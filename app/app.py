@@ -1,52 +1,63 @@
-import yaml
 import os
+import configparser
+import click
 
-with open('test/conf.yml') as cfg:
-    conf = yaml.safe_load(cfg)
+class EnvInterpolation(configparser.BasicInterpolation):
+    """Interpolation which expands environment variables in values."""
 
-class PackageHandler:
-    def __init__(self):
-        self.packages = conf['packages']
-        self.installers = conf['package_installer']
+    def before_get(self, parser, section, option, value, defaults):
+        value = super().before_get(parser, section, option, value, defaults)
+        return os.path.expandvars(value)
 
-    def find_installers(self):
-        installer = dict()
-        for items in self.installers:
-            installer.update(items)
-        return installer
+config = configparser.ConfigParser(interpolation=EnvInterpolation())
+try:
+    try: 
+        config.read('./tuckr.conf')
+    except:
+        config.read(f"{os.environ['HOME']}/.config/tuckr.conf")
+    config_dir = config['GENERAL']['config_dir']
+except KeyError:
+    print('Error: No config file was found')
 
-    def install_packages(self):
-        installers = self.find_installers()
-        for pacman in installers: 
-            if 'nosudo' in installers[pacman][1]:
-                os.system(f'{installers[pacman][0]} {self.packages[pacman]}')
-            if 'nosudo' not in installers[pacman][1]:
-                os.system(f'sudo {installers[pacman]} {self.packages[pacman]}')
 
-class SetupHandler:
-    def __init__(self):
-        self.setup = conf['setup']
-        self.scripts = conf['run_script']
+def clone_dotfiles():
+    try:
+        if ('dotfiles_repo' in config['GENERAL']):
+            if ('dotfiles_dest' in config['GENERAL']):
+                os.system(f"git clone {config['GENERAL']['dotfiles_repo']} {config['GENERAL']['dotfiles_dest']}")
+            else:
+                os.system(f"git clone {config['GENERAL']['dotfiles_repo']} $HOME/dotfiles")
+        else:
+            os.system(config['GENERAL']['clone_dotfiles_cmd'])
+    except KeyError:
+        print('Error: No dotfile repo was specified. Make sure you set it up in your tuckr.ini file.')
 
-    def create(self):
-        print(self.setup['create'])
+def install_packages():
+    if ('pkg_install_cmd' in config['PACKAGES']):
+        with open(config['PACKAGES']['pkg_list'], 'r') as pkgs:
+            pkgs = pkgs.read().replace('\n', ' ')
+            os.system(f"{config['PACKAGES']['pkg_install_cmd']} {pkgs}")
 
-    def move(self):
-        print(self.setup['move'])
+def run_scripts():
+    for script in config['SCRIPTS']:
+        print(config['SCRIPTS'][script])
+        os.system(f"sh -c {config['SCRIPTS'][script]}")
 
-    def clone_repos(self):
-        for item in self.setup['git']:
-            item = item.split()
-            os.system(f'git clone {item[0]} {item[1]}')
+def install_from_list():
+    install_cmd = {
+        'pip': 'install --user',
+        'npm': 'install -g',
+        'yarn': 'global add'
+    }
+    for list_ in config['PACKAGES']:
+        if('_list' in list_):
+            cmd = list_.split('_')[0]
+            try: 
+                with open(config['PACKAGES'][list_], 'r') as list_file:
+                    list_file = list_file.read().replace('\n', ' ')
+                    os.system(f"{cmd} {install_cmd[cmd]} {list_file}")
+            except KeyError:
+                pass
 
-    def run_custom_scripts(self):
-        for item in self.scripts:
-            os.system(f'sh -c {item}')
-
-class DotfileHandler:
-    def __init__(self):
-        self.dotfiles_dir = conf['dotfiles_dir']
-
-if __name__ == "__main__":
-    test = SetupHandler()
-    test.run_custom_scripts()
+if __name__ == '__main__':
+    clone_dotfiles()
