@@ -1,9 +1,10 @@
-import os
-import colorama
 import click
+import colorama
 from symlinkhandler import SymlinkHandler
 import dotfilehandler
 
+current = SymlinkHandler()
+    
 if __name__ == '__main__':
     colorama.init()
-    SymlinkHandler().check_symlinks()
+    current.check_symlinks()

@@ -1,13 +1,14 @@
 import os
 import configparser
 import colorama
+from pathlib import Path
 
 config = configparser.ConfigParser()
 try:
     try: 
         config.read('./tuckr.conf')
     except:
-        config.read(os.path.expanduser('~/.config/tuckr.conf'))
+        config.read(Path.expanduser('~/.config/tuckr.conf'))
 except KeyError:
     print(f"{colorama.Fore.RED}Error: No config file was found{colorama.Fore.RESET}")
 

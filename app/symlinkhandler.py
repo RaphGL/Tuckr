@@ -1,9 +1,10 @@
 import os
+from pathlib import Path
 import colorama
 
 class SymlinkHandler():
     def __init__(self):
-        self.files = os.listdir()
+        self.files = [Path(file) for file in Path.cwd().iterdir()]
 
     def check_symlinks(self):
         '''
@@ -13,7 +14,7 @@ class SymlinkHandler():
         not_linked = []
         linked = []
         for file in self.files:
-            if not os.path.islink(file):
+            if not Path.is_symlink(Path(file)):
                 not_linked.append(f'{colorama.Fore.RED}{file}{colorama.Fore.RESET}')
             else: 
                 linked.append(f'{colorama.Fore.GREEN}{file}{colorama.Fore.RESET}')
@@ -21,7 +22,6 @@ class SymlinkHandler():
             print('\nSymlinked files:')
             for link in linked:
                 print('\t'+link)
-
         if not_linked:
             print('\nUnsymlinked files:')
             for link in not_linked:
@@ -33,20 +33,33 @@ class SymlinkHandler():
         if they're aren't already symlinked. 
         '''
         for file in self.files:
-            os.symlink(file, f"{file}x")
-        print(f"{colorama.Fore.GREEN}symlinks created")
+            try:
+                Path(f"{file}sdfasdf").symlink_to(file)
+            except FileExistsError:
+                print(colorama.Fore.RED + f'Error: {file} is already a symlink' + colorama.Fore.RESET)
+        print(f"{colorama.Fore.GREEN}done{colorama.Fore.RESET}")
     
     def remove_symlinks(self):
         '''
         WIP. Checks files in the current directory and remove their symlinks from .config and $HOME dirs
         '''
         for file in self.files:
-            if os.path.islink(file):
-                os.remove(file)
-        print(f"{colorama.Fore.GREEN}symlinks removed")
+            if Path.is_symlink(file):
+                Path.unlink(file)
+        print(f"{colorama.Fore.GREEN}done{colorama.Fore.RESET}")
 
-    def add_symlink(self, link: str):
+    def add_symlink(self, link: str, target: str):
         '''
         Adds a single symlink to .config or $HOME
         '''
-        print(f"{colorama.Fore.GREEN}{link} symlink created")
+        Path(link).symlink_to(Path(target))
+        print(f"{colorama.Fore.GREEN}{link}{link}symlinked to {target}{colorama.Fore.RESET}")
+
+    def rm_symlink(self, link: str):
+        '''
+        Removes a single symlink from .config or $HOME
+        '''
+        if Path(link).is_symlink():
+            Path.unlink(link)
+            print(f"{colorama.Fore.GREEN}{link}{link}symlink removed {colorama.Fore.RESET}")
+
