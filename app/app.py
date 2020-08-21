@@ -1,5 +1,5 @@
 import click
-import colorama
+import colorama # type: ignore
 from symlinkhandler import SymlinkHandler
 import dotfilehandler
 
