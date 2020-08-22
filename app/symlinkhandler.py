@@ -3,10 +3,23 @@ import os
 from pathlib import Path
 import colorama # type: ignore
 
+def in_dotfiles_dir(func):
+    files: List[str] = [str(file) for file in Path.cwd().iterdir()]
+    def check_cwd(a):
+        if f"{Path.cwd()}/tuckr.conf" in files:
+            func(a)
+        else:
+            print(f"{colorama.Fore.RED}Error: You need to be in a dotfile directory{colorama.Fore.RESET}")
+    return check_cwd
+
 class SymlinkHandler():
     def __init__(self):
         self.files: List = [Path(file) for file in Path.cwd().iterdir()]
 
+    def find_symlink_path(self):
+        pass
+
+    @in_dotfiles_dir
     def check_symlinks(self) -> None:
         '''
         WIP. Gives information about current symlinks.
@@ -28,16 +41,21 @@ class SymlinkHandler():
             for link in not_linked:
                 print('\t'+link)
 
+    @in_dotfiles_dir
     def create_symlinks(self) -> None:
         '''
         WIP. Checks files in the current directory and symlinks them to the .config and $HOME dirs 
-        if they're aren't already symlinked. 
+        if they aren't already symlinked. 
         '''
         for file in self.files:
+            file = str(file).split("/")[-1]
+            dest = Path(f"~/{file}").expanduser()
             try:
-                Path(f"{file}sdfasdf").symlink_to(file)
+                if "tuckr.conf" in str(file):
+                    continue
+                dest.symlink_to(file)
             except FileExistsError:
-                print(colorama.Fore.RED + f'Error: {file} is already a symlink' + colorama.Fore.RESET)
+                print(f'{colorama.Fore.RED}Skipping: {file} is already a symlink{colorama.Fore.RESET}')
         print(f"{colorama.Fore.GREEN}done{colorama.Fore.RESET}")
     
     def remove_symlinks(self) -> None:
@@ -45,22 +63,28 @@ class SymlinkHandler():
         WIP. Checks files in the current directory and remove their symlinks from .config and $HOME dirs
         '''
         for file in self.files:
-            if Path.is_symlink(file):
-                Path.unlink(file)
+            if file.is_symlink():
+                file.unlink()
         print(f"{colorama.Fore.GREEN}done{colorama.Fore.RESET}")
 
-    def add_symlink(self, link: str, target: str) -> None:
+    @in_dotfiles_dir
+    def add_symlink(self, file: str) -> None:
         '''
-        Adds a single symlink to .config or $HOME
+        WIP. Adds a single symlink to .config or $HOME
         '''
-        Path(link).symlink_to(Path(target))
-        print(f"{colorama.Fore.GREEN}{link}{link}symlinked to {target}{colorama.Fore.RESET}")
+        dest = Path(f"~/{file}").expanduser()
+        if "tuckr.conf" in file:
+            print(f'{colorama.Fore.RED}Warning: tuckr.conf should not be symlinked{colorama.Fore.RESET}')
+            return
+        Path(file).symlink_to(dest)
+        print(f"{colorama.Fore.GREEN}{file} symlinked to {dest}{colorama.Fore.RESET}")
 
+    @in_dotfiles_dir
     def rm_symlink(self, link: str) -> None:
         '''
-        Removes a single symlink from .config or $HOME
+        WIP. Removes a single symlink from .config or $HOME
         '''
         path = Path(link)
         if path.is_symlink():
-            Path.unlink(path)
-            print(f"{colorama.Fore.GREEN}{path}{path}symlink removed {colorama.Fore.RESET}")
+            path.unlink()
+            print(f"{colorama.Fore.GREEN}{path}{path}symlink removed{colorama.Fore.RESET}")

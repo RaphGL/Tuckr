@@ -7,4 +7,6 @@ current = SymlinkHandler()
     
 if __name__ == '__main__':
     colorama.init()
-    current.check_symlinks()
+    # current.create_symlinks()
+    # current.remove_symlinks()
+    # current.check_symlinks()
