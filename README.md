@@ -13,6 +13,5 @@ Tuckr is a dotfile manager that provides some tools to make dotfiles management 
 * Script runner 
 * Unified config for setup - allows for curling(or wgetting we don't discriminate) the config and having it do all the setting up for you.
 
-I also intend on implement an option of not using symlinks for those that prefer a different approach.
 ## Install  
 This is a very new project and as such there's no useable versions yet. 
