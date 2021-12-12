@@ -1,1 +1,0 @@
-echo 'second script ran'
