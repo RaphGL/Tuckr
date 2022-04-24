@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 colored = "2.0.0"
 dirs = "4.0.0"
+clap = { version = "3.1.9"}

@@ -40,18 +40,36 @@ impl SymlinkStatus {
         })()
         .unwrap();
 
+        // pushes file to their specific struct
+        let mut push_to_struct = |fpath: PathBuf| {
+            // ignore .git folder 
+            if fpath.to_str().unwrap().contains(".git") {
+                return;
+            }
+            // check if file is symlinked or not
+            if is_valid_symlink(fpath.clone()) {
+                self.symlinked.push(fpath);
+            } else {
+                self.notsymlink.push(fpath);
+            }
+        };
+
         // read the config of each program
         for program in
             fs::read_dir(format!("{}/{}", dotfiles.to_str().unwrap(), "configs")).unwrap()
         {
             let p = program.unwrap();
+            // if file is a program dir, read it
             if let Ok(config) = fs::read_dir(p.path()) {
                 for conf in config {
                     let c = conf.unwrap();
-                    if is_valid_symlink(c.path().clone()) {
-                        self.symlinked.push(c.path());
+                    // reads subdirs from program such as .config
+                    if let Ok(dir) = fs::read_dir(c.path()) {
+                        for file in dir {
+                            push_to_struct(file.unwrap().path());
+                        }
                     } else {
-                        self.notsymlink.push(c.path());
+                        push_to_struct(c.path());
                     }
                 }
             }
