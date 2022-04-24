@@ -76,12 +76,19 @@ impl SymlinkStatus {
         }
     }
 
+    fn strip_away_program_path<'a>(&self, fpath: &'a PathBuf) -> &'a str {
+        let mut newstr = fpath.to_str().unwrap().split_once("configs").unwrap();
+        newstr = newstr.1.split_once("/").unwrap();
+        newstr.1
+    }
+
     // Retrieve symlinked filenames
     fn print_symlinked(&self) {
         if self.symlinked.len() > 0 {
             println!("Symlinked files:");
             for f in &self.symlinked {
-                println!("\t{}", f.to_str().unwrap().green());
+                let f = self.strip_away_program_path(f);
+                println!("\t{}", f.green());
             }
         }
     }
@@ -90,7 +97,8 @@ impl SymlinkStatus {
         if self.notsymlink.len() > 0 {
             println!("Not symlinked files:");
             for f in &self.notsymlink {
-                println!("\t{}", f.to_str().unwrap().red());
+                let f = self.strip_away_program_path(f);
+                println!("\t{}", f.red());
             }
         }
     }
