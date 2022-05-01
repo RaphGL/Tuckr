@@ -1,9 +1,6 @@
 use colored::Colorize;
-use core::panic;
 use dirs;
-use std::fmt::Result;
-use std::fs;
-use std::os::unix::fs::symlink;
+use std::fs::{self, DirEntry};
 use std::path::{Path, PathBuf};
 
 struct SymlinkStatus {
@@ -23,26 +20,12 @@ impl SymlinkStatus {
     // Populates SymlinkStatus with info
     fn retrieve_info(&mut self) {
         // find the dotfile's path
-        let dotfiles = (|| {
-            let home = dirs::home_dir().unwrap();
-            for f in fs::read_dir(home).unwrap() {
-                let file = f.unwrap();
-                let filepath = file.path();
-                let filename = filepath.to_str().unwrap();
-                if filename.contains("Dotfiles")
-                    || filename.contains("dotfiles")
-                    || filename.contains(".dotfiles")
-                {
-                    return Some(filepath);
-                }
-            }
-            None
-        })()
-        .unwrap();
+        let dotfiles = crate::get_dotfiles_path().unwrap();
+        println!("{}", dotfiles.to_str().unwrap());
 
         // pushes file to their specific struct
         let mut push_to_struct = |fpath: PathBuf| {
-            // ignore .git folder 
+            // ignore .git folder
             if fpath.to_str().unwrap().contains(".git") {
                 return;
             }
@@ -56,7 +39,7 @@ impl SymlinkStatus {
 
         // read the config of each program
         for program in
-            fs::read_dir(format!("{}/{}", dotfiles.to_str().unwrap(), "configs")).unwrap()
+            fs::read_dir(format!("{}/{}", dotfiles.to_str().unwrap(), "Configs")).unwrap()
         {
             let p = program.unwrap();
             // if file is a program dir, read it
@@ -77,7 +60,7 @@ impl SymlinkStatus {
     }
 
     fn strip_away_program_path<'a>(&self, fpath: &'a PathBuf) -> &'a str {
-        let mut newstr = fpath.to_str().unwrap().split_once("configs").unwrap();
+        let mut newstr = fpath.to_str().unwrap().split_once("Configs").unwrap();
         newstr = newstr.1.split_once("/").unwrap();
         newstr.1
     }
@@ -142,11 +125,63 @@ pub fn get_status() {
 }
 
 // Symlink files
-pub fn add(program_name: clap::Values, files: clap::Values) {
-    // TODO
+pub fn add(program_name: clap::Values) {
+    let home_dir = dirs::home_dir().unwrap();
+
+    // create symlinks from conf to home_conf
+    let create_symlink = |home_conf: String, conf: DirEntry| {
+        if let Err(_) = std::os::unix::fs::symlink(conf.path(), &home_conf) {
+            if is_valid_symlink(PathBuf::from(&home_conf)) {
+                return;
+            } else {
+                fs::remove_file(PathBuf::from(&home_conf)).unwrap();
+                std::os::unix::fs::symlink(conf.path(), home_conf).unwrap();
+            }
+        }
+    };
+
+    for p in program_name {
+        // make $HOME/Dotfiles/Configs/program string
+        let program_dir = format!(
+            "{}/{}/{}",
+            crate::get_dotfiles_path().unwrap().to_str().unwrap(),
+            "Configs",
+            p
+        );
+        let program_dir = fs::read_dir(program_dir);
+        if let Ok(dir) = program_dir {
+            // read all the configs for said program
+            for f in dir {
+                let cfg = f.unwrap();
+                // if program is a dir get all the files inside of it
+                if cfg.file_name() == ".config" {
+                    let cfg_dir = fs::read_dir(cfg.path()).unwrap();
+                    for c in cfg_dir {
+                        let conf = c.unwrap();
+                        // create $HOME/.config/program string
+                        let to_home_path = format!(
+                            "{}/{}/{}",
+                            home_dir.to_str().unwrap(),
+                            ".config",
+                            conf.file_name().to_str().unwrap()
+                        );
+                        create_symlink(to_home_path, conf);
+                    }
+                } else {
+                    // create $HOME/config string
+                    let to_home_path = format!(
+                        "{}/{}",
+                        home_dir.to_str().unwrap(),
+                        cfg.file_name().to_str().unwrap()
+                    );
+                    create_symlink(to_home_path, cfg);
+                }
+            }
+        }
+    }
 }
 
 // Remove symlink from files
-pub fn remove(program_name: clap::Values, files: clap::Values) {
-    // TODO
+pub fn remove(program_name: clap::Values) {
+    todo!()
 }
