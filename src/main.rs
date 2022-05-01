@@ -33,12 +33,12 @@ fn main() {
         )
         .subcommand(
             Command::new("add")
-                .about("Symlink program to $HOME")
+                .about("Deploy configuration for PROGRAM")
                 .arg(arg!(<PROGRAM>...)),
         )
         .subcommand(
             Command::new("rm")
-                .about("Remove symlinks from $HOME")
+                .about("Remove configuration for PROGRAM from the system")
                 .arg(arg!(<PROGRAM>...)),
         )
         .subcommand(Command::new("status").about("Check symlink status"))
