@@ -1,7 +1,8 @@
 use clap::{arg, Command};
 use std::fs;
 use std::path::PathBuf;
-mod symlink;
+mod symlinks;
+mod fileops;
 
 fn get_dotfiles_path() -> Option<PathBuf> {
     let home = dirs::home_dir().unwrap();
@@ -36,7 +37,7 @@ fn main() {
                 .arg(arg!(<PROGRAM>...)),
         )
         .subcommand(
-            Command::new("remove")
+            Command::new("rm")
                 .about("Remove symlinks from $HOME")
                 .arg(arg!(<PROGRAM>...)),
         )
@@ -46,13 +47,14 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("status", _)) => symlink::get_status(),
+        Some(("status", _)) => symlinks::get_status(),
         Some(("add", submatches)) => {
-            symlink::add(submatches.values_of("PROGRAM").unwrap());
+            symlinks::add(submatches.values_of("PROGRAM").unwrap());
         }
         Some(("remove", submatches)) => {
-            symlink::remove(submatches.values_of("PROGRAM").unwrap());
+            symlinks::remove(submatches.values_of("PROGRAM").unwrap());
         }
+        Some(("init", _)) => fileops::init_tuckr_dir(),
         _ => unreachable!(),
     }
 }

@@ -92,6 +92,7 @@ fn is_valid_symlink(file: PathBuf) -> bool {
     let fpath = file.to_str().unwrap();
 
     // strips away $HOME/Dotfiles/program from string
+    // TODO: use crate::get_dotfiles_path for this instead
     let new_path: (&str, &str);
     if fpath.contains("Dotfiles") {
         new_path = fpath.split_once("Dotfiles/").unwrap();
@@ -183,5 +184,27 @@ pub fn add(program_name: clap::Values) {
 
 // Remove symlink from files
 pub fn remove(program_name: clap::Values) {
-    todo!()
+    let home_dir = dirs::home_dir().unwrap();
+    for p in program_name {
+        // get /home/Dotfiles/Configs/program
+        let program_path = format!(
+            "{}/{}/{}",
+            crate::get_dotfiles_path().unwrap().to_str().unwrap(),
+            "Configs",
+            p
+        );
+        for f in fs::read_dir(program_path).unwrap() {
+            let file = f.unwrap();
+            // generate symlink path
+            let home_path = format!("{}/{}", home_dir.to_str().unwrap(), file.file_name().to_str().unwrap());
+            // if Configs/program file has a symlink, delete it
+            if is_valid_symlink(file.path()) {
+                if file.file_type().unwrap().is_dir() {
+                    fs::remove_dir_all(home_path).unwrap();
+                } else {
+                    fs::remove_file(home_path).unwrap();
+                }
+            }
+        }
+    }
 }
