@@ -150,6 +150,7 @@ pub fn add(program_name: clap::Values) {
             p
         );
         let program_dir = fs::read_dir(program_dir);
+
         if let Ok(dir) = program_dir {
             // read all the configs for said program
             for f in dir {
@@ -193,6 +194,7 @@ pub fn remove(program_name: clap::Values) {
             "Configs",
             p
         );
+        
         for f in fs::read_dir(program_path).unwrap() {
             let file = f.unwrap();
             // generate symlink path
