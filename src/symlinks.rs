@@ -21,7 +21,6 @@ impl SymlinkStatus {
     fn retrieve_info(&mut self) {
         // find the dotfile's path
         let dotfiles = crate::get_dotfiles_path().unwrap();
-        println!("{}", dotfiles.to_str().unwrap());
 
         // pushes file to their specific struct
         let mut push_to_struct = |fpath: PathBuf| {
@@ -65,25 +64,60 @@ impl SymlinkStatus {
         newstr.1
     }
 
-    // Retrieve symlinked filenames
-    fn print_symlinked(&self) {
-        if self.symlinked.len() > 0 {
-            println!("Symlinked files:");
-            for f in &self.symlinked {
-                let f = self.strip_away_program_path(f);
-                println!("\t{}", f.green());
+    // retrieves a vector with only the names of the programs
+    fn get_unique_config(&self, paths: Vec<PathBuf>) -> Vec<String> {
+        let mut programs: Vec<String> = Vec::new();
+
+        for p in paths {
+            let program_path = self
+                .strip_away_program_path(&p)
+                .split_once("/")
+                .unwrap()
+                .0
+                .to_owned();
+            if !programs.contains(&program_path) {
+                programs.push(program_path);
             }
         }
+
+        programs
     }
-    // Retrieve non symlinked filenames
-    fn print_notsymlinked(self) {
-        if self.notsymlink.len() > 0 {
-            println!("Not symlinked files:");
-            for f in &self.notsymlink {
-                let f = self.strip_away_program_path(f);
-                println!("\t{}", f.red());
+
+    // Retrieve symlinked filenames
+    fn print_status(&self) {
+        let print_info = |msg: String, symlinked: bool| {
+            if symlinked && self.symlinked.len() <= 0 {
+                return;
+            } else if !symlinked && self.symlinked.len() <= 0 {
+                return;
             }
-        }
+
+            println!("{}", msg);
+            let mut count = 0;
+            let fpath = if symlinked {
+                self.symlinked.to_owned()
+            } else {
+                self.notsymlink.to_owned()
+            };
+            print!("\t");
+            for f in self.get_unique_config(fpath) {
+                if count == 8 {
+                    print!("\n\t");
+                    count = 0;
+                }
+
+                if symlinked {
+                    print!("{}  ", f.green());
+                } else {
+                    print!("{}  ", f.red());
+                }
+                count += 1;
+            }
+            println!();
+        };
+
+        print_info("Deployed dotfiles".to_string(), true);
+        print_info("Not deployed dotfiles".to_string(), false);
     }
 }
 
@@ -121,8 +155,7 @@ fn is_valid_symlink(file: PathBuf) -> bool {
 pub fn get_status() {
     let mut symstruct = SymlinkStatus::new();
     symstruct.retrieve_info();
-    symstruct.print_symlinked();
-    symstruct.print_notsymlinked();
+    symstruct.print_status();
 }
 
 // Symlink files
@@ -135,7 +168,11 @@ pub fn add(program_name: clap::Values) {
             if is_valid_symlink(PathBuf::from(&home_conf)) {
                 return;
             } else {
-                fs::remove_file(PathBuf::from(&home_conf)).unwrap();
+                let f = PathBuf::from(&home_conf);
+                fs::remove_file(&f)
+                    .or_else(|_| fs::remove_dir_all(f))
+                    .unwrap();
+
                 std::os::unix::fs::symlink(conf.path(), home_conf).unwrap();
             }
         }
@@ -194,11 +231,15 @@ pub fn remove(program_name: clap::Values) {
             "Configs",
             p
         );
-        
+
         for f in fs::read_dir(program_path).unwrap() {
             let file = f.unwrap();
             // generate symlink path
-            let home_path = format!("{}/{}", home_dir.to_str().unwrap(), file.file_name().to_str().unwrap());
+            let home_path = format!(
+                "{}/{}",
+                home_dir.to_str().unwrap(),
+                file.file_name().to_str().unwrap()
+            );
             // if Configs/program file has a symlink, delete it
             if is_valid_symlink(file.path()) {
                 if file.file_type().unwrap().is_dir() {
