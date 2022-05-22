@@ -1,7 +1,9 @@
 [package]
 name = "tuckr"
 version = "0.1.0"
+authors = ["RaphGL"]
 edition = "2021"
+description = "Super powered GNU Stow replacement"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

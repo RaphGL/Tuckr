@@ -1,3 +1,4 @@
+use crate::utils;
 use colored::Colorize;
 use dirs;
 use std::fs::{self, DirEntry};
@@ -20,7 +21,7 @@ impl SymlinkStatus {
     // Populates SymlinkStatus with info
     fn retrieve_info(&mut self) {
         // find the dotfile's path
-        let dotfiles = crate::get_dotfiles_path().unwrap();
+        let dotfiles = utils::get_dotfiles_path().unwrap();
 
         // pushes file to their specific struct
         let mut push_to_struct = |fpath: PathBuf| {
@@ -126,7 +127,7 @@ fn is_valid_symlink(file: PathBuf) -> bool {
     let fpath = file.to_str().unwrap();
 
     // strips away $HOME/Dotfiles/program from string
-    // TODO: use crate::get_dotfiles_path for this instead
+    // TODO: use utils::get_dotfiles_path for this instead
     let new_path: (&str, &str);
     if fpath.contains("Dotfiles") {
         new_path = fpath.split_once("Dotfiles/").unwrap();
@@ -158,8 +159,8 @@ pub fn get_status() {
     symstruct.print_status();
 }
 
-// Symlink files
-pub fn add(program_name: clap::Values) {
+// Symlinks each file in the clap::Values iter
+pub fn add(program_name: &str) {
     let home_dir = dirs::home_dir().unwrap();
 
     // create symlinks from conf to home_conf
@@ -178,75 +179,107 @@ pub fn add(program_name: clap::Values) {
         }
     };
 
-    for p in program_name {
-        // make $HOME/Dotfiles/Configs/program string
-        let program_dir = format!(
-            "{}/{}/{}",
-            crate::get_dotfiles_path().unwrap().to_str().unwrap(),
-            "Configs",
-            p
-        );
-        let program_dir = fs::read_dir(program_dir);
+    // make $HOME/Dotfiles/Configs/program string
+    let program_dir = format!(
+        "{}/{}/{}",
+        utils::get_dotfiles_path().unwrap().to_str().unwrap(),
+        "Configs",
+        program_name
+    );
+    let program_dir = fs::read_dir(program_dir);
 
-        if let Ok(dir) = program_dir {
-            // read all the configs for said program
-            for f in dir {
-                let cfg = f.unwrap();
-                // if program is a dir get all the files inside of it
-                if cfg.file_name() == ".config" {
-                    let cfg_dir = fs::read_dir(cfg.path()).unwrap();
-                    for c in cfg_dir {
-                        let conf = c.unwrap();
-                        // create $HOME/.config/program string
-                        let to_home_path = format!(
-                            "{}/{}/{}",
-                            home_dir.to_str().unwrap(),
-                            ".config",
-                            conf.file_name().to_str().unwrap()
-                        );
-                        create_symlink(to_home_path, conf);
-                    }
-                } else {
-                    // create $HOME/config string
+    if let Ok(dir) = program_dir {
+        // read all the configs for said program
+        for f in dir {
+            let cfg = f.unwrap();
+            // if program is a dir get all the files inside of it
+            if cfg.file_name() == ".config" {
+                let cfg_dir = fs::read_dir(cfg.path()).unwrap();
+                for c in cfg_dir {
+                    let conf = c.unwrap();
+                    // create $HOME/.config/program string
                     let to_home_path = format!(
-                        "{}/{}",
+                        "{}/{}/{}",
                         home_dir.to_str().unwrap(),
-                        cfg.file_name().to_str().unwrap()
+                        ".config",
+                        conf.file_name().to_str().unwrap()
                     );
-                    create_symlink(to_home_path, cfg);
+                    create_symlink(to_home_path, conf);
                 }
+            } else {
+                // create $HOME/config string
+                let to_home_path = format!(
+                    "{}/{}",
+                    home_dir.to_str().unwrap(),
+                    cfg.file_name().to_str().unwrap()
+                );
+                create_symlink(to_home_path, cfg);
             }
         }
     }
 }
 
-// Remove symlink from files
-pub fn remove(program_name: clap::Values) {
-    let home_dir = dirs::home_dir().unwrap();
-    for p in program_name {
-        // get /home/Dotfiles/Configs/program
-        let program_path = format!(
-            "{}/{}/{}",
-            crate::get_dotfiles_path().unwrap().to_str().unwrap(),
-            "Configs",
-            p
-        );
+pub fn add_cmd(v: clap::Values) {
+    let program_path = format!(
+        "{}/{}",
+        utils::get_dotfiles_path().unwrap().to_str().unwrap(),
+        "Configs"
+    );
 
-        for f in fs::read_dir(program_path).unwrap() {
-            let file = f.unwrap();
-            // generate symlink path
-            let home_path = format!(
-                "{}/{}",
-                home_dir.to_str().unwrap(),
-                file.file_name().to_str().unwrap()
-            );
-            // if Configs/program file has a symlink, delete it
-            if is_valid_symlink(file.path()) {
-                if file.file_type().unwrap().is_dir() {
-                    fs::remove_dir_all(home_path).unwrap();
-                } else {
-                    fs::remove_file(home_path).unwrap();
-                }
+    for f in fs::read_dir(program_path).unwrap() {
+        let program = f.unwrap();
+        for arg in v.clone() {
+            if let Some(s) = utils::wildcard_matches(arg, program.file_name().to_str().unwrap()) {
+                add(s);
+            }
+        }
+    }
+}
+
+
+// Removes symlink from each file in the clap::Values iter
+pub fn remove(program_name: &str) {
+    let home_dir = dirs::home_dir().unwrap();
+    // get /home/Dotfiles/Configs/program
+    let program_path = format!(
+        "{}/{}/{}",
+        utils::get_dotfiles_path().unwrap().to_str().unwrap(),
+        "Configs",
+        program_name
+    );
+
+    for f in fs::read_dir(program_path).unwrap() {
+        let file = f.unwrap();
+        // generate symlink path
+        let home_path = format!(
+            "{}/{}",
+            home_dir.to_str().unwrap(),
+            file.file_name().to_str().unwrap()
+        );
+        println!("{}", file.path().to_str().unwrap());
+        // if Configs/program file has a symlink, delete it
+        if is_valid_symlink(file.path()) {
+            if file.file_type().unwrap().is_dir() {
+                fs::remove_dir_all(home_path).unwrap();
+            } else {
+                fs::remove_file(home_path).unwrap();
+            }
+        }
+    }
+}
+
+pub fn rm_cmd(v: clap::Values) {
+    let program_path = format!(
+        "{}/{}",
+        utils::get_dotfiles_path().unwrap().to_str().unwrap(),
+        "Configs"
+    );
+
+    for f in fs::read_dir(program_path).unwrap() {
+        let program = f.unwrap();
+        for arg in v.clone() {
+            if let Some(s) = utils::wildcard_matches(arg, program.file_name().to_str().unwrap()) {
+                remove(s);
             }
         }
     }

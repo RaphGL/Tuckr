@@ -15,6 +15,7 @@ pub fn from_stow() {
         .expect("Could not read input");
     ans = ans.to_lowercase();
 
+    // if user confirms
     if ans.trim() == "y" {
         let mut path: String;
         let curr_path = env::current_dir().unwrap().to_str().unwrap().to_owned();
