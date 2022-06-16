@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 struct SymlinkStatus {
     symlinked: Vec<PathBuf>,
-    notsymlink: Vec<PathBuf>,
+    not_symlinked: Vec<PathBuf>,
 }
 
 impl SymlinkStatus {
@@ -14,7 +14,7 @@ impl SymlinkStatus {
     fn new() -> SymlinkStatus {
         SymlinkStatus {
             symlinked: Vec::new(),
-            notsymlink: Vec::new(),
+            not_symlinked: Vec::new(),
         }
     }
 
@@ -33,63 +33,19 @@ impl SymlinkStatus {
             if is_valid_symlink(fpath.clone()) {
                 self.symlinked.push(fpath);
             } else {
-                self.notsymlink.push(fpath);
+                self.not_symlinked.push(fpath);
             }
         };
 
-        // read the config of each program
-        for program in
-            fs::read_dir(format!("{}/{}", dotfiles.to_str().unwrap(), "Configs")).unwrap()
-        {
-            let p = program.unwrap();
-            // if file is a program dir, read it
-            if let Ok(config) = fs::read_dir(p.path()) {
-                for conf in config {
-                    let c = conf.unwrap();
-                    // reads subdirs from program such as .config
-                    if let Ok(dir) = fs::read_dir(c.path()) {
-                        for file in dir {
-                            push_to_struct(file.unwrap().path());
-                        }
-                    } else {
-                        push_to_struct(c.path());
-                    }
-                }
-            }
-        }
-    }
-
-    fn strip_away_program_path<'a>(&self, fpath: &'a PathBuf) -> &'a str {
-        let mut newstr = fpath.to_str().unwrap().split_once("Configs").unwrap();
-        newstr = newstr.1.split_once("/").unwrap();
-        newstr.1
-    }
-
-    // retrieves a vector with only the names of the programs
-    fn get_unique_config(&self, paths: Vec<PathBuf>) -> Vec<String> {
-        let mut programs: Vec<String> = Vec::new();
-
-        for p in paths {
-            let program_path = self
-                .strip_away_program_path(&p)
-                .split_once("/")
-                .unwrap()
-                .0
-                .to_owned();
-            if !programs.contains(&program_path) {
-                programs.push(program_path);
-            }
-        }
-
-        programs
+        todo!()
     }
 
     // Retrieve symlinked filenames
-    fn print_status(&self) {
+    fn print_status(&self, show_deployed: bool) {
         let print_info = |msg: String, symlinked: bool| {
             if symlinked && self.symlinked.len() <= 0 {
                 return;
-            } else if !symlinked && self.symlinked.len() <= 0 {
+            } else if !symlinked && self.not_symlinked.len() <= 0 {
                 return;
             }
 
@@ -98,10 +54,11 @@ impl SymlinkStatus {
             let fpath = if symlinked {
                 self.symlinked.to_owned()
             } else {
-                self.notsymlink.to_owned()
+                self.not_symlinked.to_owned()
             };
             print!("\t");
-            for f in self.get_unique_config(fpath) {
+
+            for f in utils::get_unique_config(fpath) {
                 if count == 8 {
                     print!("\n\t");
                     count = 0;
@@ -117,8 +74,10 @@ impl SymlinkStatus {
             println!();
         };
 
-        print_info("Deployed dotfiles".to_string(), true);
-        print_info("Not deployed dotfiles".to_string(), false);
+        if show_deployed {
+            print_info("Deployed:".to_string(), true);
+        }
+        print_info("Not deployed:".to_string(), false);
     }
 }
 
@@ -127,7 +86,6 @@ fn is_valid_symlink(file: PathBuf) -> bool {
     let fpath = file.to_str().unwrap();
 
     // strips away $HOME/Dotfiles/program from string
-    // TODO: use utils::get_dotfiles_path for this instead
     let new_path: (&str, &str);
     if fpath.contains("Dotfiles") {
         new_path = fpath.split_once("Dotfiles/").unwrap();
@@ -153,10 +111,11 @@ fn is_valid_symlink(file: PathBuf) -> bool {
     }
 }
 
-pub fn get_status() {
+// prints a status message for the dotfiles
+pub fn get_status(show_deployed: bool) {
     let mut symstruct = SymlinkStatus::new();
     symstruct.retrieve_info();
-    symstruct.print_status();
+    symstruct.print_status(show_deployed);
 }
 
 // Symlinks each file in the clap::Values iter
@@ -236,7 +195,6 @@ pub fn add_cmd(v: clap::Values) {
     }
 }
 
-
 // Removes symlink from each file in the clap::Values iter
 pub fn remove(program_name: &str) {
     let home_dir = dirs::home_dir().unwrap();
@@ -256,7 +214,6 @@ pub fn remove(program_name: &str) {
             home_dir.to_str().unwrap(),
             file.file_name().to_str().unwrap()
         );
-        println!("{}", file.path().to_str().unwrap());
         // if Configs/program file has a symlink, delete it
         if is_valid_symlink(file.path()) {
             if file.file_type().unwrap().is_dir() {

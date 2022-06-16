@@ -28,6 +28,7 @@ fn main() {
             Command::new("status")
                 .about("Check symlink status")
                 .long_about("Prints a status message showing which symlinks have been and have not been symlinked.")
+                .arg(arg!(-a --all).help("Show symlinked programs if there are any"))
         )
         .subcommand(
             Command::new("init")
@@ -42,7 +43,7 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("status", _)) => symlinks::get_status(),
+        Some(("status", sub_matches)) => symlinks::get_status(sub_matches.is_present("all")),
         Some(("add", submatches)) => {
             symlinks::add_cmd(submatches.values_of("PROGRAM").unwrap());
         }

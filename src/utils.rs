@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 pub fn wildcard_matches<'a>(pattern: &str, string: &'a str) -> Option<&'a str> {
     let s = pattern.clone().split_once("*");
@@ -36,4 +36,28 @@ pub fn get_dotfiles_path() -> Option<PathBuf> {
         }
     }
     None
+}
+
+pub fn strip_away_program_path<'a>(fpath: &'a PathBuf) -> &'a str {
+    let mut newstr = fpath.to_str().unwrap().split_once("Configs").unwrap();
+    newstr = newstr.1.split_once("/").unwrap();
+    newstr.1
+}
+
+// retrieves a vector with only the names of the programs
+pub fn get_unique_config(paths: Vec<PathBuf>) -> Vec<String> {
+    let mut programs: Vec<String> = Vec::new();
+
+    for p in paths {
+        let program_path = strip_away_program_path(&p)
+            .split_once("/")
+            .unwrap()
+            .0
+            .to_owned();
+        if !programs.contains(&program_path) {
+            programs.push(program_path);
+        }
+    }
+
+    programs
 }
