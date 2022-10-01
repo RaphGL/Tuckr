@@ -1,22 +1,10 @@
 use crate::fileops;
+use crate::utils::to_home_path;
+use colored::Colorize;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use colored;
 
-fn to_home_path(path: &str) -> String {
-    format!(
-        "{}/{}",
-        dirs::home_dir().unwrap().to_str().unwrap(),
-        path.split_once("dotfiles/Configs/")
-            .unwrap()
-            .1
-            .split_once("/")
-            .unwrap()
-            .1
-    )
-}
-
-#[derive(Debug)]
 struct SymlinkHandler {
     dotfiles_dir: String,
     symlinked: Vec<PathBuf>,
@@ -24,6 +12,7 @@ struct SymlinkHandler {
 }
 
 impl SymlinkHandler {
+    /// Initializes SymlinkHandler and fills it with information about all the dotfiles
     fn new() -> SymlinkHandler {
         let symlinker = SymlinkHandler {
             dotfiles_dir: fileops::get_dotfiles_path().unwrap(),
@@ -34,14 +23,11 @@ impl SymlinkHandler {
         symlinker.validate_symlinks()
     }
 
-    /// TODO make function work ad hoc, it will only work for the programs mentioned
     /// THIS FUNCTION SHOULD NOT BE USED DIRECTLY
     /// Checks which dotfiles are or are not symlinked and registers their Configs/$PROGRAM path
     /// into the struct
     /// Returns a copy of self with all the fields set accordingly
     fn validate_symlinks(mut self: Self) -> Self {
-        let home_dir = dirs::home_dir().unwrap();
-
         // Opens and loops through each of Dotfiles/Configs' dotfiles
         let dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs")
             .expect("There's no Configs folder set up");
@@ -71,7 +57,8 @@ impl SymlinkHandler {
         self
     }
 
-    fn add(self: Self, program: &str) {
+    /// Symlinks all the files of a program to the user's $HOME
+    fn add(self: &Self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
         for file in program_dir {
             let f = file.unwrap();
@@ -79,7 +66,8 @@ impl SymlinkHandler {
         }
     }
 
-    fn remove(self: Self, program: &str) {
+    /// Deletes symlinks from $HOME if their links are pointing to the dotfiles directory
+    fn remove(self: &Self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
         for file in program_dir {
             let file = file.unwrap();
@@ -93,15 +81,50 @@ impl SymlinkHandler {
     }
 }
 
-pub fn add_cmd() {
+pub fn add_cmd(programs: clap::parser::ValuesRef<String>) {
     let sym = SymlinkHandler::new();
-    sym.add("FirstTest");
+    for program in programs {
+        sym.add(program);
+    }
 }
-pub fn remove_cmd() {
+
+pub fn remove_cmd(programs: clap::parser::ValuesRef<String>) {
     let sym = SymlinkHandler::new();
-    sym.remove("FirstTest");
+    for program in programs {
+        sym.remove(program);
+    }
 }
 
 pub fn status_cmd() {
-
+    let sym = SymlinkHandler::new();
+    print!("Symlinked programs:\n");
+    print!("\t(use \"tuckr add <program>\" to resymlink program)\n");
+    print!("\t(use \"tuckr rm <program>\" to remove the symlink)\n");
+    for program in sym.symlinked {
+        print!(
+            "\t\t{}\n",
+            program
+                .to_str()
+                .unwrap()
+                .split_once("dotfiles/Configs/")
+                .unwrap()
+                .1
+                .green()
+        );
+    }
+    print!("Programs that aren't symlinked:\n");
+    print!("\t(use \"tuckr add <program>\" to symlink it)\n");
+    for program in sym.not_symlinked {
+        print!(
+            "\t\t{}\n",
+            program
+                .to_str()
+                .unwrap()
+                .split_once("dotfiles/Configs/")
+                .unwrap()
+                .1
+                .red()
+        );
+    }
+    std::io::stdout().flush().unwrap();
 }

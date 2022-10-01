@@ -1,6 +1,7 @@
 use clap::{arg, Command};
 mod fileops;
 mod symlinks;
+mod utils;
 
 fn main() {
     let matches = Command::new("Tuckr")
@@ -42,13 +43,19 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("set", args)) => unreachable!(),
-        Some(("add", args)) => symlinks::add_cmd(),
-        Some(("rm", args)) => symlinks::remove_cmd(),
-        Some(("status", args)) => unreachable!(),
+        Some(("set", submatches)) => unreachable!(),
+        Some(("add", submatches)) => {
+            let programs = submatches.get_many::<String>("PROGRAM").unwrap();
+            symlinks::add_cmd(programs);
+        }
+        Some(("rm", submatches)) => {
+            let programs = submatches.get_many::<String>("PROGRAM").unwrap();
+            symlinks::remove_cmd(programs);
+        }
+        Some(("status", _)) => symlinks::status_cmd(),
         Some(("init", _)) => fileops::init_tuckr_dir(),
-        Some(("from-stow", _)) => fileops::convert_to_tuckr(), 
+        Some(("from-stow", _)) => fileops::convert_to_tuckr(),
         Some((_, _)) => unreachable!(),
-        None => return
+        None => return,
     }
 }
