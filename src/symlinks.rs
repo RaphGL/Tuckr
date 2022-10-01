@@ -84,47 +84,77 @@ impl SymlinkHandler {
 pub fn add_cmd(programs: clap::parser::ValuesRef<String>) {
     let sym = SymlinkHandler::new();
     for program in programs {
-        sym.add(program);
+        // add all programs if wildcard
+        if program == "*" {
+            for p in &sym.not_symlinked {
+                // Takes the name of the program and passes to the function
+                let p = p.to_owned().into_os_string().into_string().unwrap();
+                let p = p.as_str().split_once("dotfiles/Configs/").unwrap().1;
+                sym.add(p);
+            }
+            break;
+        } else {
+            sym.add(program);
+        }
     }
 }
 
 pub fn remove_cmd(programs: clap::parser::ValuesRef<String>) {
     let sym = SymlinkHandler::new();
     for program in programs {
-        sym.remove(program);
+        // remove all programs if wildcard
+        if program == "*" {
+            for p in &sym.symlinked {
+                // Takes the name of the program and passes to the function
+                let p = p.to_owned().into_os_string().into_string().unwrap();
+                let p = p.as_str().split_once("dotfiles/Configs/").unwrap().1;
+                sym.remove(p);
+            }
+            break;
+        } else {
+            sym.remove(program);
+        }
     }
 }
 
 pub fn status_cmd() {
     let sym = SymlinkHandler::new();
-    print!("Symlinked programs:\n");
-    print!("\t(use \"tuckr add <program>\" to resymlink program)\n");
-    print!("\t(use \"tuckr rm <program>\" to remove the symlink)\n");
-    for program in sym.symlinked {
-        print!(
-            "\t\t{}\n",
-            program
-                .to_str()
-                .unwrap()
-                .split_once("dotfiles/Configs/")
-                .unwrap()
-                .1
-                .green()
-        );
+    if !sym.symlinked.is_empty() {
+        print!("Symlinked programs:\n");
+        print!("\t(use \"tuckr add <program>\" to resymlink program)\n");
+        print!("\t(use \"tuckr rm <program>\" to remove the symlink)\n");
+        for program in sym.symlinked {
+            print!(
+                "\t\t{}\n",
+                program
+                    .to_str()
+                    .unwrap()
+                    .split_once("dotfiles/Configs/")
+                    .unwrap()
+                    .1
+                    .green()
+            );
+        }
     }
-    print!("Programs that aren't symlinked:\n");
-    print!("\t(use \"tuckr add <program>\" to symlink it)\n");
-    for program in sym.not_symlinked {
-        print!(
-            "\t\t{}\n",
-            program
-                .to_str()
-                .unwrap()
-                .split_once("dotfiles/Configs/")
-                .unwrap()
-                .1
-                .red()
-        );
+
+    if !sym.not_symlinked.is_empty() {
+        print!("Programs that aren't symlinked:\n");
+        print!("\t(use \"tuckr add <program>\" to symlink it)\n");
+        for program in sym.not_symlinked {
+            print!(
+                "\t\t{}\n",
+                program
+                    .to_str()
+                    .unwrap()
+                    .split_once("dotfiles/Configs/")
+                    .unwrap()
+                    .1
+                    .red()
+            );
+        }
+    } else {
+        print!("{}", "\nAll programs are already symlinked.\n".yellow());
     }
+    print!("\n");
     std::io::stdout().flush().unwrap();
 }

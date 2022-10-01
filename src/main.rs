@@ -43,7 +43,7 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("set", submatches)) => unreachable!(),
+        Some(("set", _submatches)) => unreachable!(),
         Some(("add", submatches)) => {
             let programs = submatches.get_many::<String>("PROGRAM").unwrap();
             symlinks::add_cmd(programs);
