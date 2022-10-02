@@ -2,6 +2,7 @@ use clap::{arg, Command};
 mod fileops;
 mod symlinks;
 mod utils;
+mod hooks;
 
 fn main() {
     let matches = Command::new("Tuckr")
@@ -43,7 +44,10 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("set", _submatches)) => unreachable!(),
+        Some(("set", submatches)) => {
+            let programs = submatches.get_many::<String>("PROGRAM").unwrap();
+            hooks::set_cmd(programs);
+        }
         Some(("add", submatches)) => {
             let programs = submatches.get_many::<String>("PROGRAM").unwrap();
             symlinks::add_cmd(programs);

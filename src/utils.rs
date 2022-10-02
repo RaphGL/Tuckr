@@ -12,3 +12,16 @@ pub fn to_home_path(path: &str) -> String {
             .1
     )
 }
+
+pub fn to_program_name(path: &str) -> Option<&str> {
+    let dir: &str;
+    if path.contains("Configs") {
+        dir = "Configs"
+    } else if path.contains("Hooks") {
+        dir = "Hooks"
+    } else {
+        return None;
+    }
+
+    Some(path.split_once(format!("dotfiles/{}/", dir).to_string().as_str()).unwrap().1)
+}

@@ -1,5 +1,5 @@
 use crate::fileops;
-use crate::utils::to_home_path;
+use crate::utils;
 use colored::Colorize;
 use std::fs;
 use std::io::Write;
@@ -40,7 +40,7 @@ impl SymlinkHandler {
             // Checks for the files in each of the programs' dirs
             for f in fs::read_dir(file.path()).unwrap() {
                 let f = f.unwrap();
-                let config_file = to_home_path(f.path().to_str().unwrap());
+                let config_file = utils::to_home_path(f.path().to_str().unwrap());
 
                 if let Ok(f) = fs::read_link(&config_file) {
                     if f.to_str().unwrap().contains("dotfiles/Configs") {
@@ -62,7 +62,10 @@ impl SymlinkHandler {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
         for file in program_dir {
             let f = file.unwrap();
-            _ = std::os::unix::fs::symlink(f.path(), to_home_path(f.path().to_str().unwrap()));
+            _ = std::os::unix::fs::symlink(
+                f.path(),
+                utils::to_home_path(f.path().to_str().unwrap()),
+            );
         }
     }
 
@@ -71,7 +74,7 @@ impl SymlinkHandler {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
         for file in program_dir {
             let file = file.unwrap();
-            let dotfile = to_home_path(file.path().to_str().unwrap());
+            let dotfile = utils::to_home_path(file.path().to_str().unwrap());
             if let Ok(linked) = fs::read_link(&dotfile) {
                 if linked.to_str().unwrap().contains("dotfiles/Configs") {
                     fs::remove_file(dotfile).unwrap();
@@ -126,12 +129,8 @@ pub fn status_cmd() {
         for program in sym.symlinked {
             print!(
                 "\t\t{}\n",
-                program
-                    .to_str()
+                utils::to_program_name(program.to_str().unwrap())
                     .unwrap()
-                    .split_once("dotfiles/Configs/")
-                    .unwrap()
-                    .1
                     .green()
             );
         }
@@ -143,12 +142,8 @@ pub fn status_cmd() {
         for program in sym.not_symlinked {
             print!(
                 "\t\t{}\n",
-                program
-                    .to_str()
+                utils::to_program_name(program.to_str().unwrap())
                     .unwrap()
-                    .split_once("dotfiles/Configs/")
-                    .unwrap()
-                    .1
                     .red()
             );
         }
