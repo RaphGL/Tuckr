@@ -34,21 +34,31 @@
         <li><a href="#installation">Installation</a></li>
       </ul>
     </li>
-    <li><a href="#usage">Usage</a></li>
+    <li><a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#how-it-works">How it works</a></li>
+        <li><a href="#using-hooks">Using hooks</a></li>
+      </ul>
+    </li>
     <li><a href="#license">License</a></li>
   </ol>
 </details>
 
 <!-- ABOUT THE PROJECT -->
 
-Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management slightly less painful. It follows the same model and stow, symlinking files onto $HOME. 
+Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME.   
+
+Most dotfile managers out there rely on some sort of configuration file to be able manage your dotfiles, this project came about because I couldn't find any dotfile manager that was simple enough that you could just jump into it and start using it, with no need for reading lengthy documentation and dotfile manager specific things. 
+
+A lot of people have been using Stow + Git to manage their dotfiles, while this approach is fine, Stow was not made for this, so it's not a perfect solution and it lacks features that are dotfile management specific, thus this project was born.
 
 **What makes tuckr different?**
 
+- No additional configuration required, everything that is needed comes setup by default
 - You can manage your files from any directory
-- Symlinking is tracked and you can check which programs are deployed or not
-- Hooks can be used to do additional configuration to programs that need it upon symlinking
-- Encryption can be used without worrying about decrypting and setting it up on the host system
+- Symlinks are tracked, the manager is smart enough to be able to manage them without conflicting with the rest of the symlinks in the system
+- Hooks, write small scripts that will be run when you set up programs from your dotfiles
+- Encrypted files for sensitive information
 
 
 ### Built With
@@ -60,52 +70,89 @@ Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile 
 
 ## Getting Started
 
-### Installation
+**For those that are coming from stow**,
+Tuckr is interchangeable with Stow, if you have a just run `tuckr from-stow` and you should be good to go. Continuing reading to know about the differences.
 
-TODO
+### Installation  
+
+**Install from source:**
+```sh
+cargo install --git https://github.com/RaphGL/Tuckr.git
+```
+Note: The binary will be installed to `$HOME/.cargo/bin` either move it from there or add it to path.
 
 <!-- USAGE EXAMPLES -->
 
 ## Usage
-
 ```sh
-USAGE:
-    tuckr <SUBCOMMAND>
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
-
-SUBCOMMANDS:
-    add          Deploy configuration for PROGRAM
-    from-stow    Converts a stow repo into a tuckr one
-    help         Print this message or the help of the given subcommand(s)
-    init         Initialize a dotfile folder
-    rm           Remove configuration for PROGRAM from the system
-    set          Setup program with hooks
-    status       Check symlink status
+$ tuckr from-stow # converts a stow repo to tuckr
+$ tuckr add \* # adds all dotfiles to the system
+$ tuckr add neovim zsh # adds the neovim and zsh dotfiles only
+$ tuckr set \* # adds all the dotfiles and runs their hooks (scripts)
+```
 
 ```
+Super powered GNU Stow replacement
+
+Usage: tuckr <COMMAND>
+
+Commands:
+  set        Setup a program and run their hooks hooks
+  add        Deploy dotfiles for PROGRAM
+  rm         Remove configuration for a program on the system
+  status     Check symlink status
+  init       Initialize a dotfile folder
+  from-stow  Converts a stow repo into a tuckr one
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help information
+  -V, --version  Print version information
+```
+
+### How it works
+
+Tuckr manages to be configurationless by make a few minor choices for you. As long as you follow the file structure for tuckr repos it will do everything else for you automatically.
+
+```sh
+.
+├── Configs # Dotfiles go here
+├── Encrypts # Encrypted files go here
+└── Hooks # Setup scripts go here
+```
+
+Your dotfiles should be one folder by program, the folder name will become how that program is named by tuckr.
+```
+.
+├── Configs
+│   ├── Program1
+│   ├── Program2
+│   └── test
+├── Encrypts
+└── Hooks
+    ├── Program1
+    └── Program2
+```
+As long as the names align between Configs, Hooks and Encrypts, they will work together.
+
+### Using Hooks
+Hooks are run before and after every program's setup. Hooks that run before the program setup are prefixed with `pre`, scripts that run afterward are prefixed with `post`, it doesn't matter what comes after.
+
+```
+Hooks
+├── Program1
+│   ├── post.sh
+│   └── pre.sh
+└── Program2
+    ├── post.sh
+    └── pre.sh
+```
+To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*`.
+
+
 
 <!-- LICENSE -->
 
 ## License
 
 Distributed under GPLv3 License. See [`LICENSE`](https://github.com/RaphGL/Tuckr/blob/main/LICENSE) for more information.
-
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-
-[contributors-shield]: https://img.shields.io/github/contributors/othneildrew/Best-README-Template.svg?style=for-the-badge
-[contributors-url]: https://github.com/othneildrew/Best-README-Template/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/othneildrew/Best-README-Template.svg?style=for-the-badge
-[forks-url]: https://github.com/othneildrew/Best-README-Template/network/members
-[stars-shield]: https://img.shields.io/github/stars/othneildrew/Best-README-Template.svg?style=for-the-badge
-[stars-url]: https://github.com/othneildrew/Best-README-Template/stargazers
-[issues-shield]: https://img.shields.io/github/issues/othneildrew/Best-README-Template.svg?style=for-the-badge
-[issues-url]: https://github.com/othneildrew/Best-README-Template/issues
-[license-shield]: https://img.shields.io/github/license/othneildrew/Best-README-Template.svg?style=for-the-badge
-[license-url]: https://github.com/othneildrew/Best-README-Template/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/othneildrew
-[product-screenshot]: images/screenshot.png
