@@ -1,5 +1,6 @@
 use crate::fileops;
 use crate::symlinks;
+use crate::utils;
 use colored::Colorize;
 use std::fs;
 use std::process::Command;
@@ -77,17 +78,24 @@ fn run_hook(program: &str, hook_type: DeployStep) {
             .spawn()
             .expect("Failed to run hook");
         if output.wait().unwrap().success() {
-            println!("{}", format!("{} hooked", filename).green().bold());
+            println!(
+                "{}",
+                format!("{}'s {} hooked", program, filename).green().bold()
+            );
         } else {
-            println!("{}", format!("{} failed to hook", filename).red().bold())
+            println!(
+                "{}",
+                format!("{}'s {} failed to hook", program, filename)
+                    .red()
+                    .bold()
+            )
         }
     }
 }
 
 pub fn set_cmd(programs: clap::parser::ValuesRef<String>) {
-    let step = DeployStages::new();
-    for i in step {
-        for program in programs.clone() {
+    let run_deploy_steps = |step: DeployStages, program: &str| {
+        for i in step {
             match i {
                 DeployStep::PreHook => {
                     run_hook(program, DeployStep::PreHook);
@@ -100,6 +108,20 @@ pub fn set_cmd(programs: clap::parser::ValuesRef<String>) {
                 }
                 _ => unreachable!(),
             }
+        }
+    };
+
+    for program in programs.clone() {
+        if program == "*" {
+            let dir = fs::read_dir(fileops::get_dotfiles_path().unwrap() + "/Hooks").unwrap();
+            for folder in dir {
+                let folder = folder.unwrap();
+                run_deploy_steps(
+                    DeployStages::new(),
+                    utils::to_program_name(folder.path().to_str().unwrap()).unwrap(),
+                );
+            }
+            break;
         }
     }
 }
