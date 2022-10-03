@@ -58,6 +58,7 @@ impl SymlinkHandler {
     }
 
     /// Symlinks all the files of a program to the user's $HOME
+    /// TODO add symlinking into XDG_DIRS
     fn add(self: &Self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
         for file in program_dir {

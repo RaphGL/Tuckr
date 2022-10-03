@@ -3,9 +3,11 @@ use std::fs;
 use std::io;
 use std::io::Write;
 use std::path::Path;
+use colored::Colorize;
 
+/// Converts a stow directory into a tuckr directory
 pub fn convert_to_tuckr() {
-    print!("Are you sure you want to convert this repo to Tuckr? (y/N)");
+    print!("{}", "Are you sure you want to convert this repo to Tuckr?\nFiles that start with a dot will be ignored (y/N) ".yellow());
     io::stdout().flush().unwrap();
 
     let mut answer = String::new();
@@ -23,11 +25,11 @@ pub fn convert_to_tuckr() {
 
         for dir in cwd {
             let dir = dir.unwrap();
-            if dir.file_name().to_str().unwrap().starts_with(".") {
+            let dirname = dir.file_name().clone().to_str().unwrap().to_owned();
+            if dirname.starts_with(".") {
                 continue;
             }
 
-            let dirname = dir.file_name().to_str().unwrap().to_owned();
             let path = format!("{}/{}/{}", curr_path, "Configs", dirname);
 
             if !dirname.ends_with("Configs")
@@ -40,18 +42,14 @@ pub fn convert_to_tuckr() {
     }
 }
 
+/// Creates the necessary files and folders for a tuckr directory
 pub fn init_tuckr_dir() {
-    let cwd = env::current_dir().unwrap();
-    let mut cwd = fs::read_dir(cwd).unwrap();
-    if cwd.next().is_none() {
-        println!("Current directory is not empty. Please empty it before initializing Tuckr.")
-    } else {
-        _ = fs::create_dir("Configs");
-        _ = fs::create_dir("Hooks");
-        _ = fs::create_dir("Encrypts");
-    }
+    _ = fs::create_dir("Configs");
+    _ = fs::create_dir("Hooks");
+    _ = fs::create_dir("Encrypts");
 }
 
+/// Returns a Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<String> {
     let home_dir = env::var("HOME").unwrap();
     let home_dotfiles = format!("{}/{}", home_dir, ".dotfiles");
