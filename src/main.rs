@@ -12,7 +12,7 @@ fn main() {
         .subcommand_required(true)
         .subcommand(
             Command::new("set")
-                .about("Setup program including their hooks")
+                .about("Setup a program and run their hooks hooks")
                 .arg(arg!(<PROGRAM>...))
         )
         .subcommand(
@@ -22,24 +22,24 @@ fn main() {
         )
         .subcommand(
             Command::new("rm")
-                .about("Remove configuration for PROGRAM from the system")
+                .about("Remove configuration for a program on the system")
                 .arg(arg!(<PROGRAM>...))
         )
         .subcommand(
             Command::new("status")
                 .about("Check symlink status")
-                .long_about("Prints a status message showing which symlinks have been and have not been symlinked.")
-                .arg(arg!(-a --all).help("Show symlinked programs if there are any"))
+                .long_about("Prints a status message for all dotfiles")
+                .arg(arg!(-a --all).help("Get dotfiles' symlinks"))
         )
         .subcommand(
             Command::new("init")
                 .about("Initialize a dotfile folder")
-                .long_about("Creates the files necessary for using Tuckr if the current working directory is empty")
+                .long_about("Creates necessary files to use Tuckr")
         )
         .subcommand(
             Command::new("from-stow")
                 .about("Converts a stow repo into a tuckr one")
-                .long_about("Converts the current working directory's stow repo into a tuckr one putting all the files in their respective folders")
+                .long_about("Converts a GNU Stow repo into a Tuckr one")
         )
         .get_matches();
 
