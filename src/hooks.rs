@@ -122,6 +122,8 @@ pub fn set_cmd(programs: clap::parser::ValuesRef<String>) {
                 );
             }
             break;
+        } else {
+            run_deploy_steps(DeployStages::new(), program);
         }
     }
 }
