@@ -1,9 +1,9 @@
+use colored::Colorize;
 use std::env;
 use std::fs;
 use std::io;
 use std::io::Write;
 use std::path::Path;
-use colored::Colorize;
 
 /// Converts a stow directory into a tuckr directory
 pub fn convert_to_tuckr() {
@@ -51,9 +51,16 @@ pub fn init_tuckr_dir() {
 
 /// Returns a Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<String> {
-    let home_dir = env::var("HOME").unwrap();
-    let home_dotfiles = format!("{}/{}", home_dir, ".dotfiles");
-    let config_dotfiles = format!("{}/{}", home_dir, ".config/dotfiles");
+    let home_dotfiles = format!(
+        "{}/{}",
+        dirs::home_dir().unwrap().to_str().unwrap(),
+        ".dotfiles"
+    );
+    let config_dotfiles = format!(
+        "{}/{}",
+        dirs::config_dir().unwrap().to_str().unwrap(),
+        "dotfiles"
+    );
 
     if Path::new(&home_dotfiles).exists() {
         Some(home_dotfiles)

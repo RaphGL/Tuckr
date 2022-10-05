@@ -60,27 +60,47 @@ impl SymlinkHandler {
     /// Symlinks all the files of a program to the user's $HOME
     /// TODO add symlinking into XDG_DIRS
     fn add(self: &Self, program: &str) {
-        let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
-        for file in program_dir {
-            let f = file.unwrap();
-            _ = std::os::unix::fs::symlink(
-                f.path(),
-                utils::to_home_path(f.path().to_str().unwrap()),
-            );
+        let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program);
+        match program_dir {
+            Ok(dir) => {
+                for file in dir {
+                    let f = file.unwrap();
+                    _ = std::os::unix::fs::symlink(
+                        f.path(),
+                        utils::to_home_path(f.path().to_str().unwrap()),
+                    );
+                }
+            }
+
+            Err(_) => println!(
+                "{} {}",
+                "Error: There's no program called".red(),
+                program.red()
+            ),
         }
     }
 
     /// Deletes symlinks from $HOME if their links are pointing to the dotfiles directory
     fn remove(self: &Self, program: &str) {
-        let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program).unwrap();
-        for file in program_dir {
-            let file = file.unwrap();
-            let dotfile = utils::to_home_path(file.path().to_str().unwrap());
-            if let Ok(linked) = fs::read_link(&dotfile) {
-                if linked.to_str().unwrap().contains("dotfiles/Configs") {
-                    fs::remove_file(dotfile).unwrap();
+        let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program);
+        match program_dir {
+            Ok(dir) => {
+                for file in dir {
+                    let file = file.unwrap();
+                    let dotfile = utils::to_home_path(file.path().to_str().unwrap());
+                    if let Ok(linked) = fs::read_link(&dotfile) {
+                        if linked.to_str().unwrap().contains("dotfiles/Configs") {
+                            fs::remove_file(dotfile).unwrap();
+                        }
+                    }
                 }
             }
+
+            Err(_) => println!(
+                "{} {}",
+                "Error: There's no program called".red(),
+                program.red()
+            ),
         }
     }
 }
