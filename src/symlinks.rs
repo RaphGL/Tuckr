@@ -5,6 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
+/// Handles generic symlinking and symlink status
 struct SymlinkHandler {
     dotfiles_dir: String,
     symlinked: Vec<PathBuf>,
@@ -58,49 +59,70 @@ impl SymlinkHandler {
     }
 
     /// Symlinks all the files of a program to the user's $HOME
-    /// TODO add symlinking into XDG_DIRS
     fn add(self: &Self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program);
-        match program_dir {
-            Ok(dir) => {
-                for file in dir {
-                    let f = file.unwrap();
-                    _ = std::os::unix::fs::symlink(
+        if let Ok(dir) = program_dir {
+            for file in dir {
+                let f = file.unwrap();
+                let symlink_file = |f: fs::DirEntry| {
+                    let _ = std::os::unix::fs::symlink(
                         f.path(),
                         utils::to_home_path(f.path().to_str().unwrap()),
                     );
+                };
+
+                match f.file_name().to_str().unwrap() {
+                    // Matches folders where only their files of them should be symlinked
+                    ".config" => {
+                        for file in fs::read_dir(f.path()).unwrap() {
+                            symlink_file(file.unwrap());
+                        }
+                    }
+                    _ => symlink_file(f),
                 }
             }
-
-            Err(_) => println!(
+        } else {
+            println!(
                 "{} {}",
                 "Error: There's no program called".red(),
                 program.red()
-            ),
+            );
         }
     }
 
     /// Deletes symlinks from $HOME if their links are pointing to the dotfiles directory
     fn remove(self: &Self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program);
-        match program_dir {
-            Ok(dir) => {
-                for file in dir {
-                    let file = file.unwrap();
+        if let Ok(dir) = program_dir {
+            for file in dir {
+                let file = file.unwrap();
+                let remove_symlink = |file: fs::DirEntry| {
                     let dotfile = utils::to_home_path(file.path().to_str().unwrap());
                     if let Ok(linked) = fs::read_link(&dotfile) {
                         if linked.to_str().unwrap().contains("dotfiles/Configs") {
                             fs::remove_file(dotfile).unwrap();
                         }
                     }
+                };
+
+                match file.file_name().to_str().unwrap() {
+                    ".config" => {
+                        for file in fs::read_dir(file.path()).unwrap() {
+                            remove_symlink(file.unwrap());
+                        }
+                    }
+
+                    _ => {
+                        remove_symlink(file);
+                    }
                 }
             }
-
-            Err(_) => println!(
+        } else {
+            println!(
                 "{} {}",
                 "Error: There's no program called".red(),
                 program.red()
-            ),
+            );
         }
     }
 }
@@ -112,8 +134,7 @@ pub fn add_cmd(programs: clap::parser::ValuesRef<String>) {
         if program == "*" {
             for p in &sym.not_symlinked {
                 // Takes the name of the program and passes to the function
-                let p = p.to_owned().into_os_string().into_string().unwrap();
-                let p = p.as_str().split_once("dotfiles/Configs/").unwrap().1;
+                let p = utils::to_program_name(p.to_str().unwrap()).unwrap();
                 sym.add(p);
             }
             break;
@@ -130,8 +151,7 @@ pub fn remove_cmd(programs: clap::parser::ValuesRef<String>) {
         if program == "*" {
             for p in &sym.symlinked {
                 // Takes the name of the program and passes to the function
-                let p = p.to_owned().into_os_string().into_string().unwrap();
-                let p = p.as_str().split_once("dotfiles/Configs/").unwrap().1;
+                let p = utils::to_program_name(p.to_str().unwrap()).unwrap();
                 sym.remove(p);
             }
             break;
@@ -141,6 +161,7 @@ pub fn remove_cmd(programs: clap::parser::ValuesRef<String>) {
     }
 }
 
+/// Prints symlinking status
 pub fn status_cmd() {
     let sym = SymlinkHandler::new();
     if !sym.symlinked.is_empty() {
