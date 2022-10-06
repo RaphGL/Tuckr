@@ -71,7 +71,14 @@ A lot of people have been using Stow + Git to manage their dotfiles, while this 
 ## Getting Started
 
 **For those that are coming from stow**,
-Tuckr is interchangeable with Stow, if you have a just run `tuckr from-stow` and you should be good to go. Continuing reading to know about the differences.
+Tuckr is interchangeable with Stow.
+
+if you're already using Stow:
+1. Open your dotfiles repo and remove the symlinks with `stow -t $HOME --delete *`
+2. Run `tuckr from-stow`
+3. Move your repo to `$HOME/.dotfiles` or `$HOME/.config/dotfiles`
+4. Resymlink your dotfiles with `tuckr add \*`
+
 
 ### Installation  
 
@@ -79,16 +86,16 @@ Tuckr is interchangeable with Stow, if you have a just run `tuckr from-stow` and
 ```sh
 cargo install --git https://github.com/RaphGL/Tuckr.git
 ```
-Note: The binary will be installed to `$HOME/.cargo/bin` either move it from there or add it to path.
+Note: The binary will be installed to `$HOME/.cargo/bin` either move it to somewhere in your $PATH or add it to path.
 
 <!-- USAGE EXAMPLES -->
 
 ## Usage
 ```sh
-$ tuckr from-stow # converts a stow repo to tuckr
 $ tuckr add \* # adds all dotfiles to the system
 $ tuckr add neovim zsh # adds the neovim and zsh dotfiles only
 $ tuckr set \* # adds all the dotfiles and runs their hooks (scripts)
+$ tuckr rm \* # removes all dotfiles from your system
 ```
 
 ```
@@ -112,7 +119,7 @@ Options:
 
 ### How it works
 
-Tuckr manages to be configurationless by make a few minor choices for you. As long as you follow the file structure for tuckr repos it will do everything else for you automatically.
+Tuckr works without having to use a configuration file by making a few minor choices for you. As long as you follow the file structure for tuckr repos it will do everything else for you automatically.
 
 ```sh
 .
@@ -127,7 +134,6 @@ Your dotfiles should be one folder by program, the folder name will become how t
 ├── Configs
 │   ├── Program1
 │   ├── Program2
-│   └── test
 ├── Encrypts
 └── Hooks
     ├── Program1
@@ -136,7 +142,7 @@ Your dotfiles should be one folder by program, the folder name will become how t
 As long as the names align between Configs, Hooks and Encrypts, they will work together.
 
 ### Using Hooks
-Hooks are run before and after every program's setup. Hooks that run before the program setup are prefixed with `pre`, scripts that run afterward are prefixed with `post`, it doesn't matter what comes after.
+Hooks are run before and after adding every program. Hooks that run before the program addition are prefixed with `pre`, scripts that run afterward are prefixed with `post`, as long as this is true you can name the file whatever you want.
 
 ```
 Hooks
@@ -147,8 +153,7 @@ Hooks
     ├── post.sh
     └── pre.sh
 ```
-To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*`.
-
+To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*` to run all hooks.
 
 
 <!-- LICENSE -->
