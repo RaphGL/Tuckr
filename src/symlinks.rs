@@ -1,6 +1,7 @@
 use crate::fileops;
 use crate::utils;
 use colored::Colorize;
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -8,8 +9,8 @@ use std::path::PathBuf;
 /// Handles generic symlinking and symlink status
 struct SymlinkHandler {
     dotfiles_dir: String,
-    symlinked: Vec<PathBuf>,
-    not_symlinked: Vec<PathBuf>,
+    symlinked: HashSet<PathBuf>,
+    not_symlinked: HashSet<PathBuf>,
 }
 
 impl SymlinkHandler {
@@ -17,8 +18,8 @@ impl SymlinkHandler {
     fn new() -> SymlinkHandler {
         let symlinker = SymlinkHandler {
             dotfiles_dir: fileops::get_dotfiles_path().unwrap(),
-            symlinked: Vec::new(),
-            not_symlinked: Vec::new(),
+            symlinked: HashSet::new(),
+            not_symlinked: HashSet::new(),
         };
 
         symlinker.validate_symlinks()
@@ -42,19 +43,27 @@ impl SymlinkHandler {
             for f in fs::read_dir(program_dir.path()).unwrap() {
                 let file = f.unwrap();
 
+                // a closure that takes a file and determines if it's a symlink or not
                 let check_symlink = |f: fs::DirEntry| {
                     let config_file = utils::to_home_path(f.path().to_str().unwrap());
                     if let Ok(f) = fs::read_link(&config_file) {
+                        // program_dir can only be in one set at a time
+                        // this makes it so one would get an not symlinked status
+                        // if at least one of the files is not symlinked
                         if f.to_str().unwrap().contains("dotfiles/Configs") {
-                            self.symlinked.push(program_dir.path());
+                            self.symlinked.insert(program_dir.path());
+                            self.not_symlinked.remove(&program_dir.path());
                         } else {
-                            self.not_symlinked.push(program_dir.path());
+                            self.not_symlinked.insert(program_dir.path());
+                            self.symlinked.remove(&program_dir.path());
                         }
                     } else {
-                        self.not_symlinked.push(program_dir.path());
+                        self.not_symlinked.insert(program_dir.path());
+                            self.symlinked.remove(&program_dir.path());
                     }
                 };
 
+                // iterate through all the files in program_dir
                 utils::file_or_xdgdir_map(file, check_symlink);
             }
         }
@@ -76,6 +85,7 @@ impl SymlinkHandler {
                     );
                 };
 
+                // iterate through all the files in program_dir
                 utils::file_or_xdgdir_map(file, symlink_file);
             }
         } else {
@@ -103,6 +113,7 @@ impl SymlinkHandler {
                     }
                 };
 
+                // iterate through all the files in program_dir
                 utils::file_or_xdgdir_map(file, remove_symlink);
             }
         } else {
