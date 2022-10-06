@@ -33,25 +33,29 @@ impl SymlinkHandler {
         let dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs")
             .expect("There's no Configs folder set up");
         for file in dir {
-            let file = file.unwrap();
-            if file.file_type().unwrap().is_file() {
+            let program_dir = file.unwrap();
+            if program_dir.file_type().unwrap().is_file() {
                 continue;
             }
 
             // Checks for the files in each of the programs' dirs
-            for f in fs::read_dir(file.path()).unwrap() {
-                let f = f.unwrap();
-                let config_file = utils::to_home_path(f.path().to_str().unwrap());
+            for f in fs::read_dir(program_dir.path()).unwrap() {
+                let file = f.unwrap();
 
-                if let Ok(f) = fs::read_link(&config_file) {
-                    if f.to_str().unwrap().contains("dotfiles/Configs") {
-                        self.symlinked.push(file.path())
+                let check_symlink = |f: fs::DirEntry| {
+                    let config_file = utils::to_home_path(f.path().to_str().unwrap());
+                    if let Ok(f) = fs::read_link(&config_file) {
+                        if f.to_str().unwrap().contains("dotfiles/Configs") {
+                            self.symlinked.push(program_dir.path());
+                        } else {
+                            self.not_symlinked.push(program_dir.path());
+                        }
                     } else {
-                        self.not_symlinked.push(file.path())
+                        self.not_symlinked.push(program_dir.path());
                     }
-                } else {
-                    self.not_symlinked.push(file.path())
-                }
+                };
+
+                utils::file_or_xdgdir_map(file, check_symlink);
             }
         }
 
@@ -63,7 +67,8 @@ impl SymlinkHandler {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone() + "/Configs/" + &program);
         if let Ok(dir) = program_dir {
             for file in dir {
-                let f = file.unwrap();
+                let file = file.unwrap();
+
                 let symlink_file = |f: fs::DirEntry| {
                     let _ = std::os::unix::fs::symlink(
                         f.path(),
@@ -71,15 +76,7 @@ impl SymlinkHandler {
                     );
                 };
 
-                match f.file_name().to_str().unwrap() {
-                    // Matches folders where only their files of them should be symlinked
-                    ".config" => {
-                        for file in fs::read_dir(f.path()).unwrap() {
-                            symlink_file(file.unwrap());
-                        }
-                    }
-                    _ => symlink_file(f),
-                }
+                utils::file_or_xdgdir_map(file, symlink_file);
             }
         } else {
             println!(
@@ -96,6 +93,7 @@ impl SymlinkHandler {
         if let Ok(dir) = program_dir {
             for file in dir {
                 let file = file.unwrap();
+
                 let remove_symlink = |file: fs::DirEntry| {
                     let dotfile = utils::to_home_path(file.path().to_str().unwrap());
                     if let Ok(linked) = fs::read_link(&dotfile) {
@@ -105,17 +103,7 @@ impl SymlinkHandler {
                     }
                 };
 
-                match file.file_name().to_str().unwrap() {
-                    ".config" => {
-                        for file in fs::read_dir(file.path()).unwrap() {
-                            remove_symlink(file.unwrap());
-                        }
-                    }
-
-                    _ => {
-                        remove_symlink(file);
-                    }
-                }
+                utils::file_or_xdgdir_map(file, remove_symlink);
             }
         } else {
             println!(
