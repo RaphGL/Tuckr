@@ -47,3 +47,30 @@ pub fn file_or_xdgdir_map<F: FnMut(fs::DirEntry)>(file: fs::DirEntry, mut func: 
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn to_home_path() {
+        assert_eq!(
+            super::to_home_path("/home/raph/.config/dotfiles/Configs/zsh/.zshrc"),
+            "/home/raph/.zshrc"
+        );
+        assert_eq!(
+            super::to_home_path("/home/raph/.config/dotfiles/Configs/zsh/.config/program"),
+            "/home/raph/.config/program"
+        );
+    }
+
+    #[test]
+    fn to_program_name() {
+        assert_eq!(
+            super::to_program_name("/home/raph/.config/dotfiles/Configs/zsh").unwrap(),
+            "zsh"
+        );
+        assert_eq!(
+            super::to_program_name("/home/raph/.config/dotfiles/Hooks/zsh").unwrap(),
+            "zsh"
+        );
+    }
+}

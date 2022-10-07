@@ -59,7 +59,7 @@ impl SymlinkHandler {
                         }
                     } else {
                         self.not_symlinked.insert(program_dir.path());
-                            self.symlinked.remove(&program_dir.path());
+                        self.symlinked.remove(&program_dir.path());
                     }
                 };
 
@@ -193,4 +193,20 @@ pub fn status_cmd() {
     }
     print!("\n");
     std::io::stdout().flush().unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    // makes sure that symlink status is loaded on startup
+    #[test]
+    fn new_symlink_handler() {
+        let sym = super::SymlinkHandler::new();
+        assert!(
+            if !sym.symlinked.is_empty() || !sym.not_symlinked.is_empty() {
+                true
+            } else {
+                false
+            }
+        );
+    }
 }
