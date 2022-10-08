@@ -197,6 +197,9 @@ pub fn status_cmd() {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashSet, fs::{self, File}};
+    use crate::utils;
+
     // makes sure that symlink status is loaded on startup
     #[test]
     fn new_symlink_handler() {
@@ -208,5 +211,62 @@ mod tests {
                 false
             }
         );
+    }
+
+    #[test]
+    fn add_symlink() {
+        let sym = super::SymlinkHandler {
+            dotfiles_dir: format!("{}/tuckr-{}/dotfiles", std::env::temp_dir().to_str().unwrap(), std::process::id()),
+            symlinked: HashSet::new(),
+            not_symlinked: HashSet::new()
+        };
+        let program_dir = format!("{}/Configs/program", sym.dotfiles_dir);
+        if fs::create_dir_all(program_dir.clone() + "/.config").is_err() {
+            panic!("Could not create required folders");
+        }
+
+        File::create(program_dir.clone() + "/program.test").unwrap();
+        File::create(program_dir.clone() + "/.config/program.test").unwrap();
+
+        let sym = sym.validate_symlinks();
+        sym.add("program");
+
+        let file = format!("{}/{}", program_dir, "program.test");
+        let config_file = format!("{}/{}", program_dir, ".config/program.test");
+        assert_eq!(fs::read_link(utils::to_home_path(file.as_str())).unwrap().to_str().unwrap(), file);
+        assert_eq!(fs::read_link(utils::to_home_path(config_file.as_str())).unwrap().to_str().unwrap(), config_file);
+    }
+
+    #[test]
+    fn remove_symlink() {
+        let sym = super::SymlinkHandler {
+            dotfiles_dir: format!("{}/tuckr-{}/dotfiles", std::env::temp_dir().to_str().unwrap(), std::process::id()),
+            symlinked: HashSet::new(),
+            not_symlinked: HashSet::new()
+        };
+        let program_dir = format!("{}/Configs/program", sym.dotfiles_dir);
+        if fs::create_dir_all(program_dir.clone() + "/.config").is_err() {
+            panic!("Could not create required folders");
+        }
+
+        File::create(program_dir.clone() + "/program.test").unwrap();
+        File::create(program_dir.clone() + "/.config/program.test").unwrap();
+
+        let sym = sym.validate_symlinks();
+        sym.add("program");
+        sym.remove("program");
+
+        let file = format!("{}/{}", program_dir, "program.test");
+        let config_file = format!("{}/{}", program_dir, ".config/program.test");
+        assert!(match fs::read_link(utils::to_home_path(file.as_str())) {
+            Err(_) => true,
+            Ok(link) => link.to_str().unwrap() != file
+        });
+
+        assert!(match fs::read_link(utils::to_home_path(config_file.as_str())) {
+            Err(_) => true,
+            Ok(link) => link.to_str().unwrap() != config_file
+        });
+        let _ = fs::remove_dir_all(program_dir);
     }
 }
