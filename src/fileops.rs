@@ -3,7 +3,6 @@ use std::env;
 use std::fs;
 use std::io;
 use std::io::Write;
-use std::path::Path;
 
 /// Converts a stow directory into a tuckr directory
 pub fn convert_to_tuckr() {
@@ -51,13 +50,13 @@ pub fn init_tuckr_dir() {
 
 /// Returns a Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<String> {
-    let home_dotfiles = format!("{}/.dotfiles", dirs::home_dir().unwrap().to_str().unwrap(),);
-    let config_dotfiles = format!("{}/dotfiles", dirs::config_dir().unwrap().to_str().unwrap(),);
+    let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
+    let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
-    if Path::new(&home_dotfiles).exists() {
-        Some(home_dotfiles)
-    } else if Path::new(&config_dotfiles).exists() {
-        Some(config_dotfiles)
+    if home_dotfiles.exists() {
+        Some(home_dotfiles.to_str().unwrap().to_string())
+    } else if config_dotfiles.exists() {
+        Some(config_dotfiles.to_str().unwrap().to_string())
     } else {
         None
     }
@@ -67,13 +66,13 @@ pub fn get_dotfiles_path() -> Option<String> {
 mod tests {
     #[test]
     fn get_dotfiles_path() {
-        let home_dotfiles = format!("{}/.dotfiles", dirs::home_dir().unwrap().to_str().unwrap(),);
-        let config_dotfiles = format!(
-            "{}/.config/dotfiles",
-            dirs::home_dir().unwrap().to_str().unwrap(),
-        );
+        let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
+        let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
+
         assert!(match super::get_dotfiles_path().unwrap() {
-            path if path == home_dotfiles || path == config_dotfiles => true,
+            path if path == home_dotfiles.to_str().unwrap()
+                || path == config_dotfiles.to_str().unwrap() =>
+                true,
             _ => false,
         });
     }

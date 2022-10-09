@@ -49,7 +49,7 @@ fn main() {
         Cli::Set { programs } => hooks::set_cmd(&programs),
         Cli::Add { programs } => symlinks::add_cmd(&programs),
         Cli::Rm { programs } => symlinks::remove_cmd(&programs),
-        Cli::Status { all } => symlinks::status_cmd(),
+        Cli::Status { all: _ } => symlinks::status_cmd(),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),
     }

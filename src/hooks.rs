@@ -4,6 +4,7 @@ use crate::utils;
 use colored::Colorize;
 use std::fs;
 use std::process::Command;
+use std::path::PathBuf;
 
 enum DeployStep {
     Initialize, // only used so prehook can be returned
@@ -50,7 +51,8 @@ impl Iterator for DeployStages {
 /// Get's either PreHook or PostHook as hook_type
 /// this allows it to choose which script to run
 fn run_hook(program: &str, hook_type: DeployStep) {
-    let program_dir = fileops::get_dotfiles_path().unwrap() + "/Hooks/" + program;
+    let dotfiles_dir = fileops::get_dotfiles_path().unwrap();
+    let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
     let program_dir = fs::read_dir(program_dir).unwrap();
 
     for file in program_dir {
@@ -113,7 +115,7 @@ pub fn set_cmd(programs: &[String]) {
 
     for program in programs {
         if program == "*" {
-            let dir = fs::read_dir(fileops::get_dotfiles_path().unwrap() + "/Hooks").unwrap();
+            let dir = fs::read_dir(PathBuf::from(fileops::get_dotfiles_path().unwrap()).join("Hooks")).unwrap();
             for folder in dir {
                 let folder = folder.unwrap();
                 run_deploy_steps(
