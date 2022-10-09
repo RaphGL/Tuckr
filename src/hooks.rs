@@ -93,7 +93,7 @@ fn run_hook(program: &str, hook_type: DeployStep) {
     }
 }
 
-pub fn set_cmd(programs: clap::parser::ValuesRef<String>) {
+pub fn set_cmd(programs: &[String]) {
     let run_deploy_steps = |step: DeployStages, program: &str| {
         for i in step {
             match i {
@@ -101,7 +101,7 @@ pub fn set_cmd(programs: clap::parser::ValuesRef<String>) {
                     run_hook(program, DeployStep::PreHook);
                 }
 
-                DeployStep::Symlink => symlinks::add_cmd(programs.clone()),
+                DeployStep::Symlink => symlinks::add_cmd(programs),
 
                 DeployStep::PostHook => {
                     run_hook(program, DeployStep::PostHook);
@@ -111,7 +111,7 @@ pub fn set_cmd(programs: clap::parser::ValuesRef<String>) {
         }
     };
 
-    for program in programs.clone() {
+    for program in programs {
         if program == "*" {
             let dir = fs::read_dir(fileops::get_dotfiles_path().unwrap() + "/Hooks").unwrap();
             for folder in dir {
