@@ -1,65 +1,56 @@
-use clap::{arg, Command};
 mod fileops;
 mod symlinks;
 mod utils;
 mod hooks;
 
-fn main() {
-    let matches = Command::new("Tuckr")
-        .version(env!("CARGO_PKG_VERSION"))
-        .author(env!("CARGO_PKG_AUTHORS"))
-        .about(env!("CARGO_PKG_DESCRIPTION"))
-        .subcommand_required(true)
-        .subcommand(
-            Command::new("set")
-                .about("Setup a program and run their hooks hooks")
-                .arg(arg!(<PROGRAM>...))
-        )
-        .subcommand(
-            Command::new("add")
-                .about("Deploy dotfiles for PROGRAM")
-                .arg(arg!(<PROGRAM>...))
-        )
-        .subcommand(
-            Command::new("rm")
-                .about("Remove configuration for a program on the system")
-                .arg(arg!(<PROGRAM>...))
-        )
-        .subcommand(
-            Command::new("status")
-                .about("Check symlink status")
-                .long_about("Prints a status message for all dotfiles")
-                .arg(arg!(-a --all).help("Get dotfiles' symlinks"))
-        )
-        .subcommand(
-            Command::new("init")
-                .about("Initialize a dotfile folder")
-                .long_about("Creates necessary files to use Tuckr")
-        )
-        .subcommand(
-            Command::new("from-stow")
-                .about("Converts a stow repo into a tuckr one")
-                .long_about("Converts a GNU Stow repo into a Tuckr one")
-        )
-        .get_matches();
+use clap::Parser;
 
-    match matches.subcommand() {
-        Some(("set", submatches)) => {
-            let programs = submatches.get_many::<String>("PROGRAM").unwrap();
-            hooks::set_cmd(programs);
-        }
-        Some(("add", submatches)) => {
-            let programs = submatches.get_many::<String>("PROGRAM").unwrap();
-            symlinks::add_cmd(programs);
-        }
-        Some(("rm", submatches)) => {
-            let programs = submatches.get_many::<String>("PROGRAM").unwrap();
-            symlinks::remove_cmd(programs);
-        }
-        Some(("status", _)) => symlinks::status_cmd(),
-        Some(("init", _)) => fileops::init_tuckr_dir(),
-        Some(("from-stow", _)) => fileops::convert_to_tuckr(),
-        Some((_, _)) => unreachable!(),
-        None => return,
+#[derive(Debug, Parser)]
+#[command(about, author, version)]
+enum Cli {
+    /// Setup the given program and run its hooks
+    Set {
+        #[arg(required = true, value_name = "PROGRAM")]
+        programs: Vec<String>,
+    },
+
+    /// Deploy dotfiles for the given program
+    Add {
+        #[arg(required = true, value_name = "PROGRAM")]
+        programs: Vec<String>,
+    },
+
+    /// Remove configuration for the given program
+    Rm {
+        #[arg(required = true, value_name = "PROGRAM")]
+        programs: Vec<String>,
+    },
+
+    /// Print a status message for all dotfiles
+    Status {
+        /// Get dotfiles' symlinks
+        #[arg(short, long)]
+        all: bool,
+    },
+
+    /// Initialize dotfile directory
+    ///
+    /// Creates files necessary to use Tuckr
+    Init,
+
+    /// Converts a GNU Stow repo into a Tuckr one
+    FromStow,
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match cli {
+        Cli::Set { programs } => hooks::set_cmd(&programs),
+        Cli::Add { programs } => symlinks::add_cmd(&programs),
+        Cli::Rm { programs } => symlinks::remove_cmd(&programs),
+        Cli::Status { all } => symlinks::status_cmd(),
+        Cli::Init => fileops::init_tuckr_dir(),
+        Cli::FromStow => fileops::convert_to_tuckr(),
     }
 }

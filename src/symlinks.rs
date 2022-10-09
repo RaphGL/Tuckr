@@ -126,7 +126,7 @@ impl SymlinkHandler {
     }
 }
 
-pub fn add_cmd(programs: clap::parser::ValuesRef<String>) {
+pub fn add_cmd(programs: &[String]) {
     let sym = SymlinkHandler::new();
     for program in programs {
         // add all programs if wildcard
@@ -143,7 +143,7 @@ pub fn add_cmd(programs: clap::parser::ValuesRef<String>) {
     }
 }
 
-pub fn remove_cmd(programs: clap::parser::ValuesRef<String>) {
+pub fn remove_cmd(programs: &[String]) {
     let sym = SymlinkHandler::new();
     for program in programs {
         // remove all programs if wildcard
