@@ -18,20 +18,24 @@ enum Cli {
     Add {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
+
+        #[arg(short, long)]
+        /// Exclude certain programs from being added
+        exclude: Vec<String>,
     },
 
     /// Remove configuration for the given program
     Rm {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
+
+        #[arg(short, long)]
+        /// Exclude certain programs from being removed
+        exclude: Vec<String>,
     },
 
     /// Print a status message for all dotfiles
-    Status {
-        /// Get dotfiles' symlinks
-        #[arg(short, long)]
-        all: bool,
-    },
+    Status,
 
     /// Initialize dotfile directory
     ///
@@ -47,9 +51,9 @@ fn main() {
 
     match cli {
         Cli::Set { programs } => hooks::set_cmd(&programs),
-        Cli::Add { programs } => symlinks::add_cmd(&programs),
-        Cli::Rm { programs } => symlinks::remove_cmd(&programs),
-        Cli::Status { all: _ } => symlinks::status_cmd(),
+        Cli::Add { programs, exclude: _ } => symlinks::add_cmd(&programs),
+        Cli::Rm { programs, exclude: _ } => symlinks::remove_cmd(&programs),
+        Cli::Status => symlinks::status_cmd(),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),
     }
