@@ -50,7 +50,9 @@ impl SymlinkHandler {
                         // program_dir can only be in one set at a time
                         // this makes it so one would get an not symlinked status
                         // if at least one of the files is not symlinked
-                        if f.to_str().unwrap().contains("dotfiles/Configs") {
+                        let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
+                        let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+                        if f.to_str().unwrap().contains(dotfiles_configs_path) {
                             self.symlinked.insert(program_dir.path());
                             self.not_symlinked.remove(&program_dir.path());
                         } else {
@@ -107,7 +109,9 @@ impl SymlinkHandler {
                 let remove_symlink = |file: fs::DirEntry| {
                     let dotfile = utils::to_home_path(file.path().to_str().unwrap());
                     if let Ok(linked) = fs::read_link(&dotfile) {
-                        if linked.to_str().unwrap().contains("dotfiles/Configs") {
+                        let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
+                        let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+                        if linked.to_str().unwrap().contains(dotfiles_configs_path) {
                             fs::remove_file(dotfile).unwrap();
                         }
                     }
@@ -197,9 +201,12 @@ pub fn status_cmd() {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, fs::{self, File}};
-    use std::path;
     use crate::utils;
+    use std::path;
+    use std::{
+        collections::HashSet,
+        fs::{self, File},
+    };
 
     // makes sure that symlink status is loaded on startup
     #[test]
@@ -216,9 +223,9 @@ mod tests {
 
     fn init_symlink_test() -> (super::SymlinkHandler, path::PathBuf) {
         let sym = super::SymlinkHandler {
-            dotfiles_dir: path::PathBuf::from(format!("{}/tuckr-{}/dotfiles", std::env::temp_dir().to_str().unwrap(), std::process::id())),
+            dotfiles_dir: path::PathBuf::from(std::env::temp_dir()).join(format!("tuckr-{}", std::process::id())).join("dotfiles"),
             symlinked: HashSet::new(),
-            not_symlinked: HashSet::new()
+            not_symlinked: HashSet::new(),
         };
         let program_dir = sym.dotfiles_dir.clone().join("Configs").join("program");
         if fs::create_dir_all(program_dir.clone().join(".config")).is_err() {
@@ -233,7 +240,6 @@ mod tests {
         (sym, program_dir)
     }
 
-
     #[test]
     fn add_symlink() {
         let init = init_symlink_test();
@@ -244,8 +250,14 @@ mod tests {
 
         let file = program_dir.clone().join("program.test");
         let config_file = program_dir.clone().join(".config").join("program.test");
-        assert_eq!(fs::read_link(utils::to_home_path(file.to_str().unwrap())).unwrap(), file);
-        assert_eq!(fs::read_link(utils::to_home_path(config_file.to_str().unwrap())).unwrap(), config_file);
+        assert_eq!(
+            fs::read_link(utils::to_home_path(file.to_str().unwrap())).unwrap(),
+            file
+        );
+        assert_eq!(
+            fs::read_link(utils::to_home_path(config_file.to_str().unwrap())).unwrap(),
+            config_file
+        );
     }
 
     #[test]
@@ -259,15 +271,19 @@ mod tests {
 
         let file = program_dir.clone().join("program.test");
         let config_file = program_dir.clone().join(".config").join("program.test");
-        assert!(match fs::read_link(utils::to_home_path(file.to_str().unwrap())) {
-            Err(_) => true,
-            Ok(link) => link != file
-        });
+        assert!(
+            match fs::read_link(utils::to_home_path(file.to_str().unwrap())) {
+                Err(_) => true,
+                Ok(link) => link != file,
+            }
+        );
 
-        assert!(match fs::read_link(utils::to_home_path(config_file.to_str().unwrap())) {
-            Err(_) => true,
-            Ok(link) => link != file
-        });
+        assert!(
+            match fs::read_link(utils::to_home_path(config_file.to_str().unwrap())) {
+                Err(_) => true,
+                Ok(link) => link != file,
+            }
+        );
         let _ = fs::remove_dir_all(program_dir);
     }
 }

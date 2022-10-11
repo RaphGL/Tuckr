@@ -1,16 +1,26 @@
 use std::fs;
+use std::path;
 
 /// Converts a path string from pointing to their config in the dotfiles to where they should be
 /// deployed on $HOME
 pub fn to_home_path(path: &str) -> String {
-    dirs::home_dir().unwrap().join(
-        path.split_once("dotfiles/Configs/")
-            .unwrap()
-            .1
-            .split_once("/")
-            .unwrap()
-            .1
-    ).to_str().unwrap().to_string()
+    // uses join("") so that the path appends / or \ depending on platform
+    let dotfiles_configs_path = path::PathBuf::from("dotfiles").join("Configs").join("");
+    let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+
+    dirs::home_dir()
+        .unwrap()
+        .join(
+            path.split_once(dotfiles_configs_path)
+                .unwrap()
+                .1
+                .split_once(path::MAIN_SEPARATOR)
+                .unwrap()
+                .1,
+        )
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 pub fn to_program_name(path: &str) -> Option<&str> {
@@ -23,8 +33,11 @@ pub fn to_program_name(path: &str) -> Option<&str> {
         return None;
     }
 
+    // uses join("") so that the path appends / or \ depending on platform
+    let dotfiles_configs_path = path::PathBuf::from("dotfiles").join(dir).join("");
+
     Some(
-        path.split_once(format!("dotfiles/{}/", dir).to_string().as_str())
+        path.split_once(dotfiles_configs_path.to_str().unwrap())
             .unwrap()
             .1,
     )

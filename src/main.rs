@@ -1,7 +1,7 @@
 mod fileops;
+mod hooks;
 mod symlinks;
 mod utils;
-mod hooks;
 
 use clap::Parser;
 

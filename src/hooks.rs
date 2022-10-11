@@ -3,8 +3,8 @@ use crate::symlinks;
 use crate::utils;
 use colored::Colorize;
 use std::fs;
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 enum DeployStep {
     Initialize, // only used so prehook can be returned
@@ -115,7 +115,9 @@ pub fn set_cmd(programs: &[String]) {
 
     for program in programs {
         if program == "*" {
-            let dir = fs::read_dir(PathBuf::from(fileops::get_dotfiles_path().unwrap()).join("Hooks")).unwrap();
+            let dir =
+                fs::read_dir(PathBuf::from(fileops::get_dotfiles_path().unwrap()).join("Hooks"))
+                    .unwrap();
             for folder in dir {
                 let folder = folder.unwrap();
                 run_deploy_steps(

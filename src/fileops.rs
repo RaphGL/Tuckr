@@ -3,6 +3,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::io::Write;
+use std::path;
 
 /// Converts a stow directory into a tuckr directory
 pub fn convert_to_tuckr() {
@@ -29,7 +30,7 @@ pub fn convert_to_tuckr() {
                 continue;
             }
 
-            let path = format!("{}/{}/{}", curr_path, "Configs", dirname);
+            let path = path::PathBuf::from(curr_path).join("Configs").join(&dirname);
 
             if !dirname.ends_with("Configs")
                 && !dirname.ends_with("Hooks")
