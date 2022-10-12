@@ -6,6 +6,18 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 
+#[cfg(target_os = "windows")]
+fn symlink_file(f: fs::DirEntry) {
+    let target_path = utils::to_home_path(f.path().to_str().unwrap());
+    let _ = std::os::windows::fs::symlink_file(f.path(), target_path);
+}
+
+#[cfg(target_os = "linux")]
+fn symlink_file(f: fs::DirEntry) {
+    let target_path = utils::to_home_path(f.path().to_str().unwrap());
+    let _ = std::os::unix::fs::symlink(f.path(), target_path);
+}
+
 /// Handles generic symlinking and symlink status
 struct SymlinkHandler {
     dotfiles_dir: PathBuf,
@@ -79,13 +91,6 @@ impl SymlinkHandler {
         if let Ok(dir) = program_dir {
             for file in dir {
                 let file = file.unwrap();
-
-                let symlink_file = |f: fs::DirEntry| {
-                    let _ = std::os::unix::fs::symlink(
-                        f.path(),
-                        utils::to_home_path(f.path().to_str().unwrap()),
-                    );
-                };
 
                 // iterate through all the files in program_dir
                 utils::file_or_xdgdir_map(file, symlink_file);
@@ -223,7 +228,9 @@ mod tests {
 
     fn init_symlink_test() -> (super::SymlinkHandler, path::PathBuf) {
         let sym = super::SymlinkHandler {
-            dotfiles_dir: path::PathBuf::from(std::env::temp_dir()).join(format!("tuckr-{}", std::process::id())).join("dotfiles"),
+            dotfiles_dir: path::PathBuf::from(std::env::temp_dir())
+                .join(format!("tuckr-{}", std::process::id()))
+                .join("dotfiles"),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
         };
