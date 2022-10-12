@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::process;
 
 #[cfg(target_os = "windows")]
 fn symlink_file(f: fs::DirEntry) {
@@ -29,7 +30,10 @@ impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it with information about all the dotfiles
     fn new() -> SymlinkHandler {
         let symlinker = SymlinkHandler {
-            dotfiles_dir: PathBuf::from(fileops::get_dotfiles_path().unwrap()),
+            dotfiles_dir: PathBuf::from(fileops::get_dotfiles_path().unwrap_or_else(|| {
+                eprintln!("Error: Could not find dotfiles, make sure it's in the right path");
+                process::exit(1);
+            })),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
         };
@@ -43,8 +47,10 @@ impl SymlinkHandler {
     /// Returns a copy of self with all the fields set accordingly
     fn validate_symlinks(mut self: Self) -> Self {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
-        let dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs"))
-            .expect("There's no Configs folder set up");
+        let dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs")).unwrap_or_else(|_| {
+            eprintln!("There's no Configs folder set up");
+            process::exit(1);
+        });
         for file in dir {
             let program_dir = file.unwrap();
             if program_dir.file_type().unwrap().is_file() {
@@ -96,7 +102,7 @@ impl SymlinkHandler {
                 utils::file_or_xdgdir_map(file, symlink_file);
             }
         } else {
-            println!(
+            eprintln!(
                 "{} {}",
                 "Error: There's no program called".red(),
                 program.red()
@@ -126,7 +132,7 @@ impl SymlinkHandler {
                 utils::file_or_xdgdir_map(file, remove_symlink);
             }
         } else {
-            println!(
+            eprintln!(
                 "{} {}",
                 "Error: There's no program called".red(),
                 program.red()
@@ -174,8 +180,6 @@ pub fn status_cmd() {
     let sym = SymlinkHandler::new();
     if !sym.symlinked.is_empty() {
         print!("Symlinked programs:\n");
-        print!("\t(use \"tuckr add <program>\" to resymlink program)\n");
-        print!("\t(use \"tuckr rm <program>\" to remove the symlink)\n");
         for program in sym.symlinked {
             print!(
                 "\t\t{}\n",
@@ -188,7 +192,6 @@ pub fn status_cmd() {
 
     if !sym.not_symlinked.is_empty() {
         print!("Programs that aren't symlinked:\n");
-        print!("\t(use \"tuckr add <program>\" to symlink it)\n");
         for program in sym.not_symlinked {
             print!(
                 "\t\t{}\n",
