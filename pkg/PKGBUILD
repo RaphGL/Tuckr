@@ -25,15 +25,18 @@ md5sums=("SKIP")
 validpgpkeys=()
 
 check() {
+    cd Tuckr
     cargo test
 }
 
 build() {
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
+    cd Tuckr
     cargo build --release
 }
 
 package() {
+    cd Tuckr
     install -Dm0755 -t "$pkgdir/usr/bin/" "target/release/tuckr"
 }
