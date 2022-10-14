@@ -46,7 +46,7 @@
 
 <!-- ABOUT THE PROJECT -->
 
-Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME.   
+Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME. It works on all the major OSes (Windows, MacOS, Linux).  
 
 Most dotfile managers out there rely on some sort of configuration file to be able manage your dotfiles, this project came about because I couldn't find any dotfile manager that was simple enough that you could just jump into it and start using it, with no need for reading lengthy documentation and dotfile manager specific things. 
 
@@ -79,6 +79,12 @@ if you're already using Stow:
 3. Move your repo to `$HOME/.dotfiles` or `$HOME/.config/dotfiles`
 4. Resymlink your dotfiles with `tuckr add \*`
 
+Dotfile Path in each OS:
+| Platform       | Config Path                                       | Home Path               |
+|----------------|---------------------------------------------------|-------------------------|
+| Linux/BSDs/etc | /home/alice/.config/dotfiles                      | /home/alice/dotfiles    |
+| MacOS          | /Users/Alice/Library/Application Support/dotfiles | /Users/Alice/dotfiles   |
+| Windows        | C:\Users\Alice\AppData\Roaming/dotfiles           | C:\Users\Alice/dotfiles |
 
 ### Installation  
 
@@ -87,6 +93,12 @@ if you're already using Stow:
 cargo install --git https://github.com/RaphGL/Tuckr.git
 ```
 Note: The binary will be installed to `$HOME/.cargo/bin` either move it to somewhere in your $PATH or add it to path.
+
+**Install from the AUR:**
+```sh
+paru -S tuckr-git
+```
+
 
 <!-- USAGE EXAMPLES -->
 
