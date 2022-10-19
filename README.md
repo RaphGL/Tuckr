@@ -79,6 +79,8 @@ if you're already using Stow:
 3. Move your repo to `$HOME/.dotfiles` or `$HOME/.config/dotfiles`
 4. Resymlink your dotfiles with `tuckr add \*`
 
+Note: If you're on windows you need to enable developer mode for the symlinking to work.
+
 Dotfile Path in each OS:
 | Platform       | Config Path                                       | Home Path               |
 |----------------|---------------------------------------------------|-------------------------|
