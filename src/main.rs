@@ -19,7 +19,7 @@ enum Cli {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
 
-        #[arg(short, long)]
+        #[arg(short, long, value_name = "PROGRAM")]
         /// Exclude certain programs from being added
         exclude: Vec<String>,
     },
@@ -29,7 +29,7 @@ enum Cli {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
 
-        #[arg(short, long)]
+        #[arg(short, long, value_name = "PROGRAM")]
         /// Exclude certain programs from being removed
         exclude: Vec<String>,
     },
@@ -50,9 +50,17 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
-        Cli::Set { programs } => hooks::set_cmd(&programs),
-        Cli::Add { programs, exclude: _ } => symlinks::add_cmd(&programs),
-        Cli::Rm { programs, exclude: _ } => symlinks::remove_cmd(&programs),
+        Cli::Set {
+            programs,
+        } => hooks::set_cmd(&programs),
+        Cli::Add {
+            programs,
+            exclude: _,
+        } => symlinks::add_cmd(&programs),
+        Cli::Rm {
+            programs,
+            exclude: _,
+        } => symlinks::remove_cmd(&programs),
         Cli::Status => symlinks::status_cmd(),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),

@@ -21,9 +21,10 @@ fn symlink_file(f: fs::DirEntry) {
 
 /// Handles generic symlinking and symlink status
 struct SymlinkHandler {
-    dotfiles_dir: PathBuf,
-    symlinked: HashSet<PathBuf>,
-    not_symlinked: HashSet<PathBuf>,
+    dotfiles_dir: PathBuf,           // path to the dotfiles directory
+    symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
+    not_symlinked: HashSet<PathBuf>, // path to programs that aren't symlinked to $HOME
+    not_owned: HashSet<PathBuf>,     // Path to files in $HOME that don't link to dotfiles_dir
 }
 
 impl SymlinkHandler {
@@ -36,8 +37,10 @@ impl SymlinkHandler {
             })),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
+            not_owned: HashSet::new(),
         };
 
+        // this will fill symlinker with all the information it needs to be useful
         symlinker.validate_symlinks()
     }
 
@@ -80,6 +83,7 @@ impl SymlinkHandler {
                     } else {
                         self.not_symlinked.insert(program_dir.path());
                         self.symlinked.remove(&program_dir.path());
+                        self.not_owned.insert(PathBuf::from(config_file));
                     }
                 };
 
@@ -143,6 +147,7 @@ impl SymlinkHandler {
 
 pub fn add_cmd(programs: &[String]) {
     let sym = SymlinkHandler::new();
+
     for program in programs {
         // add all programs if wildcard
         if program == "*" {
@@ -203,6 +208,14 @@ pub fn status_cmd() {
     } else {
         print!("{}", "\nAll programs are already symlinked.\n".yellow());
     }
+
+    if !sym.not_owned.is_empty() {
+        print!("\nThe following files are in conflict with your dotfiles:\n");
+        for file in sym.not_owned {
+            print!("\t{}\n", file.to_str().unwrap().yellow());
+        }
+    }
+
     print!("\n");
     std::io::stdout().flush().unwrap();
 }
@@ -236,6 +249,7 @@ mod tests {
                 .join("dotfiles"),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
+            not_owned: HashSet::new(), // TODO not yet tested
         };
         let program_dir = sym.dotfiles_dir.clone().join("Configs").join("program");
         if fs::create_dir_all(program_dir.clone().join(".config")).is_err() {
