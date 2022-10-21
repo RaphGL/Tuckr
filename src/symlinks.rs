@@ -83,7 +83,9 @@ impl SymlinkHandler {
                     } else {
                         self.not_symlinked.insert(program_dir.path());
                         self.symlinked.remove(&program_dir.path());
-                        self.not_owned.insert(PathBuf::from(config_file));
+                        if PathBuf::from(&config_file).exists() {
+                            self.not_owned.insert(PathBuf::from(config_file));
+                        }
                     }
                 };
 
