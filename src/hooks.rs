@@ -95,7 +95,7 @@ fn run_hook(program: &str, hook_type: DeployStep) {
     }
 }
 
-pub fn set_cmd(programs: &[String]) {
+pub fn set_cmd(programs: &[String], exclude: &[String]) {
     let run_deploy_steps = |step: DeployStages, program: &str| {
         for i in step {
             match i {
@@ -103,7 +103,7 @@ pub fn set_cmd(programs: &[String]) {
                     run_hook(program, DeployStep::PreHook);
                 }
 
-                DeployStep::Symlink => symlinks::add_cmd(programs),
+                DeployStep::Symlink => symlinks::add_cmd(programs, exclude),
 
                 DeployStep::PostHook => {
                     run_hook(program, DeployStep::PostHook);

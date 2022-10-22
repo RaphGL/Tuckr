@@ -147,39 +147,57 @@ impl SymlinkHandler {
     }
 }
 
-pub fn add_cmd(programs: &[String]) {
+/// programs: the programs will be applied to
+/// exclude: the programs that will be ignored
+/// symlinked: whether it should be applied to symlinked or non symlinked programs
+/// iterates over each program in the dotfiles and calls a function F giving it the SymlinkHandler
+/// instance and the name of the program that's being handled
+/// This abstracts this recurrent loop allowing to only handle programs by their names
+fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, f: F)
+where
+    F: Fn(&SymlinkHandler, &String) -> (),
+{
+    // loads the runtime information needed to carry out actions
     let sym = SymlinkHandler::new();
 
     for program in programs {
         // add all programs if wildcard
-        if program == "*" {
-            for p in &sym.not_symlinked {
-                // Takes the name of the program and passes to the function
-                let p = utils::to_program_name(p.to_str().unwrap()).unwrap();
-                sym.add(p);
+        match program.as_str() {
+            "*" => {
+                let symgroup = if symlinked {
+                    &sym.not_symlinked
+                } else {
+                    &sym.symlinked
+                };
+
+                for p in symgroup {
+                    // Takes the name of the program to be passed the function
+                    let program_name = utils::to_program_name(p.to_str().unwrap()).unwrap();
+
+                    // Ignore programs in the excludes array
+                    if exclude.contains(&program_name.to_string()) {
+                        continue;
+                    }
+
+                    // do something with the program name
+                    // passing the sym context
+                    f(&sym, &program_name.to_string());
+                }
+                break;
             }
-            break;
-        } else {
-            sym.add(program);
+
+            p if exclude.contains(&p.to_string()) => continue,
+            _ => f(&sym, program),
         }
     }
 }
 
-pub fn remove_cmd(programs: &[String]) {
-    let sym = SymlinkHandler::new();
-    for program in programs {
-        // remove all programs if wildcard
-        if program == "*" {
-            for p in &sym.symlinked {
-                // Takes the name of the program and passes to the function
-                let p = utils::to_program_name(p.to_str().unwrap()).unwrap();
-                sym.remove(p);
-            }
-            break;
-        } else {
-            sym.remove(program);
-        }
-    }
+pub fn add_cmd(programs: &[String], exclude: &[String]) {
+    foreach_program(programs, exclude, true, |sym, p| sym.add(p));
+}
+
+pub fn remove_cmd(programs: &[String], exclude: &[String]) {
+    foreach_program(programs, exclude, false, |sym, p| sym.remove(p));
 }
 
 /// Prints symlinking status
