@@ -22,11 +22,12 @@ pub fn convert_to_tuckr() {
         let cwd = env::current_dir().unwrap();
         let curr_path = cwd.to_str().unwrap();
         let cwd = fs::read_dir(&cwd).expect("Could not open current directory");
+        let ignored_files = ["COPYING", "LICENSE", "README.md"];
 
         for dir in cwd {
             let dir = dir.unwrap();
             let dirname = dir.file_name().clone().to_str().unwrap().to_owned();
-            if dirname.starts_with('.') {
+            if dirname.starts_with('.') || ignored_files.contains(&dirname.as_str()){
                 continue;
             }
 

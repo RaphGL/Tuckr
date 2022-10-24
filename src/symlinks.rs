@@ -31,7 +31,7 @@ impl SymlinkHandler {
     fn new() -> SymlinkHandler {
         let symlinker = SymlinkHandler {
             dotfiles_dir: PathBuf::from(fileops::get_dotfiles_path().unwrap_or_else(|| {
-                eprintln!("Error: Could not find dotfiles, make sure it's in the right path");
+                eprintln!("Could not find dotfiles, make sure it's in the right path");
                 process::exit(1);
             })),
             symlinked: HashSet::new(),
