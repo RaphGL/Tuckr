@@ -3,7 +3,6 @@ use crate::utils;
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process;
 
@@ -48,9 +47,9 @@ impl SymlinkHandler {
     /// Checks which dotfiles are or are not symlinked and registers their Configs/$PROGRAM path
     /// into the struct
     /// Returns a copy of self with all the fields set accordingly
-    fn validate_symlinks(mut self: Self) -> Self {
+    fn validate_symlinks(mut self) -> Self {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
-        let dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs")).unwrap_or_else(|_| {
+        let dir = fs::read_dir(self.dotfiles_dir.join("Configs")).unwrap_or_else(|_| {
             eprintln!("There's no Configs folder set up");
             process::exit(1);
         });
@@ -98,7 +97,7 @@ impl SymlinkHandler {
     }
 
     /// Symlinks all the files of a program to the user's $HOME
-    fn add(self: &Self, program: &str) {
+    fn add(&self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs").join(&program));
         if let Ok(dir) = program_dir {
             for file in dir {
@@ -117,7 +116,7 @@ impl SymlinkHandler {
     }
 
     /// Deletes symlinks from $HOME if their links are pointing to the dotfiles directory
-    fn remove(self: &Self, program: &str) {
+    fn remove(&self, program: &str) {
         let program_dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs").join(&program));
         if let Ok(dir) = program_dir {
             for file in dir {
@@ -155,7 +154,7 @@ impl SymlinkHandler {
 /// This abstracts this recurrent loop allowing to only handle programs by their names
 fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, f: F)
 where
-    F: Fn(&SymlinkHandler, &String) -> (),
+    F: Fn(&SymlinkHandler, &String),
 {
     // loads the runtime information needed to carry out actions
     let sym = SymlinkHandler::new();
@@ -204,10 +203,10 @@ pub fn remove_cmd(programs: &[String], exclude: &[String]) {
 pub fn status_cmd() {
     let sym = SymlinkHandler::new();
     if !sym.symlinked.is_empty() {
-        print!("Symlinked programs:\n");
+        println!("Symlinked programs:");
         for program in sym.symlinked {
-            print!(
-                "\t\t{}\n",
+            println!(
+                "\t\t{}",
                 utils::to_program_name(program.to_str().unwrap())
                     .unwrap()
                     .green()
@@ -216,28 +215,27 @@ pub fn status_cmd() {
     }
 
     if !sym.not_symlinked.is_empty() {
-        print!("Programs that aren't symlinked:\n");
+        println!("Programs that aren't symlinked:");
         for program in sym.not_symlinked {
-            print!(
-                "\t\t{}\n",
+            println!(
+                "\t\t{}",
                 utils::to_program_name(program.to_str().unwrap())
                     .unwrap()
                     .red()
             );
         }
     } else {
-        print!("{}", "\nAll programs are already symlinked.\n".yellow());
+        println!("{}", "\nAll programs are already symlinked.".yellow());
     }
 
     if !sym.not_owned.is_empty() {
-        print!("\nThe following files are in conflict with your dotfiles:\n");
+        println!("\nThe following files are in conflict with your dotfiles:");
         for file in sym.not_owned {
-            print!("\t{}\n", file.to_str().unwrap().yellow());
+            println!("\t{}", file.to_str().unwrap().yellow());
         }
     }
 
-    print!("\n");
-    std::io::stdout().flush().unwrap();
+    println!();
 }
 
 #[cfg(test)]

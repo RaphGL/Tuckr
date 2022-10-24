@@ -26,7 +26,7 @@ pub fn convert_to_tuckr() {
         for dir in cwd {
             let dir = dir.unwrap();
             let dirname = dir.file_name().clone().to_str().unwrap().to_owned();
-            if dirname.starts_with(".") {
+            if dirname.starts_with('.') {
                 continue;
             }
 
