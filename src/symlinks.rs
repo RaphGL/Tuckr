@@ -3,6 +3,7 @@ use crate::utils;
 use colored::Colorize;
 use std::collections::HashSet;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process;
 
@@ -191,8 +192,34 @@ where
     }
 }
 
-pub fn add_cmd(programs: &[String], exclude: &[String]) {
-    foreach_program(programs, exclude, true, |sym, p| sym.add(p));
+pub fn add_cmd(programs: &[String], exclude: &[String], force: bool) {
+    if force {
+        let stdin = std::io::stdin();
+        let mut answer = String::new();
+        print!("Are you sure you want to override conflicts? (N/y) ");
+        std::io::stdout().flush().expect("Could not print to stdout");
+        stdin
+            .read_line(&mut answer)
+            .expect("Could not read from stdin");
+
+        match answer.trim().to_lowercase().as_str() {
+            "y" | "yes" => (),
+            "n" | "no" | _ => process::exit(3),
+        }
+    }
+
+    foreach_program(programs, exclude, true, |sym, p| {
+        if force && !sym.not_owned.is_empty() {
+            for file in &sym.not_owned {
+                if file.is_dir() {
+                    _ = fs::remove_dir_all(file);
+                } else {
+                    _ = fs::remove_file(file);
+                }
+            }
+        }
+        sym.add(p)
+    });
 }
 
 pub fn remove_cmd(programs: &[String], exclude: &[String]) {

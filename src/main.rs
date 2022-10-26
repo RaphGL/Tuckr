@@ -8,7 +8,7 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(about, author, version)]
 enum Cli {
-    /// Setup the given program and run its hooks
+    /// Setup the program and run its hooks
     Set {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
@@ -16,6 +16,10 @@ enum Cli {
         #[arg(short, long, value_name = "PROGRAM", use_value_delimiter = true)]
         /// Exclude certain programs from being removed
         exclude: Vec<String>,
+
+        #[arg(short, long)]
+        /// Replace dotfiles even if there are conflicts
+        force: bool,
     },
 
     /// Deploy dotfiles for the given program
@@ -26,9 +30,13 @@ enum Cli {
         #[arg(short, long, value_name = "PROGRAM", use_value_delimiter = true)]
         /// Exclude certain programs from being added
         exclude: Vec<String>,
+
+        #[arg(short, long)]
+        /// Replace dotfiles even if there are conflicts
+        force: bool,
     },
 
-    /// Remove configuration for the given program
+    /// Remove dotfiles for a program
     Rm {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
@@ -54,8 +62,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
-        Cli::Set { programs, exclude } => hooks::set_cmd(&programs, &exclude),
-        Cli::Add { programs, exclude } => symlinks::add_cmd(&programs, &exclude),
+        Cli::Set { programs, exclude, force } => hooks::set_cmd(&programs, &exclude, force),
+        Cli::Add { programs, exclude, force } => symlinks::add_cmd(&programs, &exclude, force),
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
         Cli::Status => symlinks::status_cmd(),
         Cli::Init => fileops::init_tuckr_dir(),
