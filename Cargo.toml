@@ -9,5 +9,5 @@ description = "Super powered GNU Stow replacement"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
-colored = "2.0.0"
-dirs = "4.0.0"
+colored = "2.0"
+dirs = "4.0"
