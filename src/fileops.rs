@@ -15,6 +15,7 @@ pub fn convert_to_tuckr() {
     let answer = answer.to_lowercase().trim().to_owned();
 
     if answer == "y" {
+        // don't do anything if directory already exists
         _ = fs::create_dir("Configs");
         _ = fs::create_dir("Hooks");
         _ = fs::create_dir("Encrypts");
@@ -22,16 +23,18 @@ pub fn convert_to_tuckr() {
         let cwd = env::current_dir().unwrap();
         let curr_path = cwd.to_str().unwrap();
         let cwd = fs::read_dir(&cwd).expect("Could not open current directory");
-        let ignored_files = ["COPYING", "LICENSE", "README.md"];
+        const IGNORED_FILES: &[&str] = &["COPYING", "LICENSE", "README.md"];
 
         for dir in cwd {
             let dir = dir.unwrap();
-            let dirname = dir.file_name().clone().to_str().unwrap().to_owned();
-            if dirname.starts_with('.') || ignored_files.contains(&dirname.as_str()){
+            let dirname = dir.file_name().to_str().unwrap().to_owned();
+            if dirname.starts_with('.') || IGNORED_FILES.contains(&dirname.as_ref()) {
                 continue;
             }
 
-            let path = path::PathBuf::from(curr_path).join("Configs").join(&dirname);
+            let path = path::PathBuf::from(curr_path)
+                .join("Configs")
+                .join(&dirname);
 
             if !dirname.ends_with("Configs")
                 && !dirname.ends_with("Hooks")
@@ -43,14 +46,14 @@ pub fn convert_to_tuckr() {
     }
 }
 
-/// Creates the necessary files and folders for a tuckr directory
+/// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_tuckr_dir() {
     _ = fs::create_dir("Configs");
     _ = fs::create_dir("Hooks");
     _ = fs::create_dir("Encrypts");
 }
 
-/// Returns a Option<String> with the path to of the tuckr dotfiles directory
+/// Returns an Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<String> {
     let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
     let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");

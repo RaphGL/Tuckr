@@ -10,13 +10,13 @@ use std::process;
 #[cfg(target_os = "windows")]
 fn symlink_file(f: fs::DirEntry) {
     let target_path = utils::to_home_path(f.path().to_str().unwrap());
-    let _ = std::os::windows::fs::symlink_file(f.path(), target_path);
+    _ = std::os::windows::fs::symlink_file(f.path(), target_path);
 }
 
 #[cfg(target_os = "linux")]
 fn symlink_file(f: fs::DirEntry) {
     let target_path = utils::to_home_path(f.path().to_str().unwrap());
-    let _ = std::os::unix::fs::symlink(f.path(), target_path);
+    _ = std::os::unix::fs::symlink(f.path(), target_path);
 }
 
 /// Handles generic symlinking and symlink status
@@ -47,6 +47,7 @@ impl SymlinkHandler {
     /// THIS FUNCTION SHOULD NOT BE USED DIRECTLY
     /// Checks which dotfiles are or are not symlinked and registers their Configs/$PROGRAM path
     /// into the struct
+    ///
     /// Returns a copy of self with all the fields set accordingly
     fn validate_symlinks(mut self) -> Self {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
@@ -118,22 +119,21 @@ impl SymlinkHandler {
 
     /// Deletes symlinks from $HOME if their links are pointing to the dotfiles directory
     fn remove(&self, program: &str) {
+        let remove_symlink = |file: fs::DirEntry| {
+            let dotfile = utils::to_home_path(file.path().to_str().unwrap());
+            if let Ok(linked) = fs::read_link(&dotfile) {
+                let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
+                let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+                if linked.to_str().unwrap().contains(dotfiles_configs_path) {
+                    fs::remove_file(dotfile).unwrap();
+                }
+            }
+        };
+
         let program_dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs").join(&program));
         if let Ok(dir) = program_dir {
             for file in dir {
                 let file = file.unwrap();
-
-                let remove_symlink = |file: fs::DirEntry| {
-                    let dotfile = utils::to_home_path(file.path().to_str().unwrap());
-                    if let Ok(linked) = fs::read_link(&dotfile) {
-                        let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
-                        let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
-                        if linked.to_str().unwrap().contains(dotfiles_configs_path) {
-                            fs::remove_file(dotfile).unwrap();
-                        }
-                    }
-                };
-
                 // iterate through all the files in program_dir
                 utils::file_or_xdgdir_map(file, remove_symlink);
             }
@@ -148,10 +148,13 @@ impl SymlinkHandler {
 }
 
 /// programs: the programs will be applied to
+///
 /// exclude: the programs that will be ignored
+///
 /// symlinked: whether it should be applied to symlinked or non symlinked programs
 /// iterates over each program in the dotfiles and calls a function F giving it the SymlinkHandler
 /// instance and the name of the program that's being handled
+///
 /// This abstracts this recurrent loop allowing to only handle programs by their names
 fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, f: F)
 where
@@ -194,23 +197,27 @@ where
 
 pub fn add_cmd(programs: &[String], exclude: &[String], force: bool) {
     if force {
-        let stdin = std::io::stdin();
         let mut answer = String::new();
         print!("Are you sure you want to override conflicts? (N/y) ");
-        std::io::stdout().flush().expect("Could not print to stdout");
-        stdin
+        std::io::stdout()
+            .flush()
+            .expect("Could not print to stdout");
+        std::io::stdin()
             .read_line(&mut answer)
             .expect("Could not read from stdin");
 
         match answer.trim().to_lowercase().as_str() {
             "y" | "yes" => (),
-            "n" | "no" | _ => process::exit(3),
+            "n" | "no" => process::exit(0),
+            _ => process::exit(3),
         }
     }
 
     foreach_program(programs, exclude, true, |sym, p| {
         if force && !sym.not_owned.is_empty() {
             for file in &sym.not_owned {
+                // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
+                // files thus forcing them to be symlinked
                 if file.is_dir() {
                     _ = fs::remove_dir_all(file);
                 } else {

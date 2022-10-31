@@ -51,9 +51,10 @@ impl Iterator for DeployStages {
 /// Get's either PreHook or PostHook as hook_type
 /// this allows it to choose which script to run
 fn run_hook(program: &str, hook_type: DeployStep) {
-    let dotfiles_dir = fileops::get_dotfiles_path().unwrap();
+    let dotfiles_dir = fileops::get_dotfiles_path().expect("Could not find dotfiles directory");
     let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
-    let program_dir = fs::read_dir(program_dir).unwrap();
+    let program_dir = fs::read_dir(program_dir)
+        .expect("Could not read Hooks, folder may not exist or have the appropriate permissions");
 
     for file in program_dir {
         let file = file.unwrap().path();
@@ -105,9 +106,8 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool) {
 
                 DeployStep::Symlink => symlinks::add_cmd(programs, exclude, force),
 
-                DeployStep::PostHook => {
-                    run_hook(program, DeployStep::PostHook);
-                }
+                DeployStep::PostHook => run_hook(program, DeployStep::PostHook),
+
                 _ => unreachable!(),
             }
         }
@@ -115,15 +115,13 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool) {
 
     for program in programs {
         if program == "*" {
-            let dir = fs::read_dir(
-                PathBuf::from(fileops::get_dotfiles_path().unwrap_or_else(|| {
-                    eprintln!("Could not find the Hooks directory in your dotfiles");
-                    std::process::exit(2);
-                }))
-                .join("Hooks"),
-            )
-            .unwrap();
-            for folder in dir {
+            let dotfiles_dir = PathBuf::from(fileops::get_dotfiles_path().unwrap_or_else(|| {
+                eprintln!("Could not find the Hooks directory in your dotfiles");
+                std::process::exit(2);
+            }))
+            .join("Hooks");
+
+            for folder in fs::read_dir(dotfiles_dir).unwrap() {
                 let folder = folder.unwrap();
                 run_deploy_steps(
                     DeployStages::new(),

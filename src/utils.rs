@@ -24,14 +24,13 @@ pub fn to_home_path(path: &str) -> String {
 }
 
 pub fn to_program_name(path: &str) -> Option<&str> {
-    let dir: &str;
-    if path.contains("Configs") {
-        dir = "Configs"
+    let dir = if path.contains("Configs") {
+        "Configs"
     } else if path.contains("Hooks") {
-        dir = "Hooks"
+        "Hooks"
     } else {
         return None;
-    }
+    };
 
     // uses join("") so that the path appends / or \ depending on platform
     let dotfiles_configs_path = path::PathBuf::from("dotfiles").join(dir).join("");
@@ -46,6 +45,8 @@ pub fn to_program_name(path: &str) -> Option<&str> {
 /// Goes through each file in the program_dir and applies the function
 pub fn file_or_xdgdir_map<F: FnMut(fs::DirEntry)>(file: fs::DirEntry, mut func: F) {
     match file.file_name().to_str().unwrap() {
+        // Special folders that should not be handled directly ("owned" by the system)
+        // Instead everything inside of it should be handled instead
         ".config" | "Pictures" | "Documents" | "Desktop" | "Downloads" | "Public" | "Templates"
         | "Videos" => {
             for file in fs::read_dir(file.path()).unwrap() {
