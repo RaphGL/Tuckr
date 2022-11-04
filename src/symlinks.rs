@@ -6,6 +6,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process;
+use tabled::{Table, Tabled};
 
 #[cfg(target_os = "windows")]
 fn symlink_file(f: fs::DirEntry) {
@@ -195,6 +196,7 @@ where
     }
 }
 
+/// Adds symlinks
 pub fn add_cmd(programs: &[String], exclude: &[String], force: bool) {
     if force {
         let mut answer = String::new();
@@ -229,6 +231,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool) {
     });
 }
 
+/// Removes symlinks
 pub fn remove_cmd(programs: &[String], exclude: &[String]) {
     foreach_program(programs, exclude, false, |sym, p| sym.remove(p));
 }
@@ -236,40 +239,103 @@ pub fn remove_cmd(programs: &[String], exclude: &[String]) {
 /// Prints symlinking status
 pub fn status_cmd() {
     let sym = SymlinkHandler::new();
-    if !sym.symlinked.is_empty() {
-        println!("Symlinked programs:");
-        for program in sym.symlinked {
-            println!(
-                "\t\t{}",
-                utils::to_program_name(program.to_str().unwrap())
-                    .unwrap()
-                    .green()
-            );
+
+    #[derive(Tabled)]
+    struct SymlinkRow<'a> {
+        #[tabled(display_with = "display_option")]
+        #[tabled(rename = "Symlinked")]
+        symlinked: Option<&'a str>,
+        #[tabled(display_with = "display_option")]
+        #[tabled(rename = "Not Symlinked")]
+        not_symlinked: Option<&'a str>,
+    }
+
+    fn display_option<'a>(o: &Option<&'a str>) -> &'a str {
+        match o {
+            Some(s) => s,
+            None => "",
         }
     }
 
-    if !sym.not_symlinked.is_empty() {
-        println!("Programs that aren't symlinked:");
-        for program in sym.not_symlinked {
-            println!(
-                "\t\t{}",
-                utils::to_program_name(program.to_str().unwrap())
-                    .unwrap()
-                    .red()
-            );
-        }
-    } else {
-        println!("{}", "\nAll programs are already symlinked.".yellow());
+    // Generates a Vec<SymlinkRow> for symlinked and not symlinked files
+    let mut symlinked_status: Vec<SymlinkRow> = Vec::new();
+    for sym in &sym.symlinked {
+        let symlinked_program = utils::to_program_name(sym.to_str().unwrap()).unwrap();
+        symlinked_status.push(SymlinkRow {
+            symlinked: Some(symlinked_program),
+            not_symlinked: None,
+        });
     }
+
+    let mut notsym_status: Vec<SymlinkRow> = Vec::new();
+    for nsym in &sym.not_symlinked {
+        let notsym_program = utils::to_program_name(nsym.to_str().unwrap()).unwrap();
+        notsym_status.push(SymlinkRow {
+            symlinked: None,
+            not_symlinked: Some(notsym_program),
+        });
+    }
+
+    // Merges symlinked_status and notsym_status into a single Vec<SymlinkRow>
+    let mut status: Vec<SymlinkRow> = Vec::new();
+    for i in 0..if symlinked_status.len() > notsym_status.len() {
+        symlinked_status.len()
+    } else {
+        notsym_status.len()
+    } {
+        let sym = symlinked_status.get(i).unwrap_or(&SymlinkRow {
+            symlinked: None,
+            not_symlinked: None,
+        });
+        let nsym = notsym_status.get(i).unwrap_or(&SymlinkRow {
+            symlinked: None,
+            not_symlinked: None,
+        });
+        let mut new_sym = SymlinkRow {
+            symlinked: None,
+            not_symlinked: None,
+        };
+
+        if sym.symlinked.is_none() && nsym.symlinked.is_some() {
+            new_sym.symlinked = nsym.symlinked;
+        } else {
+            new_sym.symlinked = sym.symlinked;
+        }
+
+        if sym.not_symlinked.is_none() && nsym.not_symlinked.is_some() {
+            new_sym.not_symlinked = nsym.not_symlinked;
+        } else {
+            new_sym.not_symlinked = sym.not_symlinked;
+        }
+
+        status.push(new_sym);
+    }
+
+    // Creates all the tables and prints it
+    let mut sym_table = Table::new(status);
+    sym_table
+        .with(tabled::Style::rounded())
+        .with(tabled::Margin::new(4, 4, 1, 1));
+
+    let mut conflict_table = Table::builder(sym.not_owned.iter().map(|f| f.to_str().unwrap()))
+        .set_columns(["Conflicting Files"])
+        .clone()
+        .build();
+    conflict_table
+        .with(tabled::Style::empty())
+        .with(tabled::Alignment::center());
+
+    let mut final_table = tabled::col![sym_table];
 
     if !sym.not_owned.is_empty() {
-        println!("\nThe following files are in conflict with your dotfiles:");
-        for file in sym.not_owned {
-            println!("\t{}", file.to_str().unwrap().yellow());
-        }
+        final_table = tabled::col![sym_table, conflict_table];
     }
 
-    println!();
+    final_table
+        .with(tabled::Style::empty())
+        .with(tabled::Margin::new(4, 4, 1, 1))
+        .with(tabled::Alignment::center());
+    println!("{}", final_table);
 }
 
 #[cfg(test)]

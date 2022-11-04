@@ -62,8 +62,16 @@ fn main() {
     let cli = Cli::parse();
 
     match cli {
-        Cli::Set { programs, exclude, force } => hooks::set_cmd(&programs, &exclude, force),
-        Cli::Add { programs, exclude, force } => symlinks::add_cmd(&programs, &exclude, force),
+        Cli::Set {
+            programs,
+            exclude,
+            force,
+        } => hooks::set_cmd(&programs, &exclude, force),
+        Cli::Add {
+            programs,
+            exclude,
+            force,
+        } => symlinks::add_cmd(&programs, &exclude, force),
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
         Cli::Status => symlinks::status_cmd(),
         Cli::Init => fileops::init_tuckr_dir(),
