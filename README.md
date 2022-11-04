@@ -2,7 +2,7 @@
 <br />
 <p align="center">
   <a href="https://github.com/RaphGL/Tuckr">
-    <img src="logo.png" alt="Logo" height="80">
+    <!-- <img src="logo.png" alt="Logo" height="80"> -->
   </a>
 
   <h3 align="center">A super powered replacement for GNU Stow</h3>
