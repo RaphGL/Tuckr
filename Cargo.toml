@@ -11,3 +11,4 @@ description = "Super powered GNU Stow replacement"
 clap = { version = "4.0", features = ["derive"] }
 colored = "2.0"
 dirs = "4.0"
+tabled = "0.10"
