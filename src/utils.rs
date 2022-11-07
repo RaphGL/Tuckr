@@ -65,23 +65,70 @@ mod tests {
     #[test]
     fn to_home_path() {
         assert_eq!(
-            super::to_home_path("/home/raph/.config/dotfiles/Configs/zsh/.zshrc"),
-            "/home/raph/.zshrc"
+            // /home/$USER/.config/dotfiles/Configs/zsh/.zshrc
+            super::to_home_path(
+                dirs::config_dir()
+                    .unwrap()
+                    .join("dotfiles")
+                    .join("Configs")
+                    .join("zsh")
+                    .join(".zshrc")
+                    .to_str()
+                    .unwrap()
+            ),
+            // /home/$USER/.zshrc
+            dirs::home_dir().unwrap().join(".zshrc").to_str().unwrap()
         );
         assert_eq!(
-            super::to_home_path("/home/raph/.config/dotfiles/Configs/zsh/.config/program"),
-            "/home/raph/.config/program"
+            // /home/$USER/.config/dotfiles/Configs/zsh/.config/$PROGRAM
+            super::to_home_path(
+                dirs::config_dir()
+                    .unwrap()
+                    .join("dotfiles")
+                    .join("Configs")
+                    .join("zsh")
+                    .join(".config")
+                    .join("program")
+                    .to_str()
+                    .unwrap()
+            ),
+            // /home/$USER/.config/$PROGRAM
+            dirs::config_dir()
+                .unwrap()
+                .join("program")
+                .to_str()
+                .unwrap()
         );
     }
 
     #[test]
     fn to_program_name() {
         assert_eq!(
-            super::to_program_name("/home/raph/.config/dotfiles/Configs/zsh").unwrap(),
+            super::to_program_name(
+            // /home/$USER/.config/dotfiles/Configs/zsh
+                dirs::config_dir()
+                    .unwrap()
+                    .join("dotfiles")
+                    .join("Configs")
+                    .join("zsh")
+                    .to_str()
+                    .unwrap()
+            )
+            .unwrap(),
             "zsh"
         );
         assert_eq!(
-            super::to_program_name("/home/raph/.config/dotfiles/Hooks/zsh").unwrap(),
+            super::to_program_name(
+                // /home/$USER/.config/dotfiles/Hooks/zsh
+                dirs::config_dir()
+                    .unwrap()
+                    .join("dotfiles")
+                    .join("Hooks")
+                    .join("zsh")
+                    .to_str()
+                    .unwrap()
+            )
+            .unwrap(),
             "zsh"
         );
     }

@@ -16,9 +16,7 @@ pub fn convert_to_tuckr() {
 
     if answer == "y" {
         // don't do anything if directory already exists
-        _ = fs::create_dir("Configs");
-        _ = fs::create_dir("Hooks");
-        _ = fs::create_dir("Encrypts");
+        init_tuckr_dir();
 
         let cwd = env::current_dir().unwrap();
         let curr_path = cwd.to_str().unwrap();
@@ -71,7 +69,9 @@ pub fn get_dotfiles_path() -> Option<String> {
 mod tests {
     #[test]
     fn get_dotfiles_path() {
+        // /home/$USER/.dotfiles
         let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
+        // /home/$USER/.config/dotfiles
         let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
         assert!(match super::get_dotfiles_path().unwrap() {
