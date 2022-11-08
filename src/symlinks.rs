@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use std::process;
 use tabled::{Table, Tabled};
 
-#[cfg(target_os = "windows")]
+#[cfg(target_family = "windows")]
 fn symlink_file(f: fs::DirEntry) {
     let target_path = utils::to_home_path(f.path().to_str().unwrap());
     _ = std::os::windows::fs::symlink_file(f.path(), target_path);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(target_family = "unix")]
 fn symlink_file(f: fs::DirEntry) {
     let target_path = utils::to_home_path(f.path().to_str().unwrap());
     _ = std::os::unix::fs::symlink(f.path(), target_path);
