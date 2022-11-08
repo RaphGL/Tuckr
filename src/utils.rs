@@ -23,6 +23,7 @@ pub fn to_home_path(path: &str) -> String {
         .to_string()
 }
 
+/// Converts paths from dotfiles/Hooks and Configs to their target destination at $HOME
 pub fn to_program_name(path: &str) -> Option<&str> {
     let dir = if path.contains("Configs") {
         "Configs"
@@ -58,6 +59,20 @@ pub fn file_or_xdgdir_map<F: FnMut(fs::DirEntry)>(file: fs::DirEntry, mut func: 
             func(file);
         }
     }
+}
+
+/// Prints a single row info box with title on the left
+/// and content on the right
+pub fn print_info_box(title: &str, content: &str) {
+    let mut hook_box = tabled::builder::Builder::default()
+        .set_columns([title])
+        .add_record([content])
+        .to_owned()
+        .build();
+    hook_box
+        .with(tabled::Rotate::Left)
+        .with(tabled::Style::rounded().off_vertical());
+    println!("{}", hook_box);
 }
 
 #[cfg(test)]
@@ -105,7 +120,7 @@ mod tests {
     fn to_program_name() {
         assert_eq!(
             super::to_program_name(
-            // /home/$USER/.config/dotfiles/Configs/zsh
+                // /home/$USER/.config/dotfiles/Configs/zsh
                 dirs::config_dir()
                     .unwrap()
                     .join("dotfiles")

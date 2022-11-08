@@ -1,4 +1,4 @@
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use std::env;
 use std::fs;
 use std::io;

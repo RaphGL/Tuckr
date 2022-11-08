@@ -1,7 +1,7 @@
 use crate::fileops;
 use crate::symlinks;
 use crate::utils;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,10 +51,17 @@ impl Iterator for DeployStages {
 /// Get's either PreHook or PostHook as hook_type
 /// this allows it to choose which script to run
 fn run_hook(program: &str, hook_type: DeployStep) {
+    utils::print_info_box(match hook_type {
+        DeployStep::PreHook => "Running Prehook",
+        DeployStep::PostHook => "Running Posthook",
+        _ => unreachable!()
+    }, program.yellow().to_string().as_str());
+
     let dotfiles_dir = fileops::get_dotfiles_path().expect("Could not find dotfiles directory");
     let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
-    let program_dir = fs::read_dir(program_dir)
-        .expect("Could not read Hooks, folder may not exist or have the appropriate permissions");
+    let program_dir = fs::read_dir(program_dir).expect(
+        "Could not read Hooks, folder may not exist or not have the appropriate permissions",
+    );
 
     for file in program_dir {
         let file = file.unwrap().path();
@@ -83,12 +90,12 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         if output.wait().unwrap().success() {
             println!(
                 "{}",
-                format!("{}'s {} hooked", program, filename).green().bold()
+                format!("{program}'s {filename} hooked").green().bold()
             );
         } else {
             println!(
                 "{}",
-                format!("{}'s {} failed to hook", program, filename)
+                format!("{program}'s {filename} failed to hook")
                     .red()
                     .bold()
             )
@@ -104,7 +111,10 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool) {
                     run_hook(program, DeployStep::PreHook);
                 }
 
-                DeployStep::Symlink => symlinks::add_cmd(programs, exclude, force),
+                DeployStep::Symlink => {
+                    utils::print_info_box("Symlinking program", program.yellow().to_string().as_str());
+                    symlinks::add_cmd(programs, exclude, force);
+                }
 
                 DeployStep::PostHook => run_hook(program, DeployStep::PostHook),
 

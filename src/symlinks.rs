@@ -1,6 +1,6 @@
 use crate::fileops;
 use crate::utils;
-use colored::Colorize;
+use owo_colors::OwoColorize;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -112,7 +112,7 @@ impl SymlinkHandler {
         } else {
             eprintln!(
                 "{} {}",
-                "Error: There's no program called".red(),
+                "Error: There's no dotfiles for".red(),
                 program.red()
             );
         }
