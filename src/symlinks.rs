@@ -340,7 +340,7 @@ pub fn status_cmd() {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils;
+    use crate::{fileops, utils};
     use std::path;
     use std::{
         collections::HashSet,
@@ -350,14 +350,21 @@ mod tests {
     // makes sure that symlink status is loaded on startup
     #[test]
     fn new_symlink_handler() {
-        let sym = super::SymlinkHandler::new();
-        assert!(
-            if !sym.symlinked.is_empty() || !sym.not_symlinked.is_empty() {
-                true
-            } else {
-                false
-            }
-        );
+        let dotfiles_dir = path::PathBuf::from(fileops::get_dotfiles_path().unwrap());
+        let dirs = fs::read_dir(dotfiles_dir.join("Configs"));
+
+        if dirs.is_err() {
+            panic!("{:#?}", dirs);
+        } else {
+            let sym = super::SymlinkHandler::new();
+            assert!(
+                if !sym.symlinked.is_empty() || !sym.not_symlinked.is_empty() {
+                    true
+                } else {
+                    false
+                }
+            );
+        }
     }
 
     fn init_symlink_test() -> (super::SymlinkHandler, path::PathBuf) {
