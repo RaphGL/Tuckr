@@ -51,11 +51,14 @@ impl Iterator for DeployStages {
 /// Get's either PreHook or PostHook as hook_type
 /// this allows it to choose which script to run
 fn run_hook(program: &str, hook_type: DeployStep) {
-    utils::print_info_box(match hook_type {
-        DeployStep::PreHook => "Running Prehook",
-        DeployStep::PostHook => "Running Posthook",
-        _ => unreachable!()
-    }, program.yellow().to_string().as_str());
+    utils::print_info_box(
+        match hook_type {
+            DeployStep::PreHook => "Running Prehook",
+            DeployStep::PostHook => "Running Posthook",
+            _ => unreachable!(),
+        },
+        program.yellow().to_string().as_str(),
+    );
 
     let dotfiles_dir = fileops::get_dotfiles_path().expect("Could not find dotfiles directory");
     let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
@@ -90,15 +93,16 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         if output.wait().unwrap().success() {
             println!(
                 "{}",
-                format!("{program}'s {filename} hooked").green().bold()
+                format!("Hooked {program} {filename} successfully")
+                    .green()
+                    .to_string()
+                    .as_str()
             );
         } else {
-            println!(
-                "{}",
-                format!("{program}'s {filename} failed to hook")
-                    .red()
-                    .bold()
-            )
+            utils::print_info_box(
+                "Failed to hook".red().to_string().as_str(),
+                format!("{program} {filename}").as_str(),
+            );
         }
     }
 }
@@ -112,7 +116,10 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool) {
                 }
 
                 DeployStep::Symlink => {
-                    utils::print_info_box("Symlinking program", program.yellow().to_string().as_str());
+                    utils::print_info_box(
+                        "Symlinking program",
+                        program.yellow().to_string().as_str(),
+                    );
                     symlinks::add_cmd(programs, exclude, force);
                 }
 
