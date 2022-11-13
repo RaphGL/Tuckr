@@ -250,6 +250,7 @@ pub fn status_cmd() {
         not_symlinked: Option<&'a str>,
     }
 
+    // used on SymlinkRow so that table rows are empty if it's None
     fn display_option<'a>(o: &Option<&'a str>) -> &'a str {
         match o {
             Some(s) => s,
@@ -278,6 +279,7 @@ pub fn status_cmd() {
 
     // Merges symlinked_status and notsym_status into a single Vec<SymlinkRow>
     let mut status: Vec<SymlinkRow> = Vec::new();
+    // loops over the biggest vector so the resulting vector can encompass all values
     for i in 0..if symlinked_status.len() > notsym_status.len() {
         symlinked_status.len()
     } else {
@@ -313,28 +315,35 @@ pub fn status_cmd() {
 
     // Creates all the tables and prints it
     let mut sym_table = Table::new(status);
+    use tabled::{
+        col, format::Format, object::Columns, object::Rows, Alignment, Margin, Modify, Style,
+    };
     sym_table
-        .with(tabled::Style::rounded())
-        .with(tabled::Margin::new(4, 4, 1, 1));
+        .with(Style::rounded())
+        .with(Margin::new(4, 4, 1, 1))
+        .with(Modify::new(Rows::first()).with(Format::new(|s| s.default_color().to_string())))
+        .with(Modify::new(Columns::single(0)).with(Format::new(|s| s.green().to_string())))
+        .with(Modify::new(Columns::single(1)).with(Format::new(|s| s.red().to_string())));
 
     let mut conflict_table = Table::builder(sym.not_owned.iter().map(|f| f.to_str().unwrap()))
-        .set_columns(["Conflicting Files"])
+        .set_columns(["Conflicting Files".yellow().to_string()])
         .clone()
         .build();
     conflict_table
-        .with(tabled::Style::empty())
-        .with(tabled::Alignment::center());
+        .with(Style::empty())
+        .with(Alignment::center());
 
-    let mut final_table = tabled::col![sym_table];
+    // Creates a table with sym_table and conflict_table
+    let mut final_table = col![sym_table];
 
     if !sym.not_owned.is_empty() {
-        final_table = tabled::col![sym_table, conflict_table];
+        final_table = col![sym_table, conflict_table];
     }
 
     final_table
-        .with(tabled::Style::empty())
-        .with(tabled::Margin::new(4, 4, 1, 1))
-        .with(tabled::Alignment::center());
+        .with(Style::empty())
+        .with(Margin::new(4, 4, 1, 1))
+        .with(Alignment::center());
     println!("{}", final_table);
 }
 
