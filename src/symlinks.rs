@@ -62,38 +62,33 @@ impl SymlinkHandler {
                 continue;
             }
 
-            // Checks for the files in each of the programs' dirs
-            for f in fs::read_dir(program_dir.path()).unwrap() {
-                let file = f.unwrap();
-
-                // a closure that takes a file and determines if it's a symlink or not
-                let check_symlink = |f: fs::DirEntry| {
-                    let config_file = utils::to_home_path(f.path().to_str().unwrap());
-                    if let Ok(f) = fs::read_link(&config_file) {
-                        // program_dir can only be in one set at a time
-                        // this makes it so one would get an not symlinked status
-                        // if at least one of the files is not symlinked
-                        let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
-                        let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
-                        if f.to_str().unwrap().contains(dotfiles_configs_path) {
-                            self.symlinked.insert(program_dir.path());
-                            self.not_symlinked.remove(&program_dir.path());
-                        } else {
-                            self.not_symlinked.insert(program_dir.path());
-                            self.symlinked.remove(&program_dir.path());
-                        }
+            // a closure that takes a file and determines if it's a symlink or not
+            let check_symlink = |f: fs::DirEntry| {
+                let config_file = utils::to_home_path(f.path().to_str().unwrap());
+                if let Ok(f) = fs::read_link(&config_file) {
+                    // program_dir can only be in one set at a time
+                    // this makes it so one would get an not symlinked status
+                    // if at least one of the files is not symlinked
+                    let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
+                    let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+                    if f.to_str().unwrap().contains(dotfiles_configs_path) {
+                        self.symlinked.insert(program_dir.path());
+                        self.not_symlinked.remove(&program_dir.path());
                     } else {
                         self.not_symlinked.insert(program_dir.path());
                         self.symlinked.remove(&program_dir.path());
-                        if PathBuf::from(&config_file).exists() {
-                            self.not_owned.insert(PathBuf::from(config_file));
-                        }
                     }
-                };
+                } else {
+                    self.not_symlinked.insert(program_dir.path());
+                    self.symlinked.remove(&program_dir.path());
+                    if PathBuf::from(&config_file).exists() {
+                        self.not_owned.insert(PathBuf::from(config_file));
+                    }
+                }
+            };
 
-                // iterate through all the files in program_dir
-                utils::file_or_xdgdir_map(file, check_symlink);
-            }
+            // Checks for the files in each of the programs' dirs
+            utils::program_dir_map(program_dir.path(), check_symlink);
         }
 
         self
@@ -101,14 +96,10 @@ impl SymlinkHandler {
 
     /// Symlinks all the files of a program to the user's $HOME
     fn add(&self, program: &str) {
-        let program_dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs").join(&program));
-        if let Ok(dir) = program_dir {
-            for file in dir {
-                let file = file.unwrap();
-
-                // iterate through all the files in program_dir
-                utils::file_or_xdgdir_map(file, symlink_file);
-            }
+        let program_dir = self.dotfiles_dir.join("Configs").join(&program);
+        if program_dir.exists() {
+            // iterate through all the files in program_dir
+            utils::program_dir_map(program_dir, symlink_file);
         } else {
             eprintln!(
                 "{} {}",
@@ -131,13 +122,10 @@ impl SymlinkHandler {
             }
         };
 
-        let program_dir = fs::read_dir(self.dotfiles_dir.clone().join("Configs").join(&program));
-        if let Ok(dir) = program_dir {
-            for file in dir {
-                let file = file.unwrap();
+        let program_dir = self.dotfiles_dir.clone().join("Configs").join(&program);
+        if program_dir.exists() {
                 // iterate through all the files in program_dir
-                utils::file_or_xdgdir_map(file, remove_symlink);
-            }
+                utils::program_dir_map(program_dir, remove_symlink);
         } else {
             eprintln!(
                 "{} {}",
@@ -197,7 +185,7 @@ where
 }
 
 /// Adds symlinks
-pub fn add_cmd(programs: &[String], exclude: &[String], force: bool) {
+pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool) {
     if force {
         let mut answer = String::new();
         print!("Are you sure you want to override conflicts? (N/y) ");
@@ -215,19 +203,27 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool) {
         }
     }
 
-    foreach_program(programs, exclude, true, |sym, p| {
-        if force && !sym.not_owned.is_empty() {
-            for file in &sym.not_owned {
-                // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
-                // files thus forcing them to be symlinked
-                if file.is_dir() {
-                    _ = fs::remove_dir_all(file);
-                } else {
-                    _ = fs::remove_file(file);
+    foreach_program(programs, exclude, true, |sym, program| {
+        if !sym.not_owned.is_empty() {
+            if force {
+                for file in &sym.not_owned {
+                    if file.to_str().unwrap() != program {
+                        continue;
+                    }
+                    // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
+                    // files thus forcing them to be symlinked
+                    if file.is_dir() {
+                        _ = fs::remove_dir_all(file);
+                    } else {
+                        _ = fs::remove_file(file);
+                    }
                 }
             }
+
+            if adopt {}
         }
-        sym.add(p)
+
+        sym.add(program)
     });
 }
 

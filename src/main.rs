@@ -20,6 +20,10 @@ enum Cli {
         #[arg(short, long)]
         /// Replace dotfiles even if there are conflicts
         force: bool,
+
+        #[arg(short, long)]
+        /// Adopt the conflicting dotfile instead
+        adopt: bool,
     },
 
     /// Deploy dotfiles for the given program
@@ -34,6 +38,10 @@ enum Cli {
         #[arg(short, long)]
         /// Replace dotfiles even if there are conflicts
         force: bool,
+
+        #[arg(short, long)]
+        /// Adopt the conflicting dotfile instead
+        adopt: bool,
     },
 
     /// Remove dotfiles for a program
@@ -66,12 +74,16 @@ fn main() {
             programs,
             exclude,
             force,
-        } => hooks::set_cmd(&programs, &exclude, force),
+            adopt,
+        } => hooks::set_cmd(&programs, &exclude, force, adopt),
+
         Cli::Add {
             programs,
             exclude,
             force,
-        } => symlinks::add_cmd(&programs, &exclude, force),
+            adopt,
+        } => symlinks::add_cmd(&programs, &exclude, force, adopt),
+
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
         Cli::Status => symlinks::status_cmd(),
         Cli::Init => fileops::init_tuckr_dir(),
