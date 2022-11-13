@@ -52,14 +52,14 @@ pub fn init_tuckr_dir() {
 }
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
-pub fn get_dotfiles_path() -> Option<String> {
+pub fn get_dotfiles_path() -> Option<path::PathBuf> {
     let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
     let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
     if home_dotfiles.exists() {
-        Some(home_dotfiles.to_str().unwrap().to_string())
+        Some(home_dotfiles)
     } else if config_dotfiles.exists() {
-        Some(config_dotfiles.to_str().unwrap().to_string())
+        Some(config_dotfiles)
     } else {
         None
     }
@@ -75,8 +75,8 @@ mod tests {
         let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
         assert!(match super::get_dotfiles_path().unwrap() {
-            path if path == home_dotfiles.to_str().unwrap()
-                || path == config_dotfiles.to_str().unwrap() =>
+            path if path == home_dotfiles
+                || path == config_dotfiles =>
                 true,
             _ => false,
         });

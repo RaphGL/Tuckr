@@ -124,8 +124,8 @@ impl SymlinkHandler {
 
         let program_dir = self.dotfiles_dir.clone().join("Configs").join(&program);
         if program_dir.exists() {
-                // iterate through all the files in program_dir
-                utils::program_dir_map(program_dir, remove_symlink);
+            // iterate through all the files in program_dir
+            utils::program_dir_map(program_dir, remove_symlink);
         } else {
             eprintln!(
                 "{} {}",
@@ -206,21 +206,44 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
     foreach_program(programs, exclude, true, |sym, program| {
         if !sym.not_owned.is_empty() {
             if force {
+                // Symlink dotfile by force
                 for file in &sym.not_owned {
-                    if file.to_str().unwrap() != program {
-                        continue;
-                    }
                     // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
                     // files thus forcing them to be symlinked
-                    if file.is_dir() {
-                        _ = fs::remove_dir_all(file);
-                    } else {
-                        _ = fs::remove_file(file);
+                    if file.to_str().unwrap() == program {
+                        if file.is_dir() {
+                            _ = fs::remove_dir_all(file);
+                        } else {
+                            _ = fs::remove_file(file);
+                        }
                     }
                 }
             }
 
-            if adopt {}
+            if adopt {
+                // Discard dotfile and adopt the conflicting dotfile
+                let program_dir = fileops::get_dotfiles_path()
+                    .unwrap()
+                    .join("Configs")
+                    .join(program);
+
+                for file in &sym.not_owned {
+                    utils::program_dir_map(program_dir.clone(), |f| {
+                        let program_path = f.path();
+                        // only adopts dotfile if it matches requested program
+                        if utils::to_home_path(program_path.to_str().unwrap())
+                            == file.to_str().unwrap()
+                        {
+                            if program_path.is_dir() {
+                                _ = fs::remove_dir(&program_path);
+                            } else {
+                                _ = fs::remove_file(&program_path);
+                            }
+                            _ = fs::rename(file, program_path);
+                        }
+                    });
+                }
+            }
         }
 
         sym.add(program)
