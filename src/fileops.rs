@@ -1,3 +1,4 @@
+/// Contains code that interacts with the file system in some side effecty way
 use owo_colors::OwoColorize;
 use std::env;
 use std::fs;
@@ -49,36 +50,4 @@ pub fn init_tuckr_dir() {
     _ = fs::create_dir("Configs");
     _ = fs::create_dir("Hooks");
     _ = fs::create_dir("Encrypts");
-}
-
-/// Returns an Option<String> with the path to of the tuckr dotfiles directory
-pub fn get_dotfiles_path() -> Option<path::PathBuf> {
-    let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
-    let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
-
-    if home_dotfiles.exists() {
-        Some(home_dotfiles)
-    } else if config_dotfiles.exists() {
-        Some(config_dotfiles)
-    } else {
-        None
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn get_dotfiles_path() {
-        // /home/$USER/.dotfiles
-        let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
-        // /home/$USER/.config/dotfiles
-        let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
-
-        assert!(match super::get_dotfiles_path().unwrap() {
-            path if path == home_dotfiles
-                || path == config_dotfiles =>
-                true,
-            _ => false,
-        });
-    }
 }

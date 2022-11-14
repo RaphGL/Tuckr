@@ -1,26 +1,36 @@
+/// A set of helper functions that reduce boilerplate
 use std::fs;
 use std::path;
 
+/// Returns an Option<String> with the path to of the tuckr dotfiles directory
+pub fn get_dotfiles_path() -> Option<path::PathBuf> {
+    let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
+    let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
+
+    if home_dotfiles.exists() {
+        Some(home_dotfiles)
+    } else if config_dotfiles.exists() {
+        Some(config_dotfiles)
+    } else {
+        None
+    }
+}
+
 /// Converts a path string from pointing to their config in the dotfiles to where they should be
 /// deployed on $HOME
-pub fn to_home_path(path: &str) -> String {
+pub fn to_home_path(path: &str) -> path::PathBuf {
     // uses join("") so that the path appends / or \ depending on platform
     let dotfiles_configs_path = path::PathBuf::from("dotfiles").join("Configs").join("");
     let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
 
-    dirs::home_dir()
-        .unwrap()
-        .join(
-            path.split_once(dotfiles_configs_path)
-                .unwrap()
-                .1
-                .split_once(path::MAIN_SEPARATOR)
-                .unwrap()
-                .1,
-        )
-        .to_str()
-        .unwrap()
-        .to_string()
+    dirs::home_dir().unwrap().join(
+        path.split_once(dotfiles_configs_path)
+            .unwrap()
+            .1
+            .split_once(path::MAIN_SEPARATOR)
+            .unwrap()
+            .1,
+    )
 }
 
 /// Converts paths from dotfiles/Hooks and Configs to their target destination at $HOME
@@ -81,6 +91,20 @@ pub fn print_info_box(title: &str, content: &str) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn get_dotfiles_path() {
+        // /home/$USER/.dotfiles
+        let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
+        // /home/$USER/.config/dotfiles
+        let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
+
+        assert!(match super::get_dotfiles_path().unwrap() {
+            path if path == home_dotfiles || path == config_dotfiles => true,
+            _ => false,
+        });
+    }
+
     #[test]
     fn to_home_path() {
         assert_eq!(
@@ -96,7 +120,7 @@ mod tests {
                     .unwrap()
             ),
             // /home/$USER/.zshrc
-            dirs::home_dir().unwrap().join(".zshrc").to_str().unwrap()
+            dirs::home_dir().unwrap().join(".zshrc")
         );
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.config/$PROGRAM
@@ -112,11 +136,7 @@ mod tests {
                     .unwrap()
             ),
             // /home/$USER/.config/$PROGRAM
-            dirs::config_dir()
-                .unwrap()
-                .join("program")
-                .to_str()
-                .unwrap()
+            dirs::config_dir().unwrap().join("program")
         );
     }
 

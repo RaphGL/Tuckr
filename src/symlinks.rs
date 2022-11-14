@@ -1,4 +1,3 @@
-use crate::fileops;
 use crate::utils;
 use owo_colors::OwoColorize;
 use std::collections::HashSet;
@@ -32,7 +31,7 @@ impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it with information about all the dotfiles
     fn new() -> SymlinkHandler {
         let symlinker = SymlinkHandler {
-            dotfiles_dir: PathBuf::from(fileops::get_dotfiles_path().unwrap_or_else(|| {
+            dotfiles_dir: PathBuf::from(utils::get_dotfiles_path().unwrap_or_else(|| {
                 eprintln!("Could not find dotfiles, make sure it's in the right path");
                 process::exit(1);
             })),
@@ -222,7 +221,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
 
             if adopt {
                 // Discard dotfile and adopt the conflicting dotfile
-                let program_dir = fileops::get_dotfiles_path()
+                let program_dir = utils::get_dotfiles_path()
                     .unwrap()
                     .join("Configs")
                     .join(program);
@@ -231,9 +230,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
                     utils::program_dir_map(program_dir.clone(), |f| {
                         let program_path = f.path();
                         // only adopts dotfile if it matches requested program
-                        if utils::to_home_path(program_path.to_str().unwrap())
-                            == file.to_str().unwrap()
-                        {
+                        if utils::to_home_path(program_path.to_str().unwrap()) == file.clone() {
                             if program_path.is_dir() {
                                 _ = fs::remove_dir(&program_path);
                             } else {
@@ -368,7 +365,7 @@ pub fn status_cmd() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{fileops, utils};
+    use crate::utils;
     use std::path;
     use std::{
         collections::HashSet,
@@ -378,7 +375,7 @@ mod tests {
     // makes sure that symlink status is loaded on startup
     #[test]
     fn new_symlink_handler() {
-        let dotfiles_dir = path::PathBuf::from(fileops::get_dotfiles_path().unwrap());
+        let dotfiles_dir = path::PathBuf::from(utils::get_dotfiles_path().unwrap());
         let dirs = fs::read_dir(dotfiles_dir.join("Configs"));
 
         if dirs.is_err() {
