@@ -32,7 +32,10 @@ impl SymlinkHandler {
     fn new() -> SymlinkHandler {
         let symlinker = SymlinkHandler {
             dotfiles_dir: PathBuf::from(utils::get_dotfiles_path().unwrap_or_else(|| {
-                eprintln!("Could not find dotfiles, make sure it's in the right path");
+                eprintln!(
+                    "{}",
+                    "Could not find dotfiles, make sure it's in the right path".red()
+                );
                 process::exit(1);
             })),
             symlinked: HashSet::new(),
@@ -52,7 +55,7 @@ impl SymlinkHandler {
     fn validate_symlinks(mut self) -> Self {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
         let dir = fs::read_dir(self.dotfiles_dir.join("Configs")).unwrap_or_else(|_| {
-            eprintln!("There's no Configs folder set up");
+            eprintln!("{}", "There's no Configs folder set up".red());
             process::exit(1);
         });
         for file in dir {
@@ -197,25 +200,27 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
 
         match answer.trim().to_lowercase().as_str() {
             "y" | "yes" => (),
-            "n" | "no" => process::exit(0),
-            _ => process::exit(3),
+            _ => process::exit(0),
         }
     }
 
     foreach_program(programs, exclude, true, |sym, program| {
         if !sym.not_owned.is_empty() {
+            // Symlink dotfile by force
             if force {
-                // Symlink dotfile by force
                 for file in &sym.not_owned {
                     // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
                     // files thus forcing them to be symlinked
-                    if file.to_str().unwrap() == program {
-                        if file.is_dir() {
-                            _ = fs::remove_dir_all(file);
-                        } else {
-                            _ = fs::remove_file(file);
+                    let program_dir = sym.dotfiles_dir.join("Configs").join(program);
+                    utils::program_dir_map(program_dir, |program_file| {
+                        if &utils::to_home_path(program_file.path().to_str().unwrap()) == file {
+                            if file.is_dir() {
+                                _ = fs::remove_dir_all(file);
+                            } else {
+                                _ = fs::remove_file(file);
+                            }
                         }
-                    }
+                    });
                 }
             }
 

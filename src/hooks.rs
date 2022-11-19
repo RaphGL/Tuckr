@@ -59,11 +59,15 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         program.yellow().to_string().as_str(),
     );
 
-    let dotfiles_dir = utils::get_dotfiles_path().expect("Could not find dotfiles directory");
+    let dotfiles_dir = utils::get_dotfiles_path().unwrap_or_else(|| {
+        eprintln!("{}", "Could not find dotfiles directory".red());
+        std::process::exit(1);
+    });
     let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
-    let program_dir = fs::read_dir(program_dir).expect(
-        "Could not read Hooks, folder may not exist or not have the appropriate permissions",
-    );
+    let program_dir = fs::read_dir(program_dir).unwrap_or_else(|_| {
+        eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
+        std::process::exit(1);
+    });
 
     for file in program_dir {
         let file = file.unwrap().path();
@@ -132,7 +136,10 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
     for program in programs {
         if program == "*" {
             let dotfiles_dir = PathBuf::from(utils::get_dotfiles_path().unwrap_or_else(|| {
-                eprintln!("Could not find the Hooks directory in your dotfiles");
+                eprintln!(
+                    "{}",
+                    "Could not find the Hooks directory in your dotfiles".red()
+                );
                 std::process::exit(2);
             }))
             .join("Hooks");
