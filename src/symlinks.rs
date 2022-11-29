@@ -146,7 +146,7 @@ impl SymlinkHandler {
 /// iterates over each program in the dotfiles and calls a function F giving it the SymlinkHandler
 /// instance and the name of the program that's being handled
 ///
-/// This abstracts this recurrent loop allowing to only handle programs by their names
+/// This abstracts this recurrent loop allowing handle programs just by their names
 fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, f: F)
 where
     F: Fn(&SymlinkHandler, &String),
@@ -377,7 +377,7 @@ mod tests {
         fs::{self, File},
     };
 
-    // makes sure that symlink status is loaded on startup
+    /// makes sure that symlink status is loaded on startup
     #[test]
     fn new_symlink_handler() {
         let dotfiles_dir = path::PathBuf::from(utils::get_dotfiles_path().unwrap());
@@ -397,6 +397,7 @@ mod tests {
         }
     }
 
+    /// Initializes symlink test by creating a SymlinkHandler and a mockup dotfiles directory
     fn init_symlink_test() -> (super::SymlinkHandler, path::PathBuf) {
         let sym = super::SymlinkHandler {
             dotfiles_dir: path::PathBuf::from(std::env::temp_dir())
@@ -404,10 +405,10 @@ mod tests {
                 .join("dotfiles"),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
-            not_owned: HashSet::new(), // TODO not yet tested
+            not_owned: HashSet::new(),
         };
         let program_dir = sym.dotfiles_dir.clone().join("Configs").join("program");
-        if fs::create_dir_all(program_dir.clone().join(".config")).is_err() {
+        if let Err(_) = fs::create_dir_all(program_dir.clone().join(".config")) {
             panic!("Could not create required folders");
         }
 
@@ -437,6 +438,13 @@ mod tests {
             fs::read_link(utils::to_home_path(config_file.to_str().unwrap())).unwrap(),
             config_file
         );
+    }
+
+    #[test]
+    fn add_force_symlink() {
+        let init = init_symlink_test();
+        let sym = init.0;
+        let program_dir = init.1;
     }
 
     #[test]

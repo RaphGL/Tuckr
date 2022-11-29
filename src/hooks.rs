@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+#[derive(PartialEq)]
 enum DeployStep {
     Initialize, // only used so prehook can be returned
     PreHook,
@@ -13,15 +14,11 @@ enum DeployStep {
 }
 
 /// State machine for the dotfile deployment
-struct DeployStages {
-    stage: DeployStep,
-}
+struct DeployStages(DeployStep);
 
 impl DeployStages {
     fn new() -> DeployStages {
-        DeployStages {
-            stage: DeployStep::Initialize,
-        }
+        DeployStages(DeployStep::Initialize)
     }
 }
 
@@ -29,17 +26,17 @@ impl Iterator for DeployStages {
     type Item = DeployStep;
 
     fn next(&mut self) -> Option<DeployStep> {
-        match self.stage {
+        match self.0 {
             DeployStep::Initialize => {
-                self.stage = DeployStep::PreHook;
+                self.0 = DeployStep::PreHook;
                 Some(DeployStep::PreHook)
             }
             DeployStep::PreHook => {
-                self.stage = DeployStep::Symlink;
+                self.0 = DeployStep::Symlink;
                 Some(DeployStep::Symlink)
             }
             DeployStep::Symlink => {
-                self.stage = DeployStep::PostHook;
+                self.0 = DeployStep::PostHook;
                 Some(DeployStep::PostHook)
             }
             DeployStep::PostHook => None,
@@ -47,8 +44,8 @@ impl Iterator for DeployStages {
     }
 }
 
-/// Get's either PreHook or PostHook as hook_type
-/// this allows it to choose which script to run
+/// Gets either PreHook or PostHook as hook_type
+/// this allows it to choose what type of script to run
 fn run_hook(program: &str, hook_type: DeployStep) {
     utils::print_info_box(
         match hook_type {
@@ -114,6 +111,8 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
     let run_deploy_steps = |step: DeployStages, program: &str| {
         for i in step {
             match i {
+                DeployStep::Initialize => return,
+
                 DeployStep::PreHook => {
                     run_hook(program, DeployStep::PreHook);
                 }
@@ -127,21 +126,19 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
                 }
 
                 DeployStep::PostHook => run_hook(program, DeployStep::PostHook),
-
-                _ => unreachable!(),
             }
         }
     };
 
     for program in programs {
         if program == "*" {
-            let dotfiles_dir = PathBuf::from(utils::get_dotfiles_path().unwrap_or_else(|| {
+            let dotfiles_dir = utils::get_dotfiles_path().unwrap_or_else(|| {
                 eprintln!(
                     "{}",
                     "Could not find the Hooks directory in your dotfiles".red()
                 );
                 std::process::exit(2);
-            }))
+            })
             .join("Hooks");
 
             for folder in fs::read_dir(dotfiles_dir).unwrap() {
@@ -155,5 +152,36 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
         } else {
             run_deploy_steps(DeployStages::new(), program);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use super::*;
+
+    #[test]
+    fn run_deploy_steps() {
+        let mut steps = DeployStages::new();
+        assert!(steps.0 == DeployStep::Initialize);
+        steps.next();
+        assert!(steps.0 == DeployStep::PreHook);
+        steps.next();
+        assert!(steps.0 == DeployStep::Symlink);
+        steps.next();
+        assert!(steps.0 == DeployStep::PostHook);
+    }
+
+    #[test]
+    fn check_hooks() {
+        let mut hook = DeployStages::new();
+        assert!(hook.0 == DeployStep::Initialize);
+        hook.next();
+        assert!(hook.0 == DeployStep::PreHook);
+        hook.next();
+        assert!(hook.0 == DeployStep::Symlink);
+        hook.next();
+        assert!(hook.0 == DeployStep::PostHook);
     }
 }
