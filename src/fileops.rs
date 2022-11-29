@@ -37,7 +37,7 @@ pub fn convert_to_tuckr() {
 
             if !dirname.ends_with("Configs")
                 && !dirname.ends_with("Hooks")
-                && !dirname.ends_with("Encrypts")
+                && !dirname.ends_with("Secrets")
             {
                 fs::rename(dir.path().to_str().unwrap(), path).expect("Could not move files");
             }
@@ -49,5 +49,5 @@ pub fn convert_to_tuckr() {
 pub fn init_tuckr_dir() {
     _ = fs::create_dir("Configs");
     _ = fs::create_dir("Hooks");
-    _ = fs::create_dir("Encrypts");
+    _ = fs::create_dir("Secrets");
 }

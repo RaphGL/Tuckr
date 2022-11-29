@@ -138,7 +138,7 @@ Tuckr works without having to use a configuration file by making a few minor cho
 ```sh
 .
 ├── Configs # Dotfiles go here
-├── Encrypts # Encrypted files go here
+├── Secrets # Encrypted files go here
 └── Hooks # Setup scripts go here
 ```
 
@@ -148,12 +148,12 @@ Your dotfiles should be one folder by program, the folder name will become how t
 ├── Configs
 │   ├── Program1
 │   ├── Program2
-├── Encrypts
+├── Secrets 
 └── Hooks
     ├── Program1
     └── Program2
 ```
-As long as the names align between Configs, Hooks and Encrypts, they will work together.
+As long as the names align between Configs, Hooks and Secrets, they will work together.
 
 ### Using Hooks
 Hooks are run before and after adding every program. Hooks that run before the program addition are prefixed with `pre`, scripts that run afterward are prefixed with `post`, as long as this is true you can name the file whatever you want.
