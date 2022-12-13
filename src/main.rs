@@ -6,7 +6,7 @@ mod utils;
 use clap::Parser;
 
 #[derive(Debug, Parser)]
-#[command(about, author, version)]
+#[command(about, author, version, propagate_version = true)]
 enum Cli {
     /// Setup the program and run its hooks
     Set {
@@ -26,7 +26,8 @@ enum Cli {
         adopt: bool,
     },
 
-    /// Deploy dotfiles for the given program
+    #[command(alias = "a")]
+    /// Deploy dotfiles for the given program (alias: a)
     Add {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
@@ -54,7 +55,8 @@ enum Cli {
         exclude: Vec<String>,
     },
 
-    /// Print a status message for all dotfiles
+    #[command(alias = "s")]
+    /// Print a status message for all dotfiles (alias: s)
     Status,
 
     /// Initialize dotfile directory
