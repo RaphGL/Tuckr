@@ -7,7 +7,7 @@ use std::process::Command;
 
 #[derive(PartialEq)]
 enum DeployStep {
-    Initialize, // only used so prehook can be returned
+    Initialize, // Default value before starting deployment
     PreHook,
     Symlink,
     PostHook,
@@ -90,6 +90,7 @@ fn run_hook(program: &str, hook_type: DeployStep) {
             .arg(file)
             .spawn()
             .expect("Failed to run hook");
+
         if output.wait().unwrap().success() {
             println!(
                 "{}",
@@ -131,34 +132,36 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
     };
 
     for program in programs {
-        if program == "*" {
-            let dotfiles_dir = utils::get_dotfiles_path().unwrap_or_else(|| {
-                eprintln!(
-                    "{}",
-                    "Could not find the Hooks directory in your dotfiles".red()
-                );
-                std::process::exit(2);
-            })
-            .join("Hooks");
+        match program.as_str() {
+            "*" => {
+                let dotfiles_dir = utils::get_dotfiles_path()
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "{}",
+                            "Could not find the Hooks directory in your dotfiles".red()
+                        );
+                        std::process::exit(2);
+                    })
+                    .join("Hooks");
 
-            for folder in fs::read_dir(dotfiles_dir).unwrap() {
-                let folder = folder.unwrap();
-                run_deploy_steps(
-                    DeployStages::new(),
-                    utils::to_program_name(folder.path().to_str().unwrap()).unwrap(),
-                );
+                for folder in fs::read_dir(dotfiles_dir).unwrap() {
+                    let folder = folder.unwrap();
+                    run_deploy_steps(
+                        DeployStages::new(),
+                        utils::to_program_name(folder.path().to_str().unwrap()).unwrap(),
+                    );
+                }
+
+                break;
             }
-            break;
-        } else {
-            run_deploy_steps(DeployStages::new(), program);
+
+            _ => run_deploy_steps(DeployStages::new(), program),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-
     use super::*;
 
     #[test]

@@ -58,6 +58,7 @@ impl SymlinkHandler {
             eprintln!("{}", "There's no Configs folder set up".red());
             process::exit(1);
         });
+
         for file in dir {
             let program_dir = file.unwrap();
             if program_dir.file_type().unwrap().is_file() {
@@ -67,24 +68,29 @@ impl SymlinkHandler {
             // a closure that takes a file and determines if it's a symlink or not
             let check_symlink = |f: fs::DirEntry| {
                 let config_file = utils::to_home_path(f.path().to_str().unwrap());
-                if let Ok(f) = fs::read_link(&config_file) {
-                    // program_dir can only be in one set at a time
-                    // this makes it so one would get an not symlinked status
-                    // if at least one of the files is not symlinked
-                    let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
-                    let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
-                    if f.to_str().unwrap().contains(dotfiles_configs_path) {
-                        self.symlinked.insert(program_dir.path());
-                        self.not_symlinked.remove(&program_dir.path());
-                    } else {
+
+                match fs::read_link(&config_file) {
+                    Ok(f) => {
+                        // program_dir can only be in one set at a time
+                        // this makes it so one would get an not symlinked status
+                        // if at least one of the files is not symlinked
+                        let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
+                        let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+                        if f.to_str().unwrap().contains(dotfiles_configs_path) {
+                            self.symlinked.insert(program_dir.path());
+                            self.not_symlinked.remove(&program_dir.path());
+                        } else {
+                            self.not_symlinked.insert(program_dir.path());
+                            self.symlinked.remove(&program_dir.path());
+                        }
+                    }
+
+                    Err(_) => {
                         self.not_symlinked.insert(program_dir.path());
                         self.symlinked.remove(&program_dir.path());
-                    }
-                } else {
-                    self.not_symlinked.insert(program_dir.path());
-                    self.symlinked.remove(&program_dir.path());
-                    if PathBuf::from(&config_file).exists() {
-                        self.not_owned.insert(PathBuf::from(config_file));
+                        if PathBuf::from(&config_file).exists() {
+                            self.not_owned.insert(PathBuf::from(config_file));
+                        }
                     }
                 }
             };
@@ -266,6 +272,7 @@ pub fn status_cmd() {
         #[tabled(display_with = "display_option")]
         #[tabled(rename = "Symlinked")]
         symlinked: Option<&'a str>,
+
         #[tabled(display_with = "display_option")]
         #[tabled(rename = "Not Symlinked")]
         not_symlinked: Option<&'a str>,
@@ -334,11 +341,12 @@ pub fn status_cmd() {
         status.push(new_sym);
     }
 
-    // Creates all the tables and prints it
-    let mut sym_table = Table::new(status);
+    // --- Creates all the tables and prints them ---
     use tabled::{
         col, format::Format, object::Columns, object::Rows, Alignment, Margin, Modify, Style,
     };
+
+    let mut sym_table = Table::new(status);
     sym_table
         .with(Style::rounded())
         .with(Margin::new(4, 4, 1, 1))
@@ -442,9 +450,9 @@ mod tests {
 
     #[test]
     fn add_force_symlink() {
-        let init = init_symlink_test();
-        let sym = init.0;
-        let program_dir = init.1;
+        //let init = init_symlink_test();
+        //let sym = init.0;
+        //let program_dir = init.1;
     }
 
     #[test]

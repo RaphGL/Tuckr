@@ -15,39 +15,48 @@ pub fn convert_to_tuckr() {
     io::stdin().read_line(&mut answer).unwrap();
     let answer = answer.to_lowercase().trim().to_owned();
 
-    if answer == "y" {
-        // don't do anything if directory already exists
-        init_tuckr_dir();
+    if answer != "y" {
+        return;
+    }
 
-        let cwd = env::current_dir().unwrap();
-        let curr_path = cwd.to_str().unwrap();
-        let cwd = fs::read_dir(&cwd).expect("Could not open current directory");
-        const IGNORED_FILES: &[&str] = &["COPYING", "LICENSE", "README.md"];
+    init_tuckr_dir();
 
-        for dir in cwd {
-            let dir = dir.unwrap();
-            let dirname = dir.file_name().to_str().unwrap().to_owned();
-            if dirname.starts_with('.') || IGNORED_FILES.contains(&dirname.as_ref()) {
-                continue;
-            }
+    let cwd = env::current_dir().unwrap();
+    let curr_path = cwd.to_str().unwrap();
+    let cwd = fs::read_dir(&cwd).expect("Could not open current directory");
+    const IGNORED_FILES: &[&str] = &["COPYING", "LICENSE", "README.md"];
 
-            let path = path::PathBuf::from(curr_path)
-                .join("Configs")
-                .join(&dirname);
+    for dir in cwd {
+        let dir = dir.unwrap();
+        let dirname = dir.file_name().to_str().unwrap().to_owned();
+        if dirname.starts_with('.') || IGNORED_FILES.contains(&dirname.as_str()) {
+            continue;
+        }
 
-            if !dirname.ends_with("Configs")
-                && !dirname.ends_with("Hooks")
-                && !dirname.ends_with("Secrets")
-            {
-                fs::rename(dir.path().to_str().unwrap(), path).expect("Could not move files");
-            }
+        let path = path::PathBuf::from(curr_path)
+            .join("Configs")
+            .join(&dirname);
+
+        if !dirname.ends_with("Configs")
+            && !dirname.ends_with("Hooks")
+            && !dirname.ends_with("Secrets")
+        {
+            fs::rename(dir.path().to_str().unwrap(), path).expect("Could not move files");
         }
     }
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_tuckr_dir() {
-    _ = fs::create_dir("Configs");
-    _ = fs::create_dir("Hooks");
-    _ = fs::create_dir("Secrets");
+    if let Err(e) = fs::create_dir("Configs") {
+        eprintln!("{}", e.to_string());
+    }
+
+    if let Err(e) = fs::create_dir("Hooks") {
+        eprintln!("{}", e.to_string());
+    }
+
+    if let Err(e) = fs::create_dir("Secrets") {
+        eprintln!("{}", e.to_string());
+    }
 }

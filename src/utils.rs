@@ -21,10 +21,9 @@ pub fn get_dotfiles_path() -> Option<path::PathBuf> {
 pub fn to_home_path(path: &str) -> path::PathBuf {
     // uses join("") so that the path appends / or \ depending on platform
     let dotfiles_configs_path = path::PathBuf::from("dotfiles").join("Configs").join("");
-    let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
 
     dirs::home_dir().unwrap().join(
-        path.split_once(dotfiles_configs_path)
+        path.split_once(dotfiles_configs_path.to_str().unwrap())
             .unwrap()
             .1
             .split_once(path::MAIN_SEPARATOR)
