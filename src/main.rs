@@ -2,6 +2,7 @@ mod fileops;
 mod hooks;
 mod symlinks;
 mod utils;
+mod secrets;
 
 use clap::Parser;
 
@@ -59,6 +60,18 @@ enum Cli {
     /// Print a status message for all dotfiles (alias: s)
     Status,
 
+    /// Encrypts files and moves it to dotfiles/Secrets
+    Encrypt {
+        group: String,
+        #[arg(required = true, value_name = "dotfiles")]
+        dotfiles: Vec<String>,
+    },
+
+    /// Decrypts files
+    Decrypt {
+        group: String,
+    },
+
     /// Initialize dotfile directory
     ///
     /// Creates files necessary to use Tuckr
@@ -88,6 +101,8 @@ fn main() {
 
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
         Cli::Status => symlinks::status_cmd(),
+        Cli::Encrypt {group, dotfiles} => secrets::encrypt_cmd(&group, &dotfiles),
+        Cli::Decrypt {group}=> secrets::decrypt_cmd(&group),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),
     }

@@ -49,14 +49,14 @@ pub fn convert_to_tuckr() {
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_tuckr_dir() {
     if let Err(e) = fs::create_dir("Configs") {
-        eprintln!("{}", e.to_string());
+        eprintln!("{}", e);
     }
 
     if let Err(e) = fs::create_dir("Hooks") {
-        eprintln!("{}", e.to_string());
+        eprintln!("{}", e);
     }
 
     if let Err(e) = fs::create_dir("Secrets") {
-        eprintln!("{}", e.to_string());
+        eprintln!("{}", e);
     }
 }

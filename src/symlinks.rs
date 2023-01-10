@@ -22,29 +22,29 @@ fn symlink_file(f: fs::DirEntry) {
 /// Handles generic symlinking and symlink status
 struct SymlinkHandler {
     dotfiles_dir: PathBuf,           // path to the dotfiles directory
-    symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
+   symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
     not_symlinked: HashSet<PathBuf>, // path to programs that aren't symlinked to $HOME
     not_owned: HashSet<PathBuf>,     // Path to files in $HOME that don't link to dotfiles_dir
 }
 
 impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it with information about all the dotfiles
-    fn new() -> SymlinkHandler {
+    fn new() -> Self {
         let symlinker = SymlinkHandler {
-            dotfiles_dir: PathBuf::from(utils::get_dotfiles_path().unwrap_or_else(|| {
+            dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
                 eprintln!(
                     "{}",
                     "Could not find dotfiles, make sure it's in the right path".red()
                 );
                 process::exit(1);
-            })),
+            }),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
             not_owned: HashSet::new(),
         };
 
         // this will fill symlinker with all the information it needs to be useful
-        symlinker.validate_symlinks()
+        symlinker.validate()
     }
 
     /// THIS FUNCTION SHOULD NOT BE USED DIRECTLY
@@ -52,7 +52,7 @@ impl SymlinkHandler {
     /// into the struct
     ///
     /// Returns a copy of self with all the fields set accordingly
-    fn validate_symlinks(mut self) -> Self {
+    fn validate(mut self) -> Self {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
         let dir = fs::read_dir(self.dotfiles_dir.join("Configs")).unwrap_or_else(|_| {
             eprintln!("{}", "There's no Configs folder set up".red());
@@ -89,7 +89,7 @@ impl SymlinkHandler {
                         self.not_symlinked.insert(program_dir.path());
                         self.symlinked.remove(&program_dir.path());
                         if PathBuf::from(&config_file).exists() {
-                            self.not_owned.insert(PathBuf::from(config_file));
+                            self.not_owned.insert(config_file);
                         }
                     }
                 }
@@ -104,7 +104,7 @@ impl SymlinkHandler {
 
     /// Symlinks all the files of a program to the user's $HOME
     fn add(&self, program: &str) {
-        let program_dir = self.dotfiles_dir.join("Configs").join(&program);
+        let program_dir = self.dotfiles_dir.join("Configs").join(program);
         if program_dir.exists() {
             // iterate through all the files in program_dir
             utils::program_dir_map(program_dir, symlink_file);
@@ -130,7 +130,7 @@ impl SymlinkHandler {
             }
         };
 
-        let program_dir = self.dotfiles_dir.clone().join("Configs").join(&program);
+        let program_dir = self.dotfiles_dir.clone().join("Configs").join(program);
         if program_dir.exists() {
             // iterate through all the files in program_dir
             utils::program_dir_map(program_dir, remove_symlink);
@@ -423,7 +423,7 @@ mod tests {
         File::create(program_dir.clone().join("program.test")).unwrap();
         File::create(program_dir.clone().join(".config").join("program.test")).unwrap();
 
-        let sym = sym.validate_symlinks();
+        let sym = sym.validate();
 
         (sym, program_dir)
     }

@@ -54,7 +54,11 @@ pub fn to_program_name(path: &str) -> Option<&str> {
 
 /// Goes through every file in the Configs/<program_dir> and applies the function
 pub fn program_dir_map<F: FnMut(fs::DirEntry)>(file: path::PathBuf, mut func: F) {
-    let program_dir = fs::read_dir(file).unwrap();
+    let program_dir = match fs::read_dir(&file) {
+        Ok(f) => f,
+        Err(_) => panic!("{} does not exist", file.to_str().unwrap())
+    };
+
     for file in program_dir {
         let file = file.unwrap();
         match file.file_name().to_str().unwrap() {

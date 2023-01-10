@@ -1,0 +1,100 @@
+use crate::utils;
+use chacha20poly1305::{
+     aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305,
+};
+use rand::rngs::OsRng;
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::fs;
+use std::path::PathBuf;
+use zeroize::Zeroize;
+
+struct SecretsHandler {
+    dotfiles_dir: PathBuf,
+    decrypted_files: HashSet<PathBuf>,
+    encrypted_files: HashSet<PathBuf>,
+    key: chacha20poly1305::Key,
+    nonce: chacha20poly1305::XNonce,
+}
+
+impl SecretsHandler {
+    fn new() -> Self {
+        // makes a hash of the password so that it can fit on the 256 bit buffer used by the
+        // algorithm
+        let input_key = rpassword::prompt_password("Password: ").unwrap();
+        let mut input_key = input_key.trim().as_bytes().to_vec();
+        let mut hasher = Sha256::new();
+
+        hasher.update(&input_key);
+        let input_hash = hasher.finalize();
+
+        // zeroes sensitive information from memory
+        input_key.zeroize();
+
+        SecretsHandler {
+            dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
+                eprintln!("Couldn't find dotfiles directory");
+                std::process::exit(1);
+            }),
+            decrypted_files: HashSet::new(),
+            encrypted_files: HashSet::new(),
+            key: input_hash,
+            nonce: XChaCha20Poly1305::generate_nonce(&mut OsRng),
+        }
+    }
+
+    //fn validate();
+
+    fn encrypt(&self, dotfile: &str) -> Vec<u8> {
+        let cipher = XChaCha20Poly1305::new(&self.key);
+        let dotfile = fs::read(dotfile).unwrap();
+
+        cipher.encrypt(&self.nonce, dotfile.as_slice()).unwrap()
+    }
+
+    fn decrypt(&self, dotfile: &str) -> Vec<u8> {
+        let cipher = XChaCha20Poly1305::new(&self.key);
+        let dotfile = fs::read(dotfile).expect("Couldn't read dotfile");
+
+        // extracts the nonce from the first 24 bytes in the file
+        let (nonce, contents) = dotfile.split_at(24);
+
+        cipher
+            .decrypt(nonce.into(), contents)
+            .expect("Couldn't decrypt dotfile")
+    }
+}
+
+pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
+    let handler = SecretsHandler::new();
+    let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).unwrap();
+    }
+
+    for dotfile in dotfiles {
+        let mut encrypted = handler.encrypt(dotfile);
+        let mut encrypted_file = handler.nonce.to_vec();
+        // appends a 24 byte nonce to the beginning of the file
+        encrypted_file.append(&mut encrypted);
+        fs::write(dest_dir.join(dotfile), encrypted_file).unwrap();
+    }
+}
+
+pub fn decrypt_cmd(group: &str) {
+    let handler = SecretsHandler::new();
+    let dest_dir = std::env::current_dir().unwrap();
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).unwrap();
+    }
+
+    utils::program_dir_map(handler.dotfiles_dir.join("Secrets").join(group), |secret| {
+        let decrypted = handler.decrypt(secret.path().to_str().unwrap());
+
+        fs::write(
+            dest_dir.join(secret.file_name().to_str().unwrap().to_string() + "2"),
+            decrypted,
+        )
+        .unwrap();
+    });
+}
