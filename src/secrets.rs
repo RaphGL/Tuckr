@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 use zeroize::Zeroize;
 
 struct SecretsHandler {
@@ -85,7 +86,7 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
         let target_file = Path::new(dotfile).canonicalize().unwrap();
         let target_file = target_file.strip_prefix(&home_dir).unwrap();
 
-        let mut dir_path = target_file.clone().to_path_buf();
+        let mut dir_path = target_file.to_path_buf();
         dir_path.pop();
 
         // makes sure all parent directories of the dotfile are created
@@ -104,13 +105,18 @@ pub fn decrypt_cmd(group: &str) {
         fs::create_dir_all(&dest_dir).unwrap();
     }
 
-    utils::program_dir_map(handler.dotfiles_dir.join("Secrets").join(group), |secret| {
+    for secret in WalkDir::new(handler.dotfiles_dir.join("Secrets").join(group)) {
+        let secret = secret.unwrap();
+        if secret.file_type().is_dir() {
+            continue;
+        }
+
         let decrypted = handler.decrypt(secret.path().to_str().unwrap());
 
         fs::write(
-            dest_dir.join(secret.file_name().to_str().unwrap().to_string()),
+            dest_dir.join(secret.file_name().to_str().unwrap()),
             decrypted,
         )
         .unwrap();
-    });
+    }
 }
