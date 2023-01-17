@@ -46,47 +46,47 @@
 
 <!-- ABOUT THE PROJECT -->
 
-Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME. It works on all the major OSes (Windows, MacOS, Linux).  
+Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME. It works on all the major OSes (Linux, Windows, BSDs and MacOS).  
 
-Most dotfile managers out there rely on some sort of configuration file to be able manage your dotfiles, this project came about because I couldn't find any dotfile manager that was simple enough that you could just jump into it and start using it, with no need for reading lengthy documentation and dotfile manager specific things. 
+Managing dotfiles is something that's done every once in a while and should not require one to go and study complex tooling just to be able to deploy dotfiles.
 
-A lot of people have been using Stow + Git to manage their dotfiles, while this approach is fine, Stow was not made for this, so it's not a perfect solution and it lacks features that are dotfile management specific, thus this project was born.
+To achieve that goal Tuckr tries to only cover what is directly needed to manage dotfiles and nothing more. We won't wrap git, rm, cp or reimplement the functionality of a perfectly functioning separate utility unless it greatly impacts usability.
 
 **What makes tuckr different?**
 
-- No additional configuration required, everything that is needed comes setup by default
-- You can manage your files from any directory
-- Symlinks are tracked, the manager is smart enough to be able to manage them without conflicting with the rest of the symlinks in the system
-- Hooks, write small scripts that will be run when you set up programs from your dotfiles
-- Encrypted files for sensitive information
-
-
-### Built With
-
-- [Rust](https://www.rust-lang.org/)
-- [Clap](https://github.com/clap-rs/clap)
+- No configuration required
+- Tuckr always knows where your dotfiles are, you don't have to cd into them
+- Symlinks are tracked and validated, you're informed of conflicts and can easily handle (or not handle them)
+- Hooks, write scripts to handle additional configuration
+- Encrypt your sensitive configuration and files
 
 <!-- GETTING STARTED -->
 
 ## Getting Started
+The following paths should be used for your dotfiles:  
 
-**For those that are coming from stow**,
-Tuckr is interchangeable with Stow.
+Dotfile Path in each OS:
+| Platform       | Config Path                                       | Home Path               |
+|----------------|---------------------------------------------------|-------------------------|
+| Linux/BSDs/etc | /home/user/.config/dotfiles                      | /home/user/.dotfiles    |
+| MacOS          | /Users/User/Library/Application Support/dotfiles | /Users/User/.dotfiles   |
+| Windows        | C:\Users\User\AppData\Roaming/dotfiles           | C:\Users\Alice/.dotfiles |
 
-if you're already using Stow:
+Create the required directories:
+```
+tuckr init
+```
+
+#### Stow users
+Tuckr is interchangeable with Stow. To migrate:  
 1. Open your dotfiles repo and remove the symlinks with `stow -t $HOME --delete *`
 2. Run `tuckr from-stow`
 3. Move your repo to `$HOME/.dotfiles` or `$HOME/.config/dotfiles`
 4. Resymlink your dotfiles with `tuckr add \*`
 
-Note: If you're on windows you need to enable developer mode for the symlinking to work.
+#### Windows users
+You need to enable developer mode for the symlinking to work.  
 
-Dotfile Path in each OS:
-| Platform       | Config Path                                       | Home Path               |
-|----------------|---------------------------------------------------|-------------------------|
-| Linux/BSDs/etc | /home/alice/.config/dotfiles                      | /home/alice/dotfiles    |
-| MacOS          | /Users/Alice/Library/Application Support/dotfiles | /Users/Alice/dotfiles   |
-| Windows        | C:\Users\Alice\AppData\Roaming/dotfiles           | C:\Users\Alice/dotfiles |
 
 ### Installation  
 
@@ -101,12 +101,12 @@ Note: The binary will be installed to `$HOME/.cargo/bin` either move it to somew
 paru -S tuckr-git
 ```
 
-
 <!-- USAGE EXAMPLES -->
 
 ## Usage
 ```sh
 $ tuckr add \* # adds all dotfiles to the system
+$ tuckr add \* -e neovim # adds all dotfiles except neovim
 $ tuckr add neovim zsh # adds the neovim and zsh dotfiles only
 $ tuckr set \* # adds all the dotfiles and runs their hooks (scripts)
 $ tuckr rm \* # removes all dotfiles from your system
@@ -118,57 +118,86 @@ Super powered GNU Stow replacement
 Usage: tuckr <COMMAND>
 
 Commands:
-  set        Setup a program and run their hooks hooks
-  add        Deploy dotfiles for PROGRAM
-  rm         Remove configuration for a program on the system
-  status     Check symlink status
-  init       Initialize a dotfile folder
-  from-stow  Converts a stow repo into a tuckr one
+  set        Setup the program and run its hooks
+  add        Deploy dotfiles for the given program (alias: a)
+  rm         Remove dotfiles for a program
+  status     Print a status message for all dotfiles (alias: s)
+  encrypt    Encrypts files and moves it to dotfiles/Secrets
+  decrypt    Decrypts files
+  init       Initialize dotfile directory
+  from-stow  Converts a GNU Stow repo into a Tuckr one
   help       Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help information
-  -V, --version  Print version information
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
-### How it works
-
-Tuckr works without having to use a configuration file by making a few minor choices for you. As long as you follow the file structure for tuckr repos it will do everything else for you automatically.
-
+### How it works  
+Tuckr works with no configuration, this is achieved by making some assumptions about the structure of your dotfiles directory.
+Every Tuckr dotfiles directory should have the following structure:  
 ```sh
-.
+dotfiles
 ├── Configs # Dotfiles go here
 ├── Secrets # Encrypted files go here
 └── Hooks # Setup scripts go here
 ```
 
-Your dotfiles should be one folder by program, the folder name will become how that program is named by tuckr.
+These directories contain directories that separate the dotfiles by program name (or whatever you want to separate them by)
 ```
-.
+dotfiles
 ├── Configs
-│   ├── Program1
-│   ├── Program2
-├── Secrets 
+│   ├── tmux
+│   └── zsh 
 └── Hooks
-    ├── Program1
-    └── Program2
+    ├── tmux 
+    └── zsh 
 ```
-As long as the names align between Configs, Hooks and Secrets, they will work together.
+
+Inside of these program directories the structure is exactly the same as what your $HOME looks like.
+```
+Configs
+├── tmux
+│   └── .config
+│       └── tmux
+│           └── tmux.conf
+└── zsh
+    ├── .zshenv
+    └── .zshrc
+```
+
+The program directories' names are used to reference them in commands
 
 ### Using Hooks
-Hooks are run before and after adding every program. Hooks that run before the program addition are prefixed with `pre`, scripts that run afterward are prefixed with `post`, as long as this is true you can name the file whatever you want.
+Hooks are run before and after adding every program, if they're coupled with a program they should their directory should have the same name in Hooks as in Configs.  
+Hooks that run before symlinking the program are prefixed with `pre`, scripts that run afterwards are prefixed with `post`, as long as this is true you can name the file whatever you want.
 
 ```
 Hooks
-├── Program1
+├── tmux
 │   ├── post.sh
 │   └── pre.sh
-└── Program2
+└── zsh
     ├── post.sh
     └── pre.sh
 ```
 To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*` to run all hooks.
 
+### Using Secrets
+
+#### Encrypting files
+Encrypt a file and put it in <group_name>
+
+```
+tuckr encrypt <group_name> <file_name...>
+```
+This will create an appropriate file in the `Secrets` directory pointing to the path where it originally came from
+
+#### Decrypting files
+Decrypt files from the groups <group_name...> and put them on their appropriate paths
+```
+tuckr decrypt <group_name...>
+```
 
 <!-- LICENSE -->
 
