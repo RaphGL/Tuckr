@@ -2,7 +2,7 @@ use crate::utils;
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
+use owo_colors::OwoColorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -10,8 +10,6 @@ use zeroize::Zeroize;
 
 struct SecretsHandler {
     dotfiles_dir: PathBuf,
-    decrypted_files: HashSet<PathBuf>,
-    encrypted_files: HashSet<PathBuf>,
     key: chacha20poly1305::Key,
     nonce: chacha20poly1305::XNonce,
 }
@@ -32,31 +30,35 @@ impl SecretsHandler {
 
         SecretsHandler {
             dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
-                eprintln!("Couldn't find dotfiles directory");
+                eprintln!("{}", "Couldn't find dotfiles directory".red());
                 std::process::exit(1);
             }),
-            decrypted_files: HashSet::new(),
-            encrypted_files: HashSet::new(),
             key: input_hash,
             nonce: XChaCha20Poly1305::generate_nonce(&mut OsRng),
         }
     }
 
-    //fn validate();
-
+    // takes a path to a file and returns its encrypted content
     fn encrypt(&self, dotfile: &str) -> Vec<u8> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let dotfile = match fs::read(dotfile) {
             Ok(f) => f,
             Err(_) => {
-                eprintln!("No such file or directory: {dotfile}");
+                eprintln!("{}", format!("{} {}","No such file or directory: ", dotfile).red());
                 std::process::exit(1);
             }
         };
 
-        cipher.encrypt(&self.nonce, dotfile.as_slice()).unwrap()
+        match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("{}", e.red());
+                std::process::exit(2);
+            }
+        }
     }
 
+    // takes a path to a file and returns its decrypted content
     fn decrypt(&self, dotfile: &str) -> Vec<u8> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let dotfile = fs::read(dotfile).expect("Couldn't read dotfile");
@@ -64,12 +66,17 @@ impl SecretsHandler {
         // extracts the nonce from the first 24 bytes in the file
         let (nonce, contents) = dotfile.split_at(24);
 
-        cipher
-            .decrypt(nonce.into(), contents)
-            .expect("Couldn't decrypt dotfile")
+        match cipher.decrypt(nonce.into(), contents) {
+            Ok(f) => f,
+            Err(_) => {
+                eprintln!("{}", "Wrong password.".red());
+                std::process::exit(2);
+            }
+        }
     }
 }
 
+// TODO add exclude flag
 pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
     let handler = SecretsHandler::new();
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
@@ -105,7 +112,8 @@ pub fn decrypt_cmd(group: &str) {
         fs::create_dir_all(&dest_dir).unwrap();
     }
 
-    for secret in WalkDir::new(handler.dotfiles_dir.join("Secrets").join(group)) {
+    let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
+    for secret in WalkDir::new(group_dir) {
         let secret = secret.unwrap();
         if secret.file_type().is_dir() {
             continue;
@@ -113,10 +121,6 @@ pub fn decrypt_cmd(group: &str) {
 
         let decrypted = handler.decrypt(secret.path().to_str().unwrap());
 
-        fs::write(
-            dest_dir.join(secret.file_name().to_str().unwrap()),
-            decrypted,
-        )
-        .unwrap();
+        fs::write(dest_dir.join(secret.file_name()), decrypted).unwrap();
     }
 }

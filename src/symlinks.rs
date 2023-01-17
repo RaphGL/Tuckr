@@ -22,7 +22,7 @@ fn symlink_file(f: fs::DirEntry) {
 /// Handles generic symlinking and symlink status
 struct SymlinkHandler {
     dotfiles_dir: PathBuf,           // path to the dotfiles directory
-   symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
+    symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
     not_symlinked: HashSet<PathBuf>, // path to programs that aren't symlinked to $HOME
     not_owned: HashSet<PathBuf>,     // Path to files in $HOME that don't link to dotfiles_dir
 }
@@ -61,18 +61,18 @@ impl SymlinkHandler {
 
         for file in dir {
             let program_dir = file.unwrap();
-            if program_dir.file_type().unwrap().is_file() {
+            if program_dir.path().is_file() {
                 continue;
             }
 
-            // a closure that takes a file and determines if it's a symlink or not
-            let check_symlink = |f: fs::DirEntry| {
+            // Checks for the files in each of the programs' dirs
+            utils::program_dir_map(program_dir.path(), |f| {
                 let config_file = utils::to_home_path(f.path().to_str().unwrap());
 
                 match fs::read_link(&config_file) {
                     Ok(f) => {
                         // program_dir can only be in one set at a time
-                        // this makes it so one would get an not symlinked status
+                        // this makes it so one would get a not symlinked status
                         // if at least one of the files is not symlinked
                         let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                         let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
@@ -93,10 +93,7 @@ impl SymlinkHandler {
                         }
                     }
                 }
-            };
-
-            // Checks for the files in each of the programs' dirs
-            utils::program_dir_map(program_dir.path(), check_symlink);
+            });
         }
 
         self
@@ -130,7 +127,7 @@ impl SymlinkHandler {
             }
         };
 
-        let program_dir = self.dotfiles_dir.clone().join("Configs").join(program);
+        let program_dir = self.dotfiles_dir.join("Configs").join(program);
         if program_dir.exists() {
             // iterate through all the files in program_dir
             utils::program_dir_map(program_dir, remove_symlink);
@@ -153,7 +150,7 @@ impl SymlinkHandler {
 /// instance and the name of the program that's being handled
 ///
 /// This abstracts this recurrent loop allowing handle programs just by their names
-fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, f: F)
+fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, func: F)
 where
     F: Fn(&SymlinkHandler, &String),
 {
@@ -181,13 +178,13 @@ where
 
                     // do something with the program name
                     // passing the sym context
-                    f(&sym, &program_name.to_string());
+                    func(&sym, &program_name.to_string());
                 }
                 break;
             }
 
             p if exclude.contains(&p.to_string()) => continue,
-            _ => f(&sym, program),
+            _ => func(&sym, program),
         }
     }
 }
@@ -317,10 +314,12 @@ pub fn status_cmd() {
             symlinked: None,
             not_symlinked: None,
         });
+
         let nsym = notsym_status.get(i).unwrap_or(&SymlinkRow {
             symlinked: None,
             not_symlinked: None,
         });
+
         let mut new_sym = SymlinkRow {
             symlinked: None,
             not_symlinked: None,

@@ -38,6 +38,8 @@ pub fn to_program_name(path: &str) -> Option<&str> {
         "Configs"
     } else if path.contains("Hooks") {
         "Hooks"
+    } else if path.contains("Secrets") {
+        "Secrets"
     } else {
         return None;
     };
@@ -53,17 +55,17 @@ pub fn to_program_name(path: &str) -> Option<&str> {
 }
 
 /// Goes through every file in the Configs/<program_dir> and applies the function
-pub fn program_dir_map<F: FnMut(fs::DirEntry)>(file: path::PathBuf, mut func: F) {
-    let program_dir = match fs::read_dir(&file) {
+pub fn program_dir_map<F: FnMut(fs::DirEntry)>(dir: path::PathBuf, mut func: F) {
+    let program_dir = match fs::read_dir(&dir) {
         Ok(f) => f,
-        Err(_) => panic!("{} does not exist", file.to_str().unwrap())
+        Err(_) => panic!("{} does not exist", dir.to_str().unwrap()),
     };
 
     for file in program_dir {
         let file = file.unwrap();
         match file.file_name().to_str().unwrap() {
             // Special folders that should not be handled directly ("owned" by the system)
-            // Instead everything inside of it should be handled instead
+            // everything inside of it should be handled instead
             ".config" | "Pictures" | "Documents" | "Desktop" | "Downloads" | "Public"
             | "Templates" | "Videos" => {
                 for file in fs::read_dir(file.path()).unwrap() {

@@ -132,30 +132,26 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
     };
 
     for program in programs {
-        match program.as_str() {
-            "*" => {
-                let dotfiles_dir = utils::get_dotfiles_path()
-                    .unwrap_or_else(|| {
-                        eprintln!(
-                            "{}",
-                            "Could not find the Hooks directory in your dotfiles".red()
-                        );
-                        std::process::exit(2);
-                    })
-                    .join("Hooks");
-
-                for folder in fs::read_dir(dotfiles_dir).unwrap() {
-                    let folder = folder.unwrap();
-                    run_deploy_steps(
-                        DeployStages::new(),
-                        utils::to_program_name(folder.path().to_str().unwrap()).unwrap(),
+        if program == "*" {
+            let dotfiles_dir = utils::get_dotfiles_path()
+                .unwrap_or_else(|| {
+                    eprintln!(
+                        "{}",
+                        "Could not find the Hooks directory in your dotfiles".red()
                     );
-                }
+                    std::process::exit(2);
+                })
+                .join("Hooks");
 
-                break;
+            for folder in fs::read_dir(dotfiles_dir).unwrap() {
+                let folder = folder.unwrap();
+                run_deploy_steps(
+                    DeployStages::new(),
+                    utils::to_program_name(folder.path().to_str().unwrap()).unwrap(),
+                );
             }
-
-            _ => run_deploy_steps(DeployStages::new(), program),
+        } else {
+            run_deploy_steps(DeployStages::new(), program);
         }
     }
 }
