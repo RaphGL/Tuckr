@@ -1,6 +1,6 @@
 [package]
 name = "tuckr"
-version = "0.5.2"
+version = "0.6.0"
 authors = ["RaphGL"]
 edition = "2021"
 description = "Super powered GNU Stow replacement"
