@@ -8,7 +8,7 @@ use std::path;
 
 /// Converts a stow directory into a tuckr directory
 pub fn convert_to_tuckr() {
-    print!("{}", "Are you sure you want to convert this repo to Tuckr?\nFiles that start with a dot will be ignored (y/N) ".yellow());
+    print!("{}", "Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ".yellow());
     io::stdout().flush().unwrap();
 
     let mut answer = String::new();

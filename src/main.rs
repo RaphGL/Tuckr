@@ -9,26 +9,26 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(about, author, version, propagate_version = true)]
 enum Cli {
-    /// Setup the program and run its hooks
+    /// Setup programs and run their hooks
     Set {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
 
         #[arg(short, long, value_name = "PROGRAM", use_value_delimiter = true)]
-        /// Exclude certain programs from being removed
+        /// Exclude certain programs from being added and hooked 
         exclude: Vec<String>,
 
         #[arg(short, long)]
-        /// Replace dotfiles even if there are conflicts
+        /// Override conflicting dotfiles
         force: bool,
 
         #[arg(short, long)]
-        /// Adopt the conflicting dotfile instead
+        /// Adopt conflicting dotfiles
         adopt: bool,
     },
 
     #[command(alias = "a")]
-    /// Deploy dotfiles for the given program (alias: a)
+    /// Deploy dotfiles for the supplied programs (alias: a)
     Add {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
@@ -38,15 +38,15 @@ enum Cli {
         exclude: Vec<String>,
 
         #[arg(short, long)]
-        /// Replace dotfiles even if there are conflicts
+        /// Override conflicting dotfiles
         force: bool,
 
         #[arg(short, long)]
-        /// Adopt the conflicting dotfile instead
+        /// Adopt conflicting dotfiles
         adopt: bool,
     },
 
-    /// Remove dotfiles for a program
+    /// Remove dotfiles for the supplied programs
     Rm {
         #[arg(required = true, value_name = "PROGRAM")]
         programs: Vec<String>,
@@ -57,17 +57,19 @@ enum Cli {
     },
 
     #[command(alias = "s")]
-    /// Print a status message for all dotfiles (alias: s)
+    /// Get dotfiles' symlinking status (alias: s)
     Status,
 
-    /// Encrypts files and moves it to dotfiles/Secrets
+    #[command(alias = "e")]
+    /// Encrypt files and move them to dotfiles/Secrets (alias: e)
     Encrypt {
         group: String,
         #[arg(required = true, value_name = "dotfiles")]
         dotfiles: Vec<String>,
     },
 
-    /// Decrypts files
+    #[command(alias = "d")]
+    /// Decrypt files (alias: d)
     Decrypt {
         group: String,
     },
@@ -77,7 +79,7 @@ enum Cli {
     /// Creates files necessary to use Tuckr
     Init,
 
-    /// Converts a GNU Stow repo into a Tuckr one
+    /// Convert a GNU Stow repo into a Tuckr one
     FromStow,
 }
 
