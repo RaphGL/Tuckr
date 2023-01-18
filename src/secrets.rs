@@ -31,7 +31,7 @@ impl SecretsHandler {
         SecretsHandler {
             dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
                 eprintln!("{}", "Couldn't find dotfiles directory".red());
-                std::process::exit(1);
+                std::process::exit(utils::COULDNT_FIND_DOTFILES);
             }),
             key: input_hash,
             nonce: XChaCha20Poly1305::generate_nonce(&mut OsRng),
@@ -45,7 +45,7 @@ impl SecretsHandler {
             Ok(f) => f,
             Err(_) => {
                 eprintln!("{}", format!("{} {}","No such file or directory: ", dotfile).red());
-                std::process::exit(1);
+                std::process::exit(utils::NO_SUCH_FILE_OR_DIR);
             }
         };
 
@@ -53,7 +53,7 @@ impl SecretsHandler {
             Ok(f) => f,
             Err(e) => {
                 eprintln!("{}", e.red());
-                std::process::exit(2);
+                std::process::exit(utils::ENCRYPTION_FAILED);
             }
         }
     }
@@ -70,7 +70,7 @@ impl SecretsHandler {
             Ok(f) => f,
             Err(_) => {
                 eprintln!("{}", "Wrong password.".red());
-                std::process::exit(2);
+                std::process::exit(utils::DECRYPTION_FAILED);
             }
         }
     }

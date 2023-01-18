@@ -2,6 +2,13 @@
 use std::fs;
 use std::path;
 
+// Exit codes
+pub const COULDNT_FIND_DOTFILES: i32 = 2; // Couldn't find the dotfiles directory
+pub const NO_SETUP_FOLDER: i32 = 3; // no Configs/Hooks/Secrets folder setup
+pub const NO_SUCH_FILE_OR_DIR: i32 = 4;
+pub const ENCRYPTION_FAILED: i32 = 5;
+pub const DECRYPTION_FAILED: i32 = 6; 
+
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<path::PathBuf> {
     let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");

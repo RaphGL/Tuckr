@@ -1,10 +1,11 @@
 mod fileops;
 mod hooks;
+mod secrets;
 mod symlinks;
 mod utils;
-mod secrets;
 
 use clap::Parser;
+use std::process::ExitCode;
 
 #[derive(Debug, Parser)]
 #[command(about, author, version, propagate_version = true)]
@@ -15,7 +16,7 @@ enum Cli {
         programs: Vec<String>,
 
         #[arg(short, long, value_name = "PROGRAM", use_value_delimiter = true)]
-        /// Exclude certain programs from being added and hooked 
+        /// Exclude certain programs from being added and hooked
         exclude: Vec<String>,
 
         #[arg(short, long)]
@@ -70,9 +71,7 @@ enum Cli {
 
     #[command(alias = "d")]
     /// Decrypt files (alias: d)
-    Decrypt {
-        group: String,
-    },
+    Decrypt { group: String },
 
     /// Initialize dotfile directory
     ///
@@ -83,7 +82,7 @@ enum Cli {
     FromStow,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli {
@@ -103,9 +102,11 @@ fn main() {
 
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
         Cli::Status => symlinks::status_cmd(),
-        Cli::Encrypt {group, dotfiles} => secrets::encrypt_cmd(&group, &dotfiles),
-        Cli::Decrypt {group}=> secrets::decrypt_cmd(&group),
+        Cli::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&group, &dotfiles),
+        Cli::Decrypt { group } => secrets::decrypt_cmd(&group),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),
     }
+
+    ExitCode::SUCCESS
 }

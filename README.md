@@ -38,6 +38,8 @@
       <ul>
         <li><a href="#how-it-works">How it works</a></li>
         <li><a href="#using-hooks">Using hooks</a></li>
+        <li><a href="#using-secrets">Using secrets</a></li>
+        <li><a href="#exit-codes">Using secrets</a></li>
       </ul>
     </li>
     <li><a href="#license">License</a></li>
@@ -198,6 +200,14 @@ Decrypt files from the groups <group_name...> and put them on their appropriate 
 ```
 tuckr decrypt <group_name...>
 ```
+
+### Exit codes
+For scripting purposes Tuckr has the following exit codes:  
+- `2` Could not find Dotfiles directory
+- `3` No Configs/Hooks/Secrets directory setup
+- `4` No such file or directory exists
+- `5` Encryption failed
+- `6` Decryption failed
 
 <!-- LICENSE -->
 

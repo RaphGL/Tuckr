@@ -36,7 +36,7 @@ impl SymlinkHandler {
                     "{}",
                     "Could not find dotfiles, make sure it's in the right path".red()
                 );
-                process::exit(1);
+                process::exit(utils::COULDNT_FIND_DOTFILES);
             }),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
@@ -56,7 +56,7 @@ impl SymlinkHandler {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
         let dir = fs::read_dir(self.dotfiles_dir.join("Configs")).unwrap_or_else(|_| {
             eprintln!("{}", "There's no Configs folder set up".red());
-            process::exit(1);
+            process::exit(utils::NO_SETUP_FOLDER);
         });
 
         for file in dir {
@@ -203,7 +203,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
 
         match answer.trim().to_lowercase().as_str() {
             "y" | "yes" => (),
-            _ => process::exit(0),
+            _ => return,
         }
     }
 
