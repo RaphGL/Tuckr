@@ -5,15 +5,15 @@ use std::path;
 
 // Exit codes
 /// Couldn't find the dotfiles directory
-pub const COULDNT_FIND_DOTFILES: i32 = 2; 
+pub const COULDNT_FIND_DOTFILES: i32 = 2;
 /// No Configs/Hooks/Secrets folder setup
-pub const NO_SETUP_FOLDER: i32 = 3; 
+pub const NO_SETUP_FOLDER: i32 = 3;
 /// Referenced file does not exist in the current directory
 pub const NO_SUCH_FILE_OR_DIR: i32 = 4;
 /// Failed to encrypt referenced file
 pub const ENCRYPTION_FAILED: i32 = 5;
 /// Failed to decrypt referenced file
-pub const DECRYPTION_FAILED: i32 = 6; 
+pub const DECRYPTION_FAILED: i32 = 6;
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<path::PathBuf> {
@@ -60,11 +60,7 @@ pub fn to_program_name(path: &str) -> Option<&str> {
     // uses join("") so that the path appends / or \ depending on platform
     let config_path = path::PathBuf::from("dotfiles").join(dir).join("");
 
-    Some(
-        path.split_once(config_path.to_str().unwrap())
-            .unwrap()
-            .1,
-    )
+    Some(path.split_once(config_path.to_str().unwrap()).unwrap().1)
 }
 
 /// Goes through every file in Configs/<program_dir> and applies the function

@@ -4,9 +4,9 @@
 
 use crate::utils;
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
+use owo_colors::OwoColorize;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
-use owo_colors::OwoColorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -48,7 +48,10 @@ impl SecretsHandler {
         let dotfile = match fs::read(dotfile) {
             Ok(f) => f,
             Err(_) => {
-                eprintln!("{}", format!("{} {}","No such file or directory: ", dotfile).red());
+                eprintln!(
+                    "{}",
+                    format!("{} {}", "No such file or directory: ", dotfile).red()
+                );
                 std::process::exit(utils::NO_SUCH_FILE_OR_DIR);
             }
         };
@@ -80,9 +83,8 @@ impl SecretsHandler {
     }
 }
 
-// TODO add exclude flag
 /// Encrypts secrets
-pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
+pub fn encrypt_cmd(group: &str, dotfiles: &[String]) {
     let handler = SecretsHandler::new();
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
     if !dest_dir.exists() {
@@ -111,22 +113,40 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
 }
 
 /// Decrypts secrets
-pub fn decrypt_cmd(group: &str) {
+pub fn decrypt_cmd(groups: &Vec<String>, exclude: &Vec<String>) {
     let handler = SecretsHandler::new();
     let dest_dir = std::env::current_dir().unwrap();
-    if !dest_dir.exists() {
-        fs::create_dir_all(&dest_dir).unwrap();
-    }
 
-    let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
-    for secret in WalkDir::new(group_dir) {
-        let secret = secret.unwrap();
-        if secret.file_type().is_dir() {
-            continue;
+    let decrypt_group = |group: &String| {
+        let groupname = &utils::to_program_name(group).unwrap().to_string();
+        if exclude.contains(groupname) {
+            return;
         }
 
-        let decrypted = handler.decrypt(secret.path().to_str().unwrap());
+        let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
+        for secret in WalkDir::new(group_dir) {
+            let secret = secret.unwrap();
+            if secret.file_type().is_dir() {
+                continue;
+            }
 
-        fs::write(dest_dir.join(secret.file_name()), decrypted).unwrap();
+            let decrypted = handler.decrypt(secret.path().to_str().unwrap());
+
+            fs::write(dest_dir.join(secret.file_name()), decrypted).unwrap();
+        }
+    };
+
+    if groups.contains(&"*".to_string()) {
+        let groups_dir = handler.dotfiles_dir.join("Secrets");
+        for group in fs::read_dir(groups_dir).unwrap() {
+            let group = group.unwrap().path().to_str().unwrap().to_string();
+            decrypt_group(&group);
+        }
+
+        return;
+    }
+
+    for group in groups {
+        decrypt_group(group);
     }
 }

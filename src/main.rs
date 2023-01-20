@@ -7,7 +7,7 @@
 //!
 //! Each of these of these directories contain directories with the name of the programs or logical
 //! groups which contains all user scripts, configs and scripts, these are used to label them on tuckr
-//! so you can add or remove them anytime 
+//! so you can add or remove them anytime
 
 mod fileops;
 mod hooks;
@@ -76,13 +76,18 @@ enum Cli {
     /// Encrypt files and move them to dotfiles/Secrets (alias: e)
     Encrypt {
         group: String,
-        #[arg(required = true, value_name = "dotfiles")]
+        #[arg(required = true, value_name = "FILE")]
         dotfiles: Vec<String>,
     },
 
     #[command(alias = "d")]
     /// Decrypt files (alias: d)
-    Decrypt { group: String },
+    Decrypt {
+        #[arg(required = true, value_name = "PROGRAM")]
+        groups: Vec<String>,
+        #[arg(short, long, value_name = "PROGRAM", use_value_delimiter = true)]
+        exclude: Vec<String>,
+    },
 
     /// Initialize dotfile directory
     ///
@@ -114,7 +119,7 @@ fn main() -> ExitCode {
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
         Cli::Status => symlinks::status_cmd(),
         Cli::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&group, &dotfiles),
-        Cli::Decrypt { group } => secrets::decrypt_cmd(&group),
+        Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),
     }
