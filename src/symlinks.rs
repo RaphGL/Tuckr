@@ -8,7 +8,7 @@
 //! therefore they are in conflict
 //!
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
-//! $HOME equivalents are pointing to them and categorizing them accordingly. 
+//! $HOME equivalents are pointing to them and categorizing them accordingly.
 
 use crate::utils;
 use owo_colors::OwoColorize;
@@ -55,7 +55,7 @@ impl SymlinkHandler {
             not_owned: HashSet::new(),
         };
 
-        // this fills the symlinker with dotfile status information 
+        // this fills the symlinker with dotfile status information
         symlinker.validate()
     }
 
@@ -127,7 +127,7 @@ impl SymlinkHandler {
         }
     }
 
-    /// Deletes symlinks from $HOME if they're owned by dotfiles dir 
+    /// Deletes symlinks from $HOME if they're owned by dotfiles dir
     fn remove(&self, program: &str) {
         let remove_symlink = |file: fs::DirEntry| {
             let dotfile = utils::to_home_path(file.path().to_str().unwrap());
@@ -170,34 +170,34 @@ where
     // loads the runtime information needed to carry out actions
     let sym = SymlinkHandler::new();
 
+    // handles wildcard
+    if programs.contains(&"*".to_string()) {
+        let symgroup = if symlinked {
+            &sym.not_symlinked
+        } else {
+            &sym.symlinked
+        };
+
+        for p in symgroup {
+            // Takes the name of the program to be passed the function
+            let program_name = utils::to_program_name(p.to_str().unwrap()).unwrap();
+            // Ignore programs in the excludes array
+            if exclude.contains(&program_name.to_string()) {
+                continue;
+            }
+            // do something with the program name
+            // passing the sym context
+            func(&sym, &program_name.to_string());
+        }
+        return;
+    }
+
     for program in programs {
         // add all programs if wildcard
-        match program.as_str() {
-            "*" => {
-                let symgroup = if symlinked {
-                    &sym.not_symlinked
-                } else {
-                    &sym.symlinked
-                };
-
-                for p in symgroup {
-                    // Takes the name of the program to be passed the function
-                    let program_name = utils::to_program_name(p.to_str().unwrap()).unwrap();
-
-                    // Ignore programs in the excludes array
-                    if exclude.contains(&program_name.to_string()) {
-                        continue;
-                    }
-
-                    // do something with the program name
-                    // passing the sym context
-                    func(&sym, &program_name.to_string());
-                }
-                break;
-            }
-
-            p if exclude.contains(&p.to_string()) => continue,
-            _ => func(&sym, program),
+        if exclude.contains(program) {
+            continue;
+        } else {
+            func(&sym, program);
         }
     }
 }
