@@ -1,3 +1,15 @@
+//! Manages dotfile symlinking
+//!
+//! Dotfiles are managed by the SymlinkHandler, its fields contain the following runtime information:
+//! - dotfiles_dir: the location of the dotfiles directory
+//! - symlinked: all files that have been symlinked
+//! - not_symlinked: files that haven't been symlinked yet
+//! - not_owned: files that have the same name on dotfiles/Configs but that do not belong to us,
+//! therefore they are in conflict
+//!
+//! This information is retrieved by walking through dotfiles/Configs and checking whether their
+//! $HOME equivalents are pointing to them and categorizing them accordingly. 
+
 use crate::utils;
 use owo_colors::OwoColorize;
 use std::collections::HashSet;
@@ -19,7 +31,7 @@ fn symlink_file(f: fs::DirEntry) {
     _ = std::os::unix::fs::symlink(f.path(), target_path);
 }
 
-/// Handles generic symlinking and symlink status
+/// Handles dotfile symlinking and their current status
 struct SymlinkHandler {
     dotfiles_dir: PathBuf,           // path to the dotfiles directory
     symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
@@ -28,7 +40,7 @@ struct SymlinkHandler {
 }
 
 impl SymlinkHandler {
-    /// Initializes SymlinkHandler and fills it with information about all the dotfiles
+    /// Initializes SymlinkHandler and fills it dotfiles' status information
     fn new() -> Self {
         let symlinker = SymlinkHandler {
             dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
@@ -43,11 +55,12 @@ impl SymlinkHandler {
             not_owned: HashSet::new(),
         };
 
-        // this will fill symlinker with all the information it needs to be useful
+        // this fills the symlinker with dotfile status information 
         symlinker.validate()
     }
 
-    /// THIS FUNCTION SHOULD NOT BE USED DIRECTLY
+    /// **This function should not be used outside this scope**
+    ///
     /// Checks which dotfiles are or are not symlinked and registers their Configs/$PROGRAM path
     /// into the struct
     ///
@@ -114,7 +127,7 @@ impl SymlinkHandler {
         }
     }
 
-    /// Deletes symlinks from $HOME if their links are pointing to the dotfiles directory
+    /// Deletes symlinks from $HOME if they're owned by dotfiles dir 
     fn remove(&self, program: &str) {
         let remove_symlink = |file: fs::DirEntry| {
             let dotfile = utils::to_home_path(file.path().to_str().unwrap());

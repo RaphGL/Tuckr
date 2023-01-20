@@ -1,4 +1,7 @@
-/// Contains code that interacts with the file system in some side effecty way
+//! Creates basic file structure for tuckr
+//!
+//! Contains functions to create the base directories and to convert users from stow to tuckr
+
 use owo_colors::OwoColorize;
 use std::env;
 use std::fs;

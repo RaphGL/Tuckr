@@ -1,3 +1,7 @@
+//! Manages encrypted files
+//!
+//! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
+
 use crate::utils;
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use rand::rngs::OsRng;
@@ -38,7 +42,7 @@ impl SecretsHandler {
         }
     }
 
-    // takes a path to a file and returns its encrypted content
+    /// takes a path to a file and returns its encrypted content
     fn encrypt(&self, dotfile: &str) -> Vec<u8> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let dotfile = match fs::read(dotfile) {
@@ -58,7 +62,7 @@ impl SecretsHandler {
         }
     }
 
-    // takes a path to a file and returns its decrypted content
+    /// takes a path to a file and returns its decrypted content
     fn decrypt(&self, dotfile: &str) -> Vec<u8> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let dotfile = fs::read(dotfile).expect("Couldn't read dotfile");
@@ -77,6 +81,7 @@ impl SecretsHandler {
 }
 
 // TODO add exclude flag
+/// Encrypts secrets
 pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
     let handler = SecretsHandler::new();
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
@@ -105,6 +110,7 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String] /*, exclude: &[String]*/) {
     }
 }
 
+/// Decrypts secrets
 pub fn decrypt_cmd(group: &str) {
     let handler = SecretsHandler::new();
     let dest_dir = std::env::current_dir().unwrap();

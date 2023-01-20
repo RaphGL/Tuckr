@@ -1,3 +1,11 @@
+//! Manages script running
+//!
+//! Hooks are run in a state machine. 
+//! Hooking steps:
+//! 1. Setup scripts are run
+//! 2. Dotfiles are symlinked
+//! 3. Post setup scripts are run
+
 use crate::symlinks;
 use crate::utils;
 use owo_colors::OwoColorize;
@@ -13,7 +21,7 @@ enum DeployStep {
     PostHook,
 }
 
-/// State machine for the dotfile deployment
+/// State machine for running hooks 
 struct DeployStages(DeployStep);
 
 impl DeployStages {
@@ -44,8 +52,7 @@ impl Iterator for DeployStages {
     }
 }
 
-/// Gets either PreHook or PostHook as hook_type
-/// this allows it to choose what type of script to run
+/// Runs hooks of type PreHook or PostHook
 fn run_hook(program: &str, hook_type: DeployStep) {
     utils::print_info_box(
         match hook_type {
@@ -108,6 +115,7 @@ fn run_hook(program: &str, hook_type: DeployStep) {
     }
 }
 
+/// Runs hooks for specified programs/groups
 pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool) {
     let run_deploy_steps = |step: DeployStages, program: &str| {
         for i in step {

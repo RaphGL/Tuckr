@@ -1,12 +1,18 @@
-/// A set of helper functions that reduce boilerplate
+//! A set of helper functions that reduce boilerplate
+
 use std::fs;
 use std::path;
 
 // Exit codes
-pub const COULDNT_FIND_DOTFILES: i32 = 2; // Couldn't find the dotfiles directory
-pub const NO_SETUP_FOLDER: i32 = 3; // no Configs/Hooks/Secrets folder setup
+/// Couldn't find the dotfiles directory
+pub const COULDNT_FIND_DOTFILES: i32 = 2; 
+/// No Configs/Hooks/Secrets folder setup
+pub const NO_SETUP_FOLDER: i32 = 3; 
+/// Referenced file does not exist in the current directory
 pub const NO_SUCH_FILE_OR_DIR: i32 = 4;
+/// Failed to encrypt referenced file
 pub const ENCRYPTION_FAILED: i32 = 5;
+/// Failed to decrypt referenced file
 pub const DECRYPTION_FAILED: i32 = 6; 
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
@@ -23,7 +29,7 @@ pub fn get_dotfiles_path() -> Option<path::PathBuf> {
     }
 }
 
-/// Converts a path string from pointing to their config in the dotfiles to where they should be
+/// Converts a path string from dotfiles/Configs to where they should be
 /// deployed on $HOME
 pub fn to_home_path(path: &str) -> path::PathBuf {
     // uses join("") so that the path appends / or \ depending on platform
@@ -39,7 +45,7 @@ pub fn to_home_path(path: &str) -> path::PathBuf {
     )
 }
 
-/// Converts paths from dotfiles/Hooks and Configs to their target destination at $HOME
+/// Extracts program name from tuckr directories
 pub fn to_program_name(path: &str) -> Option<&str> {
     let dir = if path.contains("Configs") {
         "Configs"
@@ -52,16 +58,16 @@ pub fn to_program_name(path: &str) -> Option<&str> {
     };
 
     // uses join("") so that the path appends / or \ depending on platform
-    let dotfiles_configs_path = path::PathBuf::from("dotfiles").join(dir).join("");
+    let config_path = path::PathBuf::from("dotfiles").join(dir).join("");
 
     Some(
-        path.split_once(dotfiles_configs_path.to_str().unwrap())
+        path.split_once(config_path.to_str().unwrap())
             .unwrap()
             .1,
     )
 }
 
-/// Goes through every file in the Configs/<program_dir> and applies the function
+/// Goes through every file in Configs/<program_dir> and applies the function
 pub fn program_dir_map<F: FnMut(fs::DirEntry)>(dir: path::PathBuf, mut func: F) {
     let program_dir = match fs::read_dir(&dir) {
         Ok(f) => f,

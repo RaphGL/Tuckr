@@ -1,3 +1,14 @@
+//! Tuckr is a set of tools to manage dotfiles
+//!
+//! Tuckr separates dotfiles into 3 different directories:
+//! - dotfiles/Configs - stores config files
+//! - dotfiles/Hooks - stores scripts that configure the environment
+//! - dotfiles/Secrets - stores encrypted/sensitive files
+//!
+//! Each of these of these directories contain directories with the name of the programs or logical
+//! groups which contains all user scripts, configs and scripts, these are used to label them on tuckr
+//! so you can add or remove them anytime 
+
 mod fileops;
 mod hooks;
 mod secrets;
