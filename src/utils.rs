@@ -136,19 +136,29 @@ mod tests {
             // /home/$USER/.zshrc
             dirs::home_dir().unwrap().join(".zshrc")
         );
+
+        let config_path = if cfg!(target_os = "windows") {
+            dirs::config_dir()
+                .unwrap()
+                .join("dotfiles")
+                .join("Configs")
+                .join("zsh")
+                .join("AppData")
+                .join("Roaming")
+                .join("program")
+        } else {
+            dirs::config_dir()
+                .unwrap()
+                .join("dotfiles")
+                .join("Configs")
+                .join("zsh")
+                .join(".config")
+                .join("program")
+        };
+
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.config/$PROGRAM
-            super::to_home_path(
-                dirs::config_dir()
-                    .unwrap()
-                    .join("dotfiles")
-                    .join("Configs")
-                    .join("zsh")
-                    .join(".config")
-                    .join("program")
-                    .to_str()
-                    .unwrap()
-            ),
+            super::to_home_path(config_path.to_str().unwrap()),
             // /home/$USER/.config/$PROGRAM
             dirs::config_dir().unwrap().join("program")
         );
