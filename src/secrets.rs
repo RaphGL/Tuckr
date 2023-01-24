@@ -113,7 +113,7 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) {
 }
 
 /// Decrypts secrets
-pub fn decrypt_cmd(groups: &Vec<String>, exclude: &Vec<String>) {
+pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
     let handler = SecretsHandler::new();
     let dest_dir = std::env::current_dir().unwrap();
 

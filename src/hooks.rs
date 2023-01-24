@@ -179,16 +179,4 @@ mod tests {
         steps.next();
         assert!(steps.0 == DeployStep::PostHook);
     }
-
-    #[test]
-    fn check_hooks() {
-        let mut hook = DeployStages::new();
-        assert!(hook.0 == DeployStep::Initialize);
-        hook.next();
-        assert!(hook.0 == DeployStep::PreHook);
-        hook.next();
-        assert!(hook.0 == DeployStep::Symlink);
-        hook.next();
-        assert!(hook.0 == DeployStep::PostHook);
-    }
 }
