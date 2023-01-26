@@ -100,7 +100,7 @@ pub fn print_info_box(title: &str, content: &str) {
     hook_box
         .with(tabled::Rotate::Left)
         .with(tabled::Style::rounded().off_vertical());
-    println!("{}", hook_box);
+    println!("{hook_box}");
 }
 
 #[cfg(test)]

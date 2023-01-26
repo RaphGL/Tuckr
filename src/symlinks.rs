@@ -385,7 +385,7 @@ pub fn status_cmd() {
         .with(Style::empty())
         .with(Margin::new(4, 4, 1, 1))
         .with(Alignment::center());
-    println!("{}", final_table);
+    println!("{final_table}");
 }
 
 #[cfg(test)]
@@ -476,8 +476,8 @@ mod tests {
         sym.add("program");
         sym.remove("program");
 
-        let file = program_dir.clone().join("program.test");
-        let config_file = program_dir.clone().join(".config").join("program.test");
+        let file = program_dir.join("program.test");
+        let config_file = program_dir.join(".config").join("program.test");
         assert!(
             match fs::read_link(utils::to_home_path(file.to_str().unwrap())) {
                 Err(_) => true,
