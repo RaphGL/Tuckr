@@ -12,6 +12,7 @@
 
 use crate::utils;
 use owo_colors::OwoColorize;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -33,10 +34,10 @@ fn symlink_file(f: fs::DirEntry) {
 
 /// Handles dotfile symlinking and their current status
 struct SymlinkHandler {
-    dotfiles_dir: PathBuf,           // path to the dotfiles directory
-    symlinked: HashSet<PathBuf>,     // path to symlinked programs in Dotfiles/Configs
-    not_symlinked: HashSet<PathBuf>, // path to programs that aren't symlinked to $HOME
-    not_owned: HashSet<PathBuf>,     // Path to files in $HOME that don't link to dotfiles_dir
+    dotfiles_dir: PathBuf,                    // path to the dotfiles directory
+    symlinked: HashSet<PathBuf>,              // path to symlinked programs in Dotfiles/Configs
+    not_symlinked: HashSet<PathBuf>,          // path to programs that aren't symlinked to $HOME
+    not_owned: HashMap<String, Vec<PathBuf>>, // key: group the file belongs to, value: list of conflicting files from that group
 }
 
 impl SymlinkHandler {
@@ -52,7 +53,7 @@ impl SymlinkHandler {
             }),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
-            not_owned: HashSet::new(),
+            not_owned: HashMap::new(),
         };
 
         // this fills the symlinker with dotfile status information
@@ -89,6 +90,7 @@ impl SymlinkHandler {
                         // if at least one of the files is not symlinked
                         let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                         let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+
                         if f.to_str().unwrap().contains(dotfiles_configs_path) {
                             self.symlinked.insert(program_dir.path());
                             self.not_symlinked.remove(&program_dir.path());
@@ -98,11 +100,17 @@ impl SymlinkHandler {
                         }
                     }
 
+                    // file is in conflict with dotfiles and is added to not_owned
                     Err(_) => {
                         self.not_symlinked.insert(program_dir.path());
                         self.symlinked.remove(&program_dir.path());
                         if PathBuf::from(&config_file).exists() {
-                            self.not_owned.insert(config_file);
+                            let program_dir = program_dir.file_name().to_str().unwrap().to_string();
+                            if let Some(group) = self.not_owned.get_mut(&program_dir) {
+                                group.push(config_file);
+                            } else {
+                                self.not_owned.insert(program_dir, vec![config_file]);
+                            }
                         }
                     }
                 }
@@ -224,19 +232,21 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
         if !sym.not_owned.is_empty() {
             // Symlink dotfile by force
             if force {
-                for file in &sym.not_owned {
-                    // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
-                    // files thus forcing them to be symlinked
-                    let program_dir = sym.dotfiles_dir.join("Configs").join(program);
-                    utils::program_dir_map(program_dir, |program_file| {
-                        if &utils::to_home_path(program_file.path().to_str().unwrap()) == file {
-                            if file.is_dir() {
-                                _ = fs::remove_dir_all(file);
-                            } else {
-                                _ = fs::remove_file(file);
+                for (_, files) in &sym.not_owned {
+                    for file in files {
+                        // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
+                        // files thus forcing them to be symlinked
+                        let program_dir = sym.dotfiles_dir.join("Configs").join(program);
+                        utils::program_dir_map(program_dir, |program_file| {
+                            if &utils::to_home_path(program_file.path().to_str().unwrap()) == file {
+                                if file.is_dir() {
+                                    _ = fs::remove_dir_all(file);
+                                } else {
+                                    _ = fs::remove_file(file);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
             }
 
@@ -247,19 +257,21 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
                     .join("Configs")
                     .join(program);
 
-                for file in &sym.not_owned {
-                    utils::program_dir_map(program_dir.clone(), |f| {
-                        let program_path = f.path();
-                        // only adopts dotfile if it matches requested program
-                        if utils::to_home_path(program_path.to_str().unwrap()) == file.clone() {
-                            if program_path.is_dir() {
-                                _ = fs::remove_dir(&program_path);
-                            } else {
-                                _ = fs::remove_file(&program_path);
+                for (_, files) in &sym.not_owned {
+                    for file in files {
+                        utils::program_dir_map(program_dir.clone(), |f| {
+                            let program_path = f.path();
+                            // only adopts dotfile if it matches requested program
+                            if utils::to_home_path(program_path.to_str().unwrap()) == file.clone() {
+                                if program_path.is_dir() {
+                                    _ = fs::remove_dir(&program_path);
+                                } else {
+                                    _ = fs::remove_file(&program_path);
+                                }
+                                _ = fs::rename(file, program_path);
                             }
-                            _ = fs::rename(file, program_path);
-                        }
-                    });
+                        });
+                    }
                 }
             }
         }
@@ -273,9 +285,16 @@ pub fn remove_cmd(programs: &[String], exclude: &[String]) {
     foreach_program(programs, exclude, false, |sym, p| sym.remove(p));
 }
 
-/// Prints symlinking status
-pub fn status_cmd() {
-    let sym = SymlinkHandler::new();
+fn print_global_status(sym: SymlinkHandler) {
+    if sym.not_owned.len() == 0 && sym.not_symlinked.len() == 0 && sym.symlinked.len() > 0 {
+        println!("{}", "All dotfiles have been symlinked.".green());
+        return;
+    }
+
+    if sym.symlinked.len() == 0 && sym.not_symlinked.len() > 0 {
+        println!("{}", "No dotfiles have been symlinked yet.".yellow());
+        return;
+    }
 
     #[derive(Tabled)]
     struct SymlinkRow<'a> {
@@ -366,8 +385,8 @@ pub fn status_cmd() {
         .with(Modify::new(Columns::single(0)).with(Format::new(|s| s.green().to_string())))
         .with(Modify::new(Columns::single(1)).with(Format::new(|s| s.red().to_string())));
 
-    let mut conflict_table = Table::builder(sym.not_owned.iter().map(|f| f.to_str().unwrap()))
-        .set_columns(["Conflicting Files".yellow().to_string()])
+    let mut conflict_table = Table::builder(sym.not_owned.keys())
+        .set_columns(["Conflicting Dotfiles".yellow().to_string()])
         .clone()
         .build();
     conflict_table
@@ -386,6 +405,48 @@ pub fn status_cmd() {
         .with(Margin::new(4, 4, 1, 1))
         .with(Alignment::center());
     println!("{final_table}");
+
+    if !sym.not_owned.is_empty() {
+        println!("To learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
+    }
+}
+
+fn print_programs_status(sym: SymlinkHandler, programs: Vec<String>) {
+    // TODO make tables
+    // TODO add symlinked and not symlinked statuses
+    for program in &programs {
+        for item in &sym.symlinked {
+            if item.file_name().unwrap().to_str().unwrap() == program {
+                println!("{}", (program.to_owned() + " is already symlinked.").green());
+                continue;
+            }
+        }
+
+        if let Some(files) = sym.not_owned.get(program) {
+            println!("The following {program} files are in conflict:");
+            for file in files {
+                println!("\t{}", file.to_str().unwrap().red());
+            }
+            println!("\n{}\n", "Check `tuckr help add` to learn how to resolve them.".yellow());
+            continue;
+        }
+
+        for item in &sym.not_symlinked {
+            if item.file_name().unwrap().to_str().unwrap() == program {
+                println!("{}", (program.to_owned() + " is not yet symlinked.").red());
+            }
+        }
+
+    }
+}
+
+/// Prints symlinking status
+pub fn status_cmd(programs: Option<Vec<String>>) {
+    let sym = SymlinkHandler::new();
+    match programs {
+        Some(programs) => print_programs_status(sym, programs),
+        None => print_global_status(sym),
+    }
 }
 
 #[cfg(test)]
@@ -393,7 +454,7 @@ mod tests {
     use crate::utils;
     use std::path;
     use std::{
-        collections::HashSet,
+        collections::{HashMap, HashSet},
         fs::{self, File},
     };
 
@@ -425,7 +486,7 @@ mod tests {
                 .join("dotfiles"),
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
-            not_owned: HashSet::new(),
+            not_owned: HashMap::new(),
         };
         let program_dir = sym.dotfiles_dir.clone().join("Configs").join("program");
         if let Err(_) = fs::create_dir_all(program_dir.clone().join(".config")) {

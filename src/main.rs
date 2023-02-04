@@ -70,7 +70,10 @@ enum Cli {
 
     #[command(alias = "s")]
     /// Get dotfiles' symlinking status (alias: s)
-    Status,
+    Status {
+        #[arg(value_name = "PROGRAM")]
+        programs: Option<Vec<String>>,
+    },
 
     #[command(alias = "e")]
     /// Encrypt files and move them to dotfiles/Secrets (alias: e)
@@ -117,7 +120,7 @@ fn main() -> ExitCode {
         } => symlinks::add_cmd(&programs, &exclude, force, adopt),
 
         Cli::Rm { programs, exclude } => symlinks::remove_cmd(&programs, &exclude),
-        Cli::Status => symlinks::status_cmd(),
+        Cli::Status { programs } => symlinks::status_cmd(programs),
         Cli::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&group, &dotfiles),
         Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
         Cli::Init => fileops::init_tuckr_dir(),
