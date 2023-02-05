@@ -67,6 +67,7 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         eprintln!("{}", "Could not find dotfiles directory".red());
         std::process::exit(utils::COULDNT_FIND_DOTFILES);
     });
+
     let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
     let program_dir = fs::read_dir(program_dir).unwrap_or_else(|_| {
         eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());

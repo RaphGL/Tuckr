@@ -75,6 +75,7 @@ impl SymlinkHandler {
 
         for file in dir {
             let program_dir = file.unwrap();
+            // Ignores all regular files since Configs should only care about group folders
             if program_dir.path().is_file() {
                 continue;
             }
@@ -85,12 +86,12 @@ impl SymlinkHandler {
 
                 match fs::read_link(&config_file) {
                     Ok(f) => {
-                        // program_dir can only be in one set at a time
-                        // this makes it so one would get a not symlinked status
-                        // if at least one of the files is not symlinked
                         let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                         let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
 
+                        // program_dir can only be in one set at a time
+                        // this makes it so one would get a not symlinked status
+                        // if at least one of the files is not symlinked
                         if f.to_str().unwrap().contains(dotfiles_configs_path) {
                             self.symlinked.insert(program_dir.path());
                             self.not_symlinked.remove(&program_dir.path());
@@ -232,7 +233,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
         if !sym.not_owned.is_empty() {
             // Symlink dotfile by force
             if force {
-                for (_, files) in &sym.not_owned {
+                for files in sym.not_owned.values() {
                     for file in files {
                         // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
                         // files thus forcing them to be symlinked
@@ -257,7 +258,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
                     .join("Configs")
                     .join(program);
 
-                for (_, files) in &sym.not_owned {
+                for files in sym.not_owned.values() {
                     for file in files {
                         utils::program_dir_map(program_dir.clone(), |f| {
                             let program_path = f.path();
@@ -286,16 +287,6 @@ pub fn remove_cmd(programs: &[String], exclude: &[String]) {
 }
 
 fn print_global_status(sym: SymlinkHandler) {
-    if sym.not_owned.len() == 0 && sym.not_symlinked.len() == 0 && sym.symlinked.len() > 0 {
-        println!("{}", "All dotfiles have been symlinked.".green());
-        return;
-    }
-
-    if sym.symlinked.len() == 0 && sym.not_symlinked.len() > 0 {
-        println!("{}", "No dotfiles have been symlinked yet.".yellow());
-        return;
-    }
-
     #[derive(Tabled)]
     struct SymlinkRow<'a> {
         #[tabled(display_with = "display_option")]
@@ -352,22 +343,19 @@ fn print_global_status(sym: SymlinkHandler) {
             not_symlinked: None,
         });
 
-        let mut new_sym = SymlinkRow {
-            symlinked: None,
-            not_symlinked: None,
+        let new_sym = SymlinkRow {
+            symlinked: if sym.symlinked.is_none() && nsym.symlinked.is_some() {
+                nsym.symlinked
+            } else {
+                sym.symlinked
+            },
+
+            not_symlinked: if sym.not_symlinked.is_none() && nsym.not_symlinked.is_some() {
+                nsym.not_symlinked
+            } else {
+                sym.not_symlinked
+            },
         };
-
-        if sym.symlinked.is_none() && nsym.symlinked.is_some() {
-            new_sym.symlinked = nsym.symlinked;
-        } else {
-            new_sym.symlinked = sym.symlinked;
-        }
-
-        if sym.not_symlinked.is_none() && nsym.not_symlinked.is_some() {
-            new_sym.not_symlinked = nsym.not_symlinked;
-        } else {
-            new_sym.not_symlinked = sym.not_symlinked;
-        }
 
         status.push(new_sym);
     }
@@ -412,12 +400,13 @@ fn print_global_status(sym: SymlinkHandler) {
 }
 
 fn print_programs_status(sym: SymlinkHandler, programs: Vec<String>) {
-    // TODO make tables
-    // TODO add symlinked and not symlinked statuses
     for program in &programs {
         for item in &sym.symlinked {
             if item.file_name().unwrap().to_str().unwrap() == program {
-                println!("{}", (program.to_owned() + " is already symlinked.").green());
+                println!(
+                    "{}",
+                    (program.to_owned() + " is already symlinked.").green()
+                );
                 continue;
             }
         }
@@ -427,7 +416,10 @@ fn print_programs_status(sym: SymlinkHandler, programs: Vec<String>) {
             for file in files {
                 println!("\t{}", file.to_str().unwrap().red());
             }
-            println!("\n{}\n", "Check `tuckr help add` to learn how to resolve them.".yellow());
+            println!(
+                "\n{}\n",
+                "Check `tuckr help add` to learn how to resolve them.".yellow()
+            );
             continue;
         }
 
@@ -436,7 +428,6 @@ fn print_programs_status(sym: SymlinkHandler, programs: Vec<String>) {
                 println!("{}", (program.to_owned() + " is not yet symlinked.").red());
             }
         }
-
     }
 }
 
