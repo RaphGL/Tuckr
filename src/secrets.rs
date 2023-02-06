@@ -118,7 +118,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
     let dest_dir = std::env::current_dir().unwrap();
 
     let decrypt_group = |group: &String| {
-        let groupname = &utils::to_program_name(group).unwrap().to_string();
+        let groupname = &utils::to_group_name(group).unwrap().to_string();
         if exclude.contains(groupname) {
             return;
         }

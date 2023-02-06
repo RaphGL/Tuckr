@@ -35,8 +35,8 @@ fn symlink_file(f: fs::DirEntry) {
 /// Handles dotfile symlinking and their current status
 struct SymlinkHandler {
     dotfiles_dir: PathBuf,                    // path to the dotfiles directory
-    symlinked: HashSet<PathBuf>,              // path to symlinked programs in Dotfiles/Configs
-    not_symlinked: HashSet<PathBuf>,          // path to programs that aren't symlinked to $HOME
+    symlinked: HashSet<PathBuf>,              // path to symlinked groups in Dotfiles/Configs
+    not_symlinked: HashSet<PathBuf>,          // path to groups that aren't symlinked to $HOME
     not_owned: HashMap<String, Vec<PathBuf>>, // key: group the file belongs to, value: list of conflicting files from that group
 }
 
@@ -62,7 +62,7 @@ impl SymlinkHandler {
 
     /// **This function should not be used outside this scope**
     ///
-    /// Checks which dotfiles are or are not symlinked and registers their Configs/$PROGRAM path
+    /// Checks which dotfiles are or are not symlinked and registers their Configs/$group path
     /// into the struct
     ///
     /// Returns a copy of self with all the fields set accordingly
@@ -74,14 +74,14 @@ impl SymlinkHandler {
         });
 
         for file in dir {
-            let program_dir = file.unwrap();
+            let group_dir = file.unwrap();
             // Ignores all regular files since Configs should only care about group folders
-            if program_dir.path().is_file() {
+            if group_dir.path().is_file() {
                 continue;
             }
 
-            // Checks for the files in each of the programs' dirs
-            utils::program_dir_map(program_dir.path(), |f| {
+            // Checks for the files in each of the groups' dirs
+            utils::group_dir_map(group_dir.path(), |f| {
                 let config_file = utils::to_home_path(f.path().to_str().unwrap());
 
                 match fs::read_link(&config_file) {
@@ -89,28 +89,28 @@ impl SymlinkHandler {
                         let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                         let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
 
-                        // program_dir can only be in one set at a time
+                        // group_dir can only be in one set at a time
                         // this makes it so one would get a not symlinked status
                         // if at least one of the files is not symlinked
                         if f.to_str().unwrap().contains(dotfiles_configs_path) {
-                            self.symlinked.insert(program_dir.path());
-                            self.not_symlinked.remove(&program_dir.path());
+                            self.symlinked.insert(group_dir.path());
+                            self.not_symlinked.remove(&group_dir.path());
                         } else {
-                            self.not_symlinked.insert(program_dir.path());
-                            self.symlinked.remove(&program_dir.path());
+                            self.not_symlinked.insert(group_dir.path());
+                            self.symlinked.remove(&group_dir.path());
                         }
                     }
 
                     // file is in conflict with dotfiles and is added to not_owned
                     Err(_) => {
-                        self.not_symlinked.insert(program_dir.path());
-                        self.symlinked.remove(&program_dir.path());
+                        self.not_symlinked.insert(group_dir.path());
+                        self.symlinked.remove(&group_dir.path());
                         if PathBuf::from(&config_file).exists() {
-                            let program_dir = program_dir.file_name().to_str().unwrap().to_string();
-                            if let Some(group) = self.not_owned.get_mut(&program_dir) {
+                            let group_dir = group_dir.file_name().to_str().unwrap().to_string();
+                            if let Some(group) = self.not_owned.get_mut(&group_dir) {
                                 group.push(config_file);
                             } else {
-                                self.not_owned.insert(program_dir, vec![config_file]);
+                                self.not_owned.insert(group_dir, vec![config_file]);
                             }
                         }
                     }
@@ -121,23 +121,19 @@ impl SymlinkHandler {
         self
     }
 
-    /// Symlinks all the files of a program to the user's $HOME
-    fn add(&self, program: &str) {
-        let program_dir = self.dotfiles_dir.join("Configs").join(program);
-        if program_dir.exists() {
-            // iterate through all the files in program_dir
-            utils::program_dir_map(program_dir, symlink_file);
+    /// Symlinks all the files of a group to the user's $HOME
+    fn add(&self, group: &str) {
+        let group_dir = self.dotfiles_dir.join("Configs").join(group);
+        if group_dir.exists() {
+            // iterate through all the files in group_dir
+            utils::group_dir_map(group_dir, symlink_file);
         } else {
-            eprintln!(
-                "{} {}",
-                "Error: There's no dotfiles for".red(),
-                program.red()
-            );
+            eprintln!("{} {}", "Error: There's no dotfiles for".red(), group.red());
         }
     }
 
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
-    fn remove(&self, program: &str) {
+    fn remove(&self, group: &str) {
         let remove_symlink = |file: fs::DirEntry| {
             let dotfile = utils::to_home_path(file.path().to_str().unwrap());
             if let Ok(linked) = fs::read_link(&dotfile) {
@@ -149,30 +145,26 @@ impl SymlinkHandler {
             }
         };
 
-        let program_dir = self.dotfiles_dir.join("Configs").join(program);
-        if program_dir.exists() {
-            // iterate through all the files in program_dir
-            utils::program_dir_map(program_dir, remove_symlink);
+        let group_dir = self.dotfiles_dir.join("Configs").join(group);
+        if group_dir.exists() {
+            // iterate through all the files in group_dir
+            utils::group_dir_map(group_dir, remove_symlink);
         } else {
-            eprintln!(
-                "{} {}",
-                "Error: There's no program called".red(),
-                program.red()
-            );
+            eprintln!("{} {}", "Error: There's no group called".red(), group.red());
         }
     }
 }
 
-/// programs: the programs will be applied to
+/// groups: the groups will be applied to
 ///
-/// exclude: the programs that will be ignored
+/// exclude: the groups that will be ignored
 ///
-/// symlinked: whether it should be applied to symlinked or non symlinked programs
-/// iterates over each program in the dotfiles and calls a function F giving it the SymlinkHandler
-/// instance and the name of the program that's being handled
+/// symlinked: whether it should be applied to symlinked or non symlinked groups
+/// iterates over each group in the dotfiles and calls a function F giving it the SymlinkHandler
+/// instance and the name of the group that's being handled
 ///
-/// This abstracts this recurrent loop allowing handle programs just by their names
-fn foreach_program<F>(programs: &[String], exclude: &[String], symlinked: bool, func: F)
+/// This abstracts this recurrent loop allowing handle groups just by their names
+fn foreach_group<F>(groups: &[String], exclude: &[String], symlinked: bool, func: F)
 where
     F: Fn(&SymlinkHandler, &String),
 {
@@ -180,7 +172,7 @@ where
     let sym = SymlinkHandler::new();
 
     // handles wildcard
-    if programs.contains(&"*".to_string()) {
+    if groups.contains(&"*".to_string()) {
         let symgroup = if symlinked {
             &sym.not_symlinked
         } else {
@@ -188,31 +180,31 @@ where
         };
 
         for p in symgroup {
-            // Takes the name of the program to be passed the function
-            let program_name = utils::to_program_name(p.to_str().unwrap()).unwrap();
-            // Ignore programs in the excludes array
-            if exclude.contains(&program_name.to_string()) {
+            // Takes the name of the group to be passed the function
+            let group_name = utils::to_group_name(p.to_str().unwrap()).unwrap();
+            // Ignore groups in the excludes array
+            if exclude.contains(&group_name.to_string()) {
                 continue;
             }
-            // do something with the program name
+            // do something with the group name
             // passing the sym context
-            func(&sym, &program_name.to_string());
+            func(&sym, &group_name.to_string());
         }
         return;
     }
 
-    for program in programs {
-        // add all programs if wildcard
-        if exclude.contains(program) {
+    for group in groups {
+        // add all groups if wildcard
+        if exclude.contains(group) {
             continue;
         } else {
-            func(&sym, program);
+            func(&sym, group);
         }
     }
 }
 
 /// Adds symlinks
-pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool) {
+pub fn add_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) {
     if force {
         let mut answer = String::new();
         print!("Are you sure you want to override conflicts? (N/y) ");
@@ -229,7 +221,7 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
         }
     }
 
-    foreach_program(programs, exclude, true, |sym, program| {
+    foreach_group(groups, exclude, true, |sym, group| {
         if !sym.not_owned.is_empty() {
             // Symlink dotfile by force
             if force {
@@ -237,9 +229,9 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
                     for file in files {
                         // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
                         // files thus forcing them to be symlinked
-                        let program_dir = sym.dotfiles_dir.join("Configs").join(program);
-                        utils::program_dir_map(program_dir, |program_file| {
-                            if &utils::to_home_path(program_file.path().to_str().unwrap()) == file {
+                        let group_dir = sym.dotfiles_dir.join("Configs").join(group);
+                        utils::group_dir_map(group_dir, |group_file| {
+                            if &utils::to_home_path(group_file.path().to_str().unwrap()) == file {
                                 if file.is_dir() {
                                     _ = fs::remove_dir_all(file);
                                 } else {
@@ -253,23 +245,23 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
 
             if adopt {
                 // Discard dotfile and adopt the conflicting dotfile
-                let program_dir = utils::get_dotfiles_path()
+                let group_dir = utils::get_dotfiles_path()
                     .unwrap()
                     .join("Configs")
-                    .join(program);
+                    .join(group);
 
                 for files in sym.not_owned.values() {
                     for file in files {
-                        utils::program_dir_map(program_dir.clone(), |f| {
-                            let program_path = f.path();
-                            // only adopts dotfile if it matches requested program
-                            if utils::to_home_path(program_path.to_str().unwrap()) == file.clone() {
-                                if program_path.is_dir() {
-                                    _ = fs::remove_dir(&program_path);
+                        utils::group_dir_map(group_dir.clone(), |f| {
+                            let group_path = f.path();
+                            // only adopts dotfile if it matches requested group
+                            if utils::to_home_path(group_path.to_str().unwrap()) == file.clone() {
+                                if group_path.is_dir() {
+                                    _ = fs::remove_dir(&group_path);
                                 } else {
-                                    _ = fs::remove_file(&program_path);
+                                    _ = fs::remove_file(&group_path);
                                 }
-                                _ = fs::rename(file, program_path);
+                                _ = fs::rename(file, group_path);
                             }
                         });
                     }
@@ -277,13 +269,13 @@ pub fn add_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
             }
         }
 
-        sym.add(program)
+        sym.add(group)
     });
 }
 
 /// Removes symlinks
-pub fn remove_cmd(programs: &[String], exclude: &[String]) {
-    foreach_program(programs, exclude, false, |sym, p| sym.remove(p));
+pub fn remove_cmd(groups: &[String], exclude: &[String]) {
+    foreach_group(groups, exclude, false, |sym, p| sym.remove(p));
 }
 
 fn print_global_status(sym: SymlinkHandler) {
@@ -309,19 +301,19 @@ fn print_global_status(sym: SymlinkHandler) {
     // Generates a Vec<SymlinkRow> for symlinked and not symlinked files
     let mut symlinked_status: Vec<SymlinkRow> = Vec::new();
     for sym in &sym.symlinked {
-        let symlinked_program = utils::to_program_name(sym.to_str().unwrap()).unwrap();
+        let symlinked_group = utils::to_group_name(sym.to_str().unwrap()).unwrap();
         symlinked_status.push(SymlinkRow {
-            symlinked: Some(symlinked_program),
+            symlinked: Some(symlinked_group),
             not_symlinked: None,
         });
     }
 
     let mut notsym_status: Vec<SymlinkRow> = Vec::new();
     for nsym in &sym.not_symlinked {
-        let notsym_program = utils::to_program_name(nsym.to_str().unwrap()).unwrap();
+        let notsym_group = utils::to_group_name(nsym.to_str().unwrap()).unwrap();
         notsym_status.push(SymlinkRow {
             symlinked: None,
-            not_symlinked: Some(notsym_program),
+            not_symlinked: Some(notsym_group),
         });
     }
 
@@ -399,20 +391,17 @@ fn print_global_status(sym: SymlinkHandler) {
     }
 }
 
-fn print_programs_status(sym: SymlinkHandler, programs: Vec<String>) {
-    for program in &programs {
+fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
+    for group in &groups {
         for item in &sym.symlinked {
-            if item.file_name().unwrap().to_str().unwrap() == program {
-                println!(
-                    "{}",
-                    (program.to_owned() + " is already symlinked.").green()
-                );
+            if item.file_name().unwrap().to_str().unwrap() == group {
+                println!("{}", (group.to_owned() + " is already symlinked.").green());
                 continue;
             }
         }
 
-        if let Some(files) = sym.not_owned.get(program) {
-            println!("The following {program} files are in conflict:");
+        if let Some(files) = sym.not_owned.get(group) {
+            println!("The following {group} files are in conflict:");
             for file in files {
                 println!("\t{}", file.to_str().unwrap().red());
             }
@@ -424,18 +413,18 @@ fn print_programs_status(sym: SymlinkHandler, programs: Vec<String>) {
         }
 
         for item in &sym.not_symlinked {
-            if item.file_name().unwrap().to_str().unwrap() == program {
-                println!("{}", (program.to_owned() + " is not yet symlinked.").red());
+            if item.file_name().unwrap().to_str().unwrap() == group {
+                println!("{}", (group.to_owned() + " is not yet symlinked.").red());
             }
         }
     }
 }
 
 /// Prints symlinking status
-pub fn status_cmd(programs: Option<Vec<String>>) {
+pub fn status_cmd(groups: Option<Vec<String>>) {
     let sym = SymlinkHandler::new();
-    match programs {
-        Some(programs) => print_programs_status(sym, programs),
+    match groups {
+        Some(groups) => print_groups_status(sym, groups),
         None => print_global_status(sym),
     }
 }
@@ -479,29 +468,29 @@ mod tests {
             not_symlinked: HashSet::new(),
             not_owned: HashMap::new(),
         };
-        let program_dir = sym.dotfiles_dir.clone().join("Configs").join("program");
-        if let Err(_) = fs::create_dir_all(program_dir.clone().join(".config")) {
+        let group_dir = sym.dotfiles_dir.clone().join("Configs").join("group");
+        if let Err(_) = fs::create_dir_all(group_dir.clone().join(".config")) {
             panic!("Could not create required folders");
         }
 
-        File::create(program_dir.clone().join("program.test")).unwrap();
-        File::create(program_dir.clone().join(".config").join("program.test")).unwrap();
+        File::create(group_dir.clone().join("group.test")).unwrap();
+        File::create(group_dir.clone().join(".config").join("group.test")).unwrap();
 
         let sym = sym.validate();
 
-        (sym, program_dir)
+        (sym, group_dir)
     }
 
     #[test]
     fn add_symlink() {
         let init = init_symlink_test();
         let sym = init.0;
-        let program_dir = init.1;
+        let group_dir = init.1;
 
-        sym.add("program");
+        sym.add("group");
 
-        let file = program_dir.clone().join("program.test");
-        let config_file = program_dir.clone().join(".config").join("program.test");
+        let file = group_dir.clone().join("group.test");
+        let config_file = group_dir.clone().join(".config").join("group.test");
         assert_eq!(
             fs::read_link(utils::to_home_path(file.to_str().unwrap())).unwrap(),
             file
@@ -516,20 +505,20 @@ mod tests {
     fn add_force_symlink() {
         //let init = init_symlink_test();
         //let sym = init.0;
-        //let program_dir = init.1;
+        //let group_dir = init.1;
     }
 
     #[test]
     fn remove_symlink() {
         let init = init_symlink_test();
         let sym = init.0;
-        let program_dir = init.1;
+        let group_dir = init.1;
 
-        sym.add("program");
-        sym.remove("program");
+        sym.add("group");
+        sym.remove("group");
 
-        let file = program_dir.join("program.test");
-        let config_file = program_dir.join(".config").join("program.test");
+        let file = group_dir.join("group.test");
+        let config_file = group_dir.join(".config").join("group.test");
         assert!(
             match fs::read_link(utils::to_home_path(file.to_str().unwrap())) {
                 Err(_) => true,
@@ -543,6 +532,6 @@ mod tests {
                 Ok(link) => link != file,
             }
         );
-        let _ = fs::remove_dir_all(program_dir);
+        let _ = fs::remove_dir_all(group_dir);
     }
 }

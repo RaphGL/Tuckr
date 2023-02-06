@@ -45,8 +45,8 @@ pub fn to_home_path(path: &str) -> path::PathBuf {
     )
 }
 
-/// Extracts program name from tuckr directories
-pub fn to_program_name(path: &str) -> Option<&str> {
+/// Extracts group name from tuckr directories
+pub fn to_group_name(path: &str) -> Option<&str> {
     let dir = if path.contains("Configs") {
         "Configs"
     } else if path.contains("Hooks") {
@@ -63,14 +63,14 @@ pub fn to_program_name(path: &str) -> Option<&str> {
     Some(path.split_once(config_path.to_str().unwrap()).unwrap().1)
 }
 
-/// Goes through every file in Configs/<program_dir> and applies the function
-pub fn program_dir_map<F: FnMut(fs::DirEntry)>(dir: path::PathBuf, mut func: F) {
-    let program_dir = match fs::read_dir(&dir) {
+/// Goes through every file in Configs/<group_dir> and applies the function
+pub fn group_dir_map<F: FnMut(fs::DirEntry)>(dir: path::PathBuf, mut func: F) {
+    let group_dir = match fs::read_dir(&dir) {
         Ok(f) => f,
         Err(_) => panic!("{} does not exist", dir.to_str().unwrap()),
     };
 
-    for file in program_dir {
+    for file in group_dir {
         let file = file.unwrap();
         match file.file_name().to_str().unwrap() {
             // Special folders that should not be handled directly ("owned" by the system)
@@ -145,7 +145,7 @@ mod tests {
                 .join("zsh")
                 .join("AppData")
                 .join("Roaming")
-                .join("program")
+                .join("group")
         } else {
             dirs::config_dir()
                 .unwrap()
@@ -153,21 +153,21 @@ mod tests {
                 .join("Configs")
                 .join("zsh")
                 .join(".config")
-                .join("program")
+                .join("group")
         };
 
         assert_eq!(
-            // /home/$USER/.config/dotfiles/Configs/zsh/.config/$PROGRAM
+            // /home/$USER/.config/dotfiles/Configs/zsh/.config/$group
             super::to_home_path(config_path.to_str().unwrap()),
-            // /home/$USER/.config/$PROGRAM
-            dirs::config_dir().unwrap().join("program")
+            // /home/$USER/.config/$group
+            dirs::config_dir().unwrap().join("group")
         );
     }
 
     #[test]
-    fn to_program_name() {
+    fn to_group_name() {
         assert_eq!(
-            super::to_program_name(
+            super::to_group_name(
                 // /home/$USER/.config/dotfiles/Configs/zsh
                 dirs::config_dir()
                     .unwrap()
@@ -181,7 +181,7 @@ mod tests {
             "zsh"
         );
         assert_eq!(
-            super::to_program_name(
+            super::to_group_name(
                 // /home/$USER/.config/dotfiles/Hooks/zsh
                 dirs::config_dir()
                     .unwrap()

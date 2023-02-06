@@ -1,6 +1,6 @@
 //! Manages script running
 //!
-//! Hooks are run in a state machine. 
+//! Hooks are run in a state machine.
 //! Hooking steps:
 //! 1. Setup scripts are run
 //! 2. Dotfiles are symlinked
@@ -21,7 +21,7 @@ enum DeployStep {
     PostHook,
 }
 
-/// State machine for running hooks 
+/// State machine for running hooks
 struct DeployStages(DeployStep);
 
 impl DeployStages {
@@ -53,14 +53,14 @@ impl Iterator for DeployStages {
 }
 
 /// Runs hooks of type PreHook or PostHook
-fn run_hook(program: &str, hook_type: DeployStep) {
+fn run_hook(group: &str, hook_type: DeployStep) {
     utils::print_info_box(
         match hook_type {
             DeployStep::PreHook => "Running Prehook",
             DeployStep::PostHook => "Running Posthook",
             _ => unreachable!(),
         },
-        program.yellow().to_string().as_str(),
+        group.yellow().to_string().as_str(),
     );
 
     let dotfiles_dir = utils::get_dotfiles_path().unwrap_or_else(|| {
@@ -68,13 +68,13 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         std::process::exit(utils::COULDNT_FIND_DOTFILES);
     });
 
-    let program_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(program);
-    let program_dir = fs::read_dir(program_dir).unwrap_or_else(|_| {
+    let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
+    let group_dir = fs::read_dir(group_dir).unwrap_or_else(|_| {
         eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
         std::process::exit(utils::NO_SETUP_FOLDER);
     });
 
-    for file in program_dir {
+    for file in group_dir {
         let file = file.unwrap().path();
         let filename = file.file_name().unwrap().to_str().unwrap();
         let file = file.to_str().unwrap();
@@ -102,7 +102,7 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         if output.wait().unwrap().success() {
             println!(
                 "{}",
-                format!("Hooked {program} {filename} successfully")
+                format!("Hooked {group} {filename} successfully")
                     .green()
                     .to_string()
                     .as_str()
@@ -110,38 +110,35 @@ fn run_hook(program: &str, hook_type: DeployStep) {
         } else {
             utils::print_info_box(
                 "Failed to hook".red().to_string().as_str(),
-                format!("{program} {filename}").as_str(),
+                format!("{group} {filename}").as_str(),
             );
         }
     }
 }
 
-/// Runs hooks for specified programs/groups
-pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool) {
-    let run_deploy_steps = |step: DeployStages, program: &str| {
+/// Runs hooks for specified groups
+pub fn set_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) {
+    let run_deploy_steps = |step: DeployStages, group: &str| {
         for i in step {
             match i {
                 DeployStep::Initialize => return,
 
                 DeployStep::PreHook => {
-                    run_hook(program, DeployStep::PreHook);
+                    run_hook(group, DeployStep::PreHook);
                 }
 
                 DeployStep::Symlink => {
-                    utils::print_info_box(
-                        "Symlinking program",
-                        program.yellow().to_string().as_str(),
-                    );
-                    symlinks::add_cmd(programs, exclude, force, adopt);
+                    utils::print_info_box("Symlinking group", group.yellow().to_string().as_str());
+                    symlinks::add_cmd(groups, exclude, force, adopt);
                 }
 
-                DeployStep::PostHook => run_hook(program, DeployStep::PostHook),
+                DeployStep::PostHook => run_hook(group, DeployStep::PostHook),
             }
         }
     };
 
-    for program in programs {
-        if program == "*" {
+    for group in groups {
+        if group == "*" {
             let dotfiles_dir = utils::get_dotfiles_path()
                 .unwrap_or_else(|| {
                     eprintln!(
@@ -156,11 +153,11 @@ pub fn set_cmd(programs: &[String], exclude: &[String], force: bool, adopt: bool
                 let folder = folder.unwrap();
                 run_deploy_steps(
                     DeployStages::new(),
-                    utils::to_program_name(folder.path().to_str().unwrap()).unwrap(),
+                    utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
                 );
             }
         } else {
-            run_deploy_steps(DeployStages::new(), program);
+            run_deploy_steps(DeployStages::new(), group);
         }
     }
 }
