@@ -128,7 +128,7 @@ impl SymlinkHandler {
             // iterate through all the files in group_dir
             utils::group_dir_map(group_dir, symlink_file);
         } else {
-            eprintln!("{} {}", "Error: There's no dotfiles for".red(), group.red());
+            eprintln!("{} {}", "There's no dotfiles for".red(), group.red());
         }
     }
 
@@ -150,7 +150,7 @@ impl SymlinkHandler {
             // iterate through all the files in group_dir
             utils::group_dir_map(group_dir, remove_symlink);
         } else {
-            eprintln!("{} {}", "Error: There's no group called".red(), group.red());
+            eprintln!("{} {}", "There's no group called".red(), group.red());
         }
     }
 }
@@ -412,9 +412,16 @@ fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
             continue;
         }
 
+        if sym.not_symlinked.is_empty() {
+                println!("{}", (group.to_owned() + " does not exist.").red());
+                continue;
+        }
+
         for item in &sym.not_symlinked {
             if item.file_name().unwrap().to_str().unwrap() == group {
                 println!("{}", (group.to_owned() + " is not yet symlinked.").red());
+            } else {
+                println!("{}", (group.to_owned() + " does not exist.").red());
             }
         }
     }

@@ -118,14 +118,20 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
     let dest_dir = std::env::current_dir().unwrap();
 
     let decrypt_group = |group: &String| {
-        let groupname = &utils::to_group_name(group).unwrap().to_string();
-        if exclude.contains(groupname) {
+        if exclude.contains(group) {
             return;
         }
 
         let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
         for secret in WalkDir::new(group_dir) {
-            let secret = secret.unwrap();
+            let secret = match secret {
+                Ok(secret) => secret,
+                Err(_) => {
+                    eprintln!("{}", (group.to_owned() + " does not exist.").red());
+                    return;
+                }
+            };
+
             if secret.file_type().is_dir() {
                 continue;
             }
@@ -139,8 +145,8 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
     if groups.contains(&"*".to_string()) {
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
-            let group = group.unwrap().path().to_str().unwrap().to_string();
-            decrypt_group(&group);
+            let group = group.unwrap().file_name();
+            decrypt_group(&group.to_str().unwrap().to_string());
         }
 
         return;
