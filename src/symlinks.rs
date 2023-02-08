@@ -509,13 +509,6 @@ mod tests {
     }
 
     #[test]
-    fn add_force_symlink() {
-        //let init = init_symlink_test();
-        //let sym = init.0;
-        //let group_dir = init.1;
-    }
-
-    #[test]
     fn remove_symlink() {
         let init = init_symlink_test();
         let sym = init.0;

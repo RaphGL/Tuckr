@@ -39,7 +39,7 @@
         <li><a href="#how-it-works">How it works</a></li>
         <li><a href="#using-hooks">Using hooks</a></li>
         <li><a href="#using-secrets">Using secrets</a></li>
-        <li><a href="#exit-codes">Using secrets</a></li>
+        <li><a href="#exit-codes">Exit codes</a></li>
       </ul>
     </li>
     <li><a href="#license">License</a></li>
@@ -48,57 +48,81 @@
 
 <!-- ABOUT THE PROJECT -->
 
-Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME. It works on all the major OSes (Linux, Windows, BSDs and MacOS).  
+Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME. It works on all the major OSes (Linux, Windows, BSDs and MacOS).
 
-Managing dotfiles is something that's done every once in a while and should not require one to go and study complex tooling just to be able to deploy dotfiles.
-
+Tuckr aims to bring the simplicity of Stow to a dotfile manager with a very small learning curve.
 To achieve that goal Tuckr tries to only cover what is directly needed to manage dotfiles and nothing more. We won't wrap git, rm, cp or reimplement the functionality of a perfectly functioning separate utility unless it greatly impacts usability.
 
-**What makes tuckr different?**
+### Goals:
 
-- No configuration required
-- Tuckr always knows where your dotfiles are, you don't have to cd into them
-- Symlinks are tracked and validated, you're informed of conflicts and can easily handle (or not handle them)
-- Hooks, write scripts to handle additional configuration
-- Encrypt your sensitive configuration and files
+- No configuration
+- Commands can be run from anywhere
+- Symlinks are tracked and validated, you're given easy tools to manage them
+- All configuration is separated and handled as a logical unit (groups or programs)
+- Hooks, optionally write configuration scripts for each group
+- Easily encrypt and deploy sensitive configuration files
 
 <!-- GETTING STARTED -->
 
 ## Getting Started
-The following paths should be used for your dotfiles:  
+
+The following paths should be used for your dotfiles:
 
 Dotfile Path in each OS:
-| Platform       | Config Path                                       | Home Path               |
-|----------------|---------------------------------------------------|-------------------------|
-| Linux/BSDs/etc | /home/user/.config/dotfiles                      | /home/user/.dotfiles    |
-| MacOS          | /Users/User/Library/Application Support/dotfiles | /Users/User/.dotfiles   |
-| Windows        | C:\Users\User\AppData\Roaming/dotfiles           | C:\Users\Alice/.dotfiles |
 
-Create the required directories:
-```
-tuckr init
-```
+| Platform       | Config Path                                | Home Path                 |
+| -------------- | ------------------------------------------ | ------------------------- |
+| Linux/BSDs/etc | $HOME/.config/dotfiles                     | $HOME/.dotfiles           |
+| MacOS          | $HOME/Library/Application Support/dotfiles | $HOME/.dotfiles           |
+| Windows        | C:\Users\<user>\AppData\Roaming/dotfiles   | C:\Users\<user>/.dotfiles |
+
+To learn how to set it up for your dotfiles, check the `How it works` sections.
 
 #### Stow users
-Tuckr is interchangeable with Stow. To migrate:  
-1. Open your dotfiles repo and remove the symlinks with `stow -t $HOME --delete *`
-2. Run `tuckr from-stow`
+
+Tuckr is interchangeable with Stow. To migrate:
+
+1. Go to your dotfiles directory remove all symlinks with
+
+```
+stow -t $HOME --delete *
+```
+
+2. Convert your repo:
+
+```
+tuckr from-stow
+```
+
 3. Move your repo to `$HOME/.dotfiles` or `$HOME/.config/dotfiles`
-4. Resymlink your dotfiles with `tuckr add \*`
+4. Resymlink your dotfiles with:
+
+```
+tuckr add \*
+```
+
+5. Confirm that there were no conflicts with:
+
+```
+tuckr status
+```
 
 #### Windows users
-You need to enable developer mode for the symlinking to work.  
 
+You need to enable developer mode for symlinking to work, this is a restriction imposed by the OS.
 
-### Installation  
+### Installation
 
 **Install from source:**
+
 ```sh
 cargo install --git https://github.com/RaphGL/Tuckr.git
 ```
+
 Note: The binary will be installed to `$HOME/.cargo/bin` either move it to somewhere in your $PATH or add it to path.
 
 **Install from the AUR:**
+
 ```sh
 paru -S tuckr-git
 ```
@@ -106,6 +130,7 @@ paru -S tuckr-git
 <!-- USAGE EXAMPLES -->
 
 ## Usage
+
 ```sh
 $ tuckr add \* # adds all dotfiles to the system
 $ tuckr add \* -e neovim # adds all dotfiles except neovim
@@ -115,19 +140,17 @@ $ tuckr rm \* # removes all dotfiles from your system
 ```
 
 ```
-Super powered GNU Stow replacement
-
 Usage: tuckr <COMMAND>
 
 Commands:
-  set        Setup the program and run its hooks
-  add        Deploy dotfiles for the given program (alias: a)
-  rm         Remove dotfiles for a program
-  status     Print a status message for all dotfiles (alias: s)
-  encrypt    Encrypts files and moves it to dotfiles/Secrets
-  decrypt    Decrypts files
+  set        Setup groups and run their hooks
+  add        Deploy dotfiles for the supplied groups (alias: a)
+  rm         Remove dotfiles for the supplied groups
+  status     Get dotfiles' symlinking status (alias: s)
+  encrypt    Encrypt files and move them to dotfiles/Secrets (alias: e)
+  decrypt    Decrypt files (alias: d)
   init       Initialize dotfile directory
-  from-stow  Converts a GNU Stow repo into a Tuckr one
+  from-stow  Convert a GNU Stow repo into Tuckr
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -135,9 +158,11 @@ Options:
   -V, --version  Print version
 ```
 
-### How it works  
+### How it works
+
 Tuckr works with no configuration, this is achieved by making some assumptions about the structure of your dotfiles directory.
-Every Tuckr dotfiles directory should have the following structure:  
+Every Tuckr dotfiles directory should have the following structure:
+
 ```sh
 dotfiles
 ├── Configs # Dotfiles go here
@@ -146,18 +171,20 @@ dotfiles
 ```
 
 These directories contain directories that separate the dotfiles by program name (or whatever you want to separate them by)
-```
+
+```sh
 dotfiles
 ├── Configs
 │   ├── tmux
-│   └── zsh 
+│   └── zsh
 └── Hooks
-    ├── tmux 
-    └── zsh 
+    ├── tmux
+    └── zsh
 ```
 
 Inside of these program directories the structure is exactly the same as what your $HOME looks like.
-```
+
+```sh
 Configs
 ├── tmux
 │   └── .config
@@ -171,10 +198,11 @@ Configs
 The program directories' names are used to reference them in commands
 
 ### Using Hooks
+
 Hooks are run before and after adding every program, if they're coupled with a program they should their directory should have the same name in Hooks as in Configs.  
 Hooks that run before symlinking the program are prefixed with `pre`, scripts that run afterwards are prefixed with `post`, as long as this is true you can name the file whatever you want.
 
-```
+```sh
 Hooks
 ├── tmux
 │   ├── post.sh
@@ -183,26 +211,33 @@ Hooks
     ├── post.sh
     └── pre.sh
 ```
+
 To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*` to run all hooks.
 
 ### Using Secrets
 
 #### Encrypting files
+
 Encrypt a file and put it in <group_name>
 
 ```
 tuckr encrypt <group_name> <file_name...>
 ```
+
 This will create an appropriate file in the `Secrets` directory pointing to the path where it originally came from
 
 #### Decrypting files
+
 Decrypt files from the groups <group_name...> and put them on their appropriate paths
+
 ```
 tuckr decrypt <group_name...>
 ```
 
 ### Exit codes
-For scripting purposes Tuckr has the following exit codes:  
+
+For scripting purposes Tuckr has the following exit codes:
+
 - `2` Could not find Dotfiles directory
 - `3` No Configs/Hooks/Secrets directory setup
 - `4` No such file or directory exists
