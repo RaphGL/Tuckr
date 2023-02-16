@@ -411,11 +411,11 @@ fn print_global_status(sym: SymlinkHandler) {
 }
 
 fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
-    for group in &groups {
+    'next_group: for group in &groups {
         for item in &sym.symlinked {
             if item.file_name().unwrap().to_str().unwrap() == group {
                 println!("{}", (group.to_owned() + " is already symlinked.").green());
-                continue;
+                continue 'next_group;
             }
         }
 
@@ -432,7 +432,7 @@ fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
         }
 
         if sym.not_symlinked.is_empty() {
-            println!("{}", (group.to_owned() + " does not exist.").red());
+            println!("{}", (group.to_owned() + " does not exist.").yellow());
             continue;
         }
 
@@ -440,7 +440,7 @@ fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
             if item.file_name().unwrap().to_str().unwrap() == group {
                 println!("{}", (group.to_owned() + " is not yet symlinked.").red());
             } else {
-                println!("{}", (group.to_owned() + " does not exist.").red());
+                println!("{}", (group.to_owned() + " does not exist.").yellow());
             }
         }
     }
