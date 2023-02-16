@@ -5,15 +5,15 @@ use std::path;
 
 // Exit codes
 /// Couldn't find the dotfiles directory
-pub const COULDNT_FIND_DOTFILES: i32 = 2;
+pub const COULDNT_FIND_DOTFILES: u8 = 2;
 /// No Configs/Hooks/Secrets folder setup
-pub const NO_SETUP_FOLDER: i32 = 3;
+pub const NO_SETUP_FOLDER: u8 = 3;
 /// Referenced file does not exist in the current directory
-pub const NO_SUCH_FILE_OR_DIR: i32 = 4;
+pub const NO_SUCH_FILE_OR_DIR: u8 = 4;
 /// Failed to encrypt referenced file
-pub const ENCRYPTION_FAILED: i32 = 5;
+pub const ENCRYPTION_FAILED: u8 = 5;
 /// Failed to decrypt referenced file
-pub const DECRYPTION_FAILED: i32 = 6;
+pub const DECRYPTION_FAILED: u8 = 6;
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<path::PathBuf> {

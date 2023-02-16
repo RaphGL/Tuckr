@@ -17,7 +17,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process;
+use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
 #[cfg(target_family = "windows")]
@@ -42,15 +42,20 @@ struct SymlinkHandler {
 
 impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it dotfiles' status information
-    fn new() -> Self {
-        let symlinker = SymlinkHandler {
-            dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
+    fn try_new() -> Result<Self, ExitCode> {
+        let dotfiles_dir = match utils::get_dotfiles_path() {
+            Some(dir) => dir,
+            None => {
                 eprintln!(
                     "{}",
                     "Could not find dotfiles, make sure it's in the right path".red()
                 );
-                process::exit(utils::COULDNT_FIND_DOTFILES);
-            }),
+                return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+            }
+        };
+
+        let symlinker = SymlinkHandler {
+            dotfiles_dir,
             symlinked: HashSet::new(),
             not_symlinked: HashSet::new(),
             not_owned: HashMap::new(),
@@ -66,12 +71,15 @@ impl SymlinkHandler {
     /// into the struct
     ///
     /// Returns a copy of self with all the fields set accordingly
-    fn validate(mut self) -> Self {
+    fn validate(mut self) -> Result<Self, ExitCode> {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
-        let dir = fs::read_dir(self.dotfiles_dir.join("Configs")).unwrap_or_else(|_| {
-            eprintln!("{}", "There's no Configs folder set up".red());
-            process::exit(utils::NO_SETUP_FOLDER);
-        });
+        let dir = match fs::read_dir(self.dotfiles_dir.join("Configs")) {
+            Ok(dir) => dir,
+            Err(_) => {
+                eprintln!("{}", "There's no Configs folder set up".red());
+                return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+            }
+        };
 
         for file in dir {
             let group_dir = file.unwrap();
@@ -118,7 +126,7 @@ impl SymlinkHandler {
             });
         }
 
-        self
+        Ok(self)
     }
 
     /// Symlinks all the files of a group to the user's $HOME
@@ -164,12 +172,17 @@ impl SymlinkHandler {
 /// instance and the name of the group that's being handled
 ///
 /// This abstracts this recurrent loop allowing handle groups just by their names
-fn foreach_group<F>(groups: &[String], exclude: &[String], symlinked: bool, func: F)
+fn foreach_group<F>(
+    groups: &[String],
+    exclude: &[String],
+    symlinked: bool,
+    func: F,
+) -> Result<(), ExitCode>
 where
     F: Fn(&SymlinkHandler, &String),
 {
     // loads the runtime information needed to carry out actions
-    let sym = SymlinkHandler::new();
+    let sym = SymlinkHandler::try_new()?;
 
     // handles wildcard
     if groups.contains(&"*".to_string()) {
@@ -190,7 +203,8 @@ where
             // passing the sym context
             func(&sym, &group_name.to_string());
         }
-        return;
+
+        return Ok(());
     }
 
     for group in groups {
@@ -201,10 +215,12 @@ where
             func(&sym, group);
         }
     }
+
+    Ok(())
 }
 
 /// Adds symlinks
-pub fn add_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) {
+pub fn add_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) -> Result<(), ExitCode> {
     if force {
         let mut answer = String::new();
         print!("Are you sure you want to override conflicts? (N/y) ");
@@ -217,7 +233,7 @@ pub fn add_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) 
 
         match answer.trim().to_lowercase().as_str() {
             "y" | "yes" => (),
-            _ => return,
+            _ => return Ok(()),
         }
     }
 
@@ -270,12 +286,15 @@ pub fn add_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) 
         }
 
         sym.add(group)
-    });
+    })?;
+
+    Ok(())
 }
 
 /// Removes symlinks
-pub fn remove_cmd(groups: &[String], exclude: &[String]) {
-    foreach_group(groups, exclude, false, |sym, p| sym.remove(p));
+pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    foreach_group(groups, exclude, false, |sym, p| sym.remove(p))?;
+    Ok(())
 }
 
 fn print_global_status(sym: SymlinkHandler) {
@@ -413,8 +432,8 @@ fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
         }
 
         if sym.not_symlinked.is_empty() {
-                println!("{}", (group.to_owned() + " does not exist.").red());
-                continue;
+            println!("{}", (group.to_owned() + " does not exist.").red());
+            continue;
         }
 
         for item in &sym.not_symlinked {
@@ -428,12 +447,14 @@ fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
 }
 
 /// Prints symlinking status
-pub fn status_cmd(groups: Option<Vec<String>>) {
-    let sym = SymlinkHandler::new();
+pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
+    let sym = SymlinkHandler::try_new()?;
     match groups {
         Some(groups) => print_groups_status(sym, groups),
         None => print_global_status(sym),
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -454,7 +475,7 @@ mod tests {
         if dirs.is_err() {
             panic!("{:#?}", dirs);
         } else {
-            let sym = super::SymlinkHandler::new();
+            let sym = super::SymlinkHandler::try_new().unwrap();
             assert!(
                 if !sym.symlinked.is_empty() || !sym.not_symlinked.is_empty() {
                     true
@@ -483,7 +504,7 @@ mod tests {
         File::create(group_dir.clone().join("group.test")).unwrap();
         File::create(group_dir.clone().join(".config").join("group.test")).unwrap();
 
-        let sym = sym.validate();
+        let sym = sym.validate().unwrap();
 
         (sym, group_dir)
     }

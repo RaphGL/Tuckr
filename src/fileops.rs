@@ -8,9 +8,10 @@ use std::fs;
 use std::io;
 use std::io::Write;
 use std::path;
+use std::process::ExitCode;
 
 /// Converts a stow directory into a tuckr directory
-pub fn convert_to_tuckr() {
+pub fn convert_to_tuckr() -> Result<(), ExitCode> {
     print!("{}", "Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ".yellow());
     io::stdout().flush().unwrap();
 
@@ -19,10 +20,10 @@ pub fn convert_to_tuckr() {
     let answer = answer.to_lowercase().trim().to_owned();
 
     if answer != "y" {
-        return;
+        return Ok(());
     }
 
-    init_tuckr_dir();
+    init_tuckr_dir()?;
 
     let cwd = env::current_dir().unwrap();
     let curr_path = cwd.to_str().unwrap();
@@ -47,10 +48,12 @@ pub fn convert_to_tuckr() {
             fs::rename(dir.path().to_str().unwrap(), path).expect("Could not move files");
         }
     }
+
+    Ok(())
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
-pub fn init_tuckr_dir() {
+pub fn init_tuckr_dir() -> Result<(), ExitCode> {
     if let Err(e) = fs::create_dir("Configs") {
         eprintln!("{}", e.red());
     }
@@ -62,4 +65,6 @@ pub fn init_tuckr_dir() {
     if let Err(e) = fs::create_dir("Secrets") {
         eprintln!("{}", e.red());
     }
+
+    Ok(())
 }

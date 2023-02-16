@@ -11,6 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use zeroize::Zeroize;
+use std::process::ExitCode;
 
 struct SecretsHandler {
     dotfiles_dir: PathBuf,
@@ -19,7 +20,7 @@ struct SecretsHandler {
 }
 
 impl SecretsHandler {
-    fn new() -> Self {
+    fn try_new() -> Result<Self, ExitCode> {
         // makes a hash of the password so that it can fit on the 256 bit buffer used by the
         // algorithm
         let input_key = rpassword::prompt_password("Password: ").unwrap();
@@ -32,18 +33,23 @@ impl SecretsHandler {
         // zeroes sensitive information from memory
         input_key.zeroize();
 
-        SecretsHandler {
-            dotfiles_dir: utils::get_dotfiles_path().unwrap_or_else(|| {
+        let dotfiles_dir = match utils::get_dotfiles_path() {
+            Some(dir) => dir,
+            None => {
                 eprintln!("{}", "Couldn't find dotfiles directory".red());
-                std::process::exit(utils::COULDNT_FIND_DOTFILES);
-            }),
+                return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+            }
+        };
+
+        Ok(SecretsHandler {
+            dotfiles_dir,
             key: input_hash,
             nonce: XChaCha20Poly1305::generate_nonce(&mut OsRng),
-        }
+        })
     }
 
     /// takes a path to a file and returns its encrypted content
-    fn encrypt(&self, dotfile: &str) -> Vec<u8> {
+    fn encrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let dotfile = match fs::read(dotfile) {
             Ok(f) => f,
@@ -52,21 +58,21 @@ impl SecretsHandler {
                     "{}",
                     format!("{} {}", "No such file or directory: ", dotfile).red()
                 );
-                std::process::exit(utils::NO_SUCH_FILE_OR_DIR);
+                return Err(ExitCode::from(utils::NO_SUCH_FILE_OR_DIR));
             }
         };
 
         match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
-            Ok(f) => f,
+            Ok(f) => Ok(f),
             Err(e) => {
                 eprintln!("{}", e.red());
-                std::process::exit(utils::ENCRYPTION_FAILED);
+                return Err(ExitCode::from(utils::ENCRYPTION_FAILED));
             }
         }
     }
 
     /// takes a path to a file and returns its decrypted content
-    fn decrypt(&self, dotfile: &str) -> Vec<u8> {
+    fn decrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let dotfile = fs::read(dotfile).expect("Couldn't read dotfile");
 
@@ -74,18 +80,19 @@ impl SecretsHandler {
         let (nonce, contents) = dotfile.split_at(24);
 
         match cipher.decrypt(nonce.into(), contents) {
-            Ok(f) => f,
+            Ok(f) => Ok(f),
             Err(_) => {
                 eprintln!("{}", "Wrong password.".red());
-                std::process::exit(utils::DECRYPTION_FAILED);
+                return Err(ExitCode::from(utils::DECRYPTION_FAILED));
             }
         }
     }
 }
 
 /// Encrypts secrets
-pub fn encrypt_cmd(group: &str, dotfiles: &[String]) {
-    let handler = SecretsHandler::new();
+pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
+    let handler = SecretsHandler::try_new()?;
+
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).unwrap();
@@ -94,7 +101,8 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) {
     let home_dir = dirs::home_dir().unwrap();
 
     for dotfile in dotfiles {
-        let mut encrypted = handler.encrypt(dotfile);
+        let mut encrypted = handler.encrypt(dotfile)?;
+
         let mut encrypted_file = handler.nonce.to_vec();
 
         let target_file = Path::new(dotfile).canonicalize().unwrap();
@@ -110,16 +118,19 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) {
         encrypted_file.append(&mut encrypted);
         fs::write(dest_dir.join(target_file), encrypted_file).unwrap();
     }
+
+    Ok(())
 }
 
 /// Decrypts secrets
-pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
-    let handler = SecretsHandler::new();
+pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    let handler = SecretsHandler::try_new()?;
+
     let dest_dir = std::env::current_dir().unwrap();
 
-    let decrypt_group = |group: &String| {
+    let decrypt_group = |group: &String| -> Result<(), ExitCode> {
         if exclude.contains(group) {
-            return;
+            ()
         }
 
         let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
@@ -128,7 +139,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
                 Ok(secret) => secret,
                 Err(_) => {
                     eprintln!("{}", (group.to_owned() + " does not exist.").red());
-                    return;
+                    return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
                 }
             };
 
@@ -136,23 +147,26 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) {
                 continue;
             }
 
-            let decrypted = handler.decrypt(secret.path().to_str().unwrap());
+            let decrypted = handler.decrypt(secret.path().to_str().unwrap())?;
 
             fs::write(dest_dir.join(secret.file_name()), decrypted).unwrap();
         }
+
+        Ok(())
     };
 
     if groups.contains(&"*".to_string()) {
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
             let group = group.unwrap().file_name();
-            decrypt_group(&group.to_str().unwrap().to_string());
+            decrypt_group(&group.to_str().unwrap().to_string())?;
         }
 
-        return;
     }
 
     for group in groups {
-        decrypt_group(group);
+        decrypt_group(group)?;
     }
+
+    Ok(())
 }

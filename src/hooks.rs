@@ -11,7 +11,7 @@ use crate::utils;
 use owo_colors::OwoColorize;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, ExitCode};
 
 #[derive(PartialEq)]
 enum DeployStep {
@@ -53,7 +53,7 @@ impl Iterator for DeployStages {
 }
 
 /// Runs hooks of type PreHook or PostHook
-fn run_hook(group: &str, hook_type: DeployStep) {
+fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
     utils::print_info_box(
         match hook_type {
             DeployStep::PreHook => "Running Prehook",
@@ -63,16 +63,22 @@ fn run_hook(group: &str, hook_type: DeployStep) {
         group.yellow().to_string().as_str(),
     );
 
-    let dotfiles_dir = utils::get_dotfiles_path().unwrap_or_else(|| {
-        eprintln!("{}", "Could not find dotfiles directory".red());
-        std::process::exit(utils::COULDNT_FIND_DOTFILES);
-    });
+    let dotfiles_dir = match utils::get_dotfiles_path() {
+        Some(dir) => dir,
+        None => {
+            eprintln!("{}", "Could not find dotfiles directory".red());
+            return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+        }
+    };
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
-    let group_dir = fs::read_dir(group_dir).unwrap_or_else(|_| {
-        eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
-        std::process::exit(utils::NO_SETUP_FOLDER);
-    });
+    let group_dir = match fs::read_dir(group_dir) {
+        Ok(dir) => dir,
+        Err(_) => {
+            eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
+            return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+        }
+    };
 
     for file in group_dir {
         let file = file.unwrap().path();
@@ -114,52 +120,59 @@ fn run_hook(group: &str, hook_type: DeployStep) {
             );
         }
     }
+
+    Ok(())
 }
 
 /// Runs hooks for specified groups
-pub fn set_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) {
-    let run_deploy_steps = |step: DeployStages, group: &str| {
+pub fn set_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) -> Result<(), ExitCode> {
+    let run_deploy_steps = |step: DeployStages, group: &str| -> Result<(), ExitCode> {
         for i in step {
             match i {
-                DeployStep::Initialize => return,
+                DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_hook(group, DeployStep::PreHook);
+                    run_hook(group, DeployStep::PreHook)?;
                 }
 
                 DeployStep::Symlink => {
                     utils::print_info_box("Symlinking group", group.yellow().to_string().as_str());
-                    symlinks::add_cmd(groups, exclude, force, adopt);
+                    symlinks::add_cmd(groups, exclude, force, adopt)?;
                 }
 
-                DeployStep::PostHook => run_hook(group, DeployStep::PostHook),
+                DeployStep::PostHook => run_hook(group, DeployStep::PostHook)?,
             }
         }
+
+        Ok(())
     };
 
     for group in groups {
         if group == "*" {
-            let dotfiles_dir = utils::get_dotfiles_path()
-                .unwrap_or_else(|| {
+            let dotfiles_dir = match utils::get_dotfiles_path() {
+                Some(dir) => dir.join("Hooks"),
+                None => {
                     eprintln!(
                         "{}",
                         "Could not find the Hooks directory in your dotfiles".red()
                     );
-                    std::process::exit(utils::NO_SETUP_FOLDER);
-                })
-                .join("Hooks");
+                    return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+                }
+            };
 
             for folder in fs::read_dir(dotfiles_dir).unwrap() {
                 let folder = folder.unwrap();
                 run_deploy_steps(
                     DeployStages::new(),
                     utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
-                );
+                )?;
             }
         } else {
-            run_deploy_steps(DeployStages::new(), group);
+            run_deploy_steps(DeployStages::new(), group)?;
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]

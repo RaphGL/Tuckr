@@ -104,7 +104,7 @@ enum Cli {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match cli {
+    let exit_code = match cli {
         Cli::Set {
             groups,
             exclude,
@@ -125,7 +125,10 @@ fn main() -> ExitCode {
         Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
         Cli::Init => fileops::init_tuckr_dir(),
         Cli::FromStow => fileops::convert_to_tuckr(),
-    }
+    };
 
-    ExitCode::SUCCESS
+    match exit_code {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => e,
+    }
 }
