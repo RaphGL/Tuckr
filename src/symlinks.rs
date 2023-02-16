@@ -12,24 +12,25 @@
 
 use crate::utils;
 use owo_colors::OwoColorize;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
-#[cfg(target_family = "windows")]
-fn symlink_file(f: fs::DirEntry) {
-    let target_path = utils::to_home_path(f.path().to_str().unwrap());
-    _ = std::os::windows::fs::symlink_file(f.path(), target_path);
-}
-
 #[cfg(target_family = "unix")]
 fn symlink_file(f: fs::DirEntry) {
     let target_path = utils::to_home_path(f.path().to_str().unwrap());
-    _ = std::os::unix::fs::symlink(f.path(), target_path);
+
+    #[cfg(target_family = "unix")]
+    {
+        _ = std::os::unix::fs::symlink(f.path(), target_path);
+    }
+    #[cfg(target_family = "windows")]
+    {
+        _ = std::os::windows::fs::symlink_file(f.path(), target_path);
+    }
 }
 
 /// Handles dotfile symlinking and their current status
@@ -220,7 +221,12 @@ where
 }
 
 /// Adds symlinks
-pub fn add_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) -> Result<(), ExitCode> {
+pub fn add_cmd(
+    groups: &[String],
+    exclude: &[String],
+    force: bool,
+    adopt: bool,
+) -> Result<(), ExitCode> {
     if force {
         let mut answer = String::new();
         print!("Are you sure you want to override conflicts? (N/y) ");
@@ -297,7 +303,7 @@ pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode>
     Ok(())
 }
 
-fn print_global_status(sym: SymlinkHandler) {
+fn handle_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled)]
     struct SymlinkRow<'a> {
         #[tabled(display_with = "display_option")]
@@ -408,9 +414,16 @@ fn print_global_status(sym: SymlinkHandler) {
     if !sym.not_owned.is_empty() {
         println!("To learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
     }
+
+    // Determines exit code for the command
+    if !sym.symlinked.is_empty() && sym.not_symlinked.is_empty() && sym.not_owned.is_empty() {
+        Ok(())
+    } else {
+        Err(ExitCode::FAILURE)
+    }
 }
 
-fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
+fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
     'next_group: for group in &groups {
         for item in &sym.symlinked {
             if item.file_name().unwrap().to_str().unwrap() == group {
@@ -444,14 +457,27 @@ fn print_groups_status(sym: SymlinkHandler, groups: Vec<String>) {
             }
         }
     }
+
+    let symlinked_groups: Vec<_> = sym.symlinked.iter().collect();
+    let symlinked_groups: Vec<_> = symlinked_groups
+        .iter()
+        .map(|f| f.file_name().unwrap().to_str().unwrap())
+        .collect();
+    for group in groups {
+        if !symlinked_groups.contains(&group.as_str()) {
+            return Err(ExitCode::FAILURE);
+        }
+    }
+
+    Ok(())
 }
 
 /// Prints symlinking status
 pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
     let sym = SymlinkHandler::try_new()?;
     match groups {
-        Some(groups) => print_groups_status(sym, groups),
-        None => print_global_status(sym),
+        Some(groups) => print_groups_status(&sym, groups)?,
+        None => handle_global_status(&sym)?,
     }
 
     Ok(())

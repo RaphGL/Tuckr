@@ -66,7 +66,7 @@ impl SecretsHandler {
             Ok(f) => Ok(f),
             Err(e) => {
                 eprintln!("{}", e.red());
-                return Err(ExitCode::from(utils::ENCRYPTION_FAILED));
+                Err(ExitCode::from(utils::ENCRYPTION_FAILED))
             }
         }
     }
@@ -83,7 +83,7 @@ impl SecretsHandler {
             Ok(f) => Ok(f),
             Err(_) => {
                 eprintln!("{}", "Wrong password.".red());
-                return Err(ExitCode::from(utils::DECRYPTION_FAILED));
+                Err(ExitCode::from(utils::DECRYPTION_FAILED))
             }
         }
     }
@@ -130,7 +130,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
     let decrypt_group = |group: &String| -> Result<(), ExitCode> {
         if exclude.contains(group) {
-            ()
+            return Ok(());
         }
 
         let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
