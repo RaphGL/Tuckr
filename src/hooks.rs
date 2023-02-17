@@ -125,7 +125,12 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
 }
 
 /// Runs hooks for specified groups
-pub fn set_cmd(groups: &[String], exclude: &[String], force: bool, adopt: bool) -> Result<(), ExitCode> {
+pub fn set_cmd(
+    groups: &[String],
+    exclude: &[String],
+    force: bool,
+    adopt: bool,
+) -> Result<(), ExitCode> {
     let run_deploy_steps = |step: DeployStages, group: &str| -> Result<(), ExitCode> {
         for i in step {
             match i {

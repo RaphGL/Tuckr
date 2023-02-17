@@ -486,11 +486,8 @@ pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
 #[cfg(test)]
 mod tests {
     use crate::utils;
+    use std::fs::{self, File};
     use std::path;
-    use std::{
-        collections::{HashMap, HashSet},
-        fs::{self, File},
-    };
 
     /// makes sure that symlink status is loaded on startup
     #[test]
@@ -514,14 +511,7 @@ mod tests {
 
     /// Initializes symlink test by creating a SymlinkHandler and a mockup dotfiles directory
     fn init_symlink_test() -> (super::SymlinkHandler, path::PathBuf) {
-        let sym = super::SymlinkHandler {
-            dotfiles_dir: path::PathBuf::from(std::env::temp_dir())
-                .join(format!("tuckr-{}", std::process::id()))
-                .join("dotfiles"),
-            symlinked: HashSet::new(),
-            not_symlinked: HashSet::new(),
-            not_owned: HashMap::new(),
-        };
+        let sym = super::SymlinkHandler::try_new().unwrap();
         let group_dir = sym.dotfiles_dir.clone().join("Configs").join("group");
         if let Err(_) = fs::create_dir_all(group_dir.clone().join(".config")) {
             panic!("Could not create required folders");
@@ -540,8 +530,9 @@ mod tests {
         let init = init_symlink_test();
         let sym = init.0;
         let group_dir = init.1;
+        let group_name = group_dir.file_name().unwrap().to_str().unwrap();
 
-        sym.add("group");
+        sym.add(group_name);
 
         let file = group_dir.clone().join("group.test");
         let config_file = group_dir.clone().join(".config").join("group.test");
@@ -553,6 +544,8 @@ mod tests {
             fs::read_link(utils::to_home_path(config_file.to_str().unwrap())).unwrap(),
             config_file
         );
+
+        sym.remove(group_name);
     }
 
     #[test]

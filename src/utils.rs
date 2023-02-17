@@ -24,6 +24,12 @@ pub fn get_dotfiles_path() -> Option<path::PathBuf> {
         Some(home_dotfiles)
     } else if config_dotfiles.exists() {
         Some(config_dotfiles)
+    } else if cfg!(test) {
+        Some(
+            path::PathBuf::from(std::env::temp_dir())
+                .join(format!("tuckr-{}", std::process::id()))
+                .join("dotfiles"),
+        )
     } else {
         None
     }
@@ -33,12 +39,12 @@ pub fn get_dotfiles_path() -> Option<path::PathBuf> {
 /// deployed on $HOME
 pub fn to_home_path(path: &str) -> path::PathBuf {
     // uses join("") so that the path appends / or \ depending on platform
-    let dotfiles_configs_path = path::PathBuf::from("dotfiles").join("Configs").join("");
+    let dotfiles_configs_path = get_dotfiles_path().unwrap().join("Configs").join("");
+    let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
 
     dirs::home_dir().unwrap().join(
-        path.split_once(dotfiles_configs_path.to_str().unwrap())
+        path.strip_prefix(dotfiles_configs_path)
             .unwrap()
-            .1
             .split_once(path::MAIN_SEPARATOR)
             .unwrap()
             .1,

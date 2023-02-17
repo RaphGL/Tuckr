@@ -9,9 +9,9 @@ use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use walkdir::WalkDir;
 use zeroize::Zeroize;
-use std::process::ExitCode;
 
 struct SecretsHandler {
     dotfiles_dir: PathBuf,
@@ -161,7 +161,6 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
             let group = group.unwrap().file_name();
             decrypt_group(&group.to_str().unwrap().to_string())?;
         }
-
     }
 
     for group in groups {
