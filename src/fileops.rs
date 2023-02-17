@@ -10,7 +10,7 @@ use std::path;
 use std::process::ExitCode;
 
 /// Converts a stow directory into a tuckr directory
-pub fn convert_to_tuckr() -> Result<(), ExitCode> {
+pub fn from_stow_cmd() -> Result<(), ExitCode> {
     print!("{}", "Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ".yellow());
     io::stdout().flush().unwrap();
 
@@ -22,7 +22,7 @@ pub fn convert_to_tuckr() -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    init_tuckr_dir()?;
+    init_cmd()?;
 
     let cwd = env::current_dir().unwrap();
     let curr_path = cwd.to_str().unwrap();
@@ -52,7 +52,7 @@ pub fn convert_to_tuckr() -> Result<(), ExitCode> {
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
-pub fn init_tuckr_dir() -> Result<(), ExitCode> {
+pub fn init_cmd() -> Result<(), ExitCode> {
     if let Err(e) = fs::create_dir("Configs") {
         eprintln!("{}", e.red());
     }

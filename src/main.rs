@@ -123,8 +123,8 @@ fn main() -> ExitCode {
         Cli::Status { groups } => symlinks::status_cmd(groups),
         Cli::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&group, &dotfiles),
         Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
-        Cli::Init => fileops::init_tuckr_dir(),
-        Cli::FromStow => fileops::convert_to_tuckr(),
+        Cli::Init => fileops::from_stow_cmd(),
+        Cli::FromStow => fileops::init_cmd(),
     };
 
     match exit_code {

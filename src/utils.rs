@@ -26,7 +26,7 @@ pub fn get_dotfiles_path() -> Option<path::PathBuf> {
         Some(config_dotfiles)
     } else if cfg!(test) {
         Some(
-            path::PathBuf::from(std::env::temp_dir())
+            std::env::temp_dir()
                 .join(format!("tuckr-{}", std::process::id()))
                 .join("dotfiles"),
         )
