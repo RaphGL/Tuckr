@@ -130,14 +130,47 @@ impl SymlinkHandler {
         Ok(self)
     }
 
+    /// Returns all conditional groups with the same name that satify the current user's platform
+    ///
+    /// symlinked: gets symlinked conditional groups otherwise gets not symlinked ones
+    fn get_related_conditional_groups(&self, group: &str, symlinked: bool) -> Vec<&str> {
+        let groups: Vec<&PathBuf> = if symlinked {
+            self.symlinked
+                .iter()
+                .filter(|f| {
+                    let filename = f.file_name().unwrap().to_str().unwrap();
+                    filename.contains(group) && utils::is_valid_target(filename)
+                })
+                .collect()
+        } else {
+            self.not_symlinked
+                .iter()
+                .filter(|f| {
+                    let filename = f.file_name().unwrap().to_str().unwrap();
+                    filename.contains(group) && utils::is_valid_target(filename)
+                })
+                .collect()
+        };
+
+        groups
+            .iter()
+            .map(|group| group.file_name().unwrap().to_str().unwrap())
+            .collect()
+    }
+
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
-        let group_dir = self.dotfiles_dir.join("Configs").join(group);
-        if group_dir.exists() {
-            // iterate through all the files in group_dir
-            utils::group_dir_map(group_dir, symlink_file);
-        } else {
-            eprintln!("{} {}", "There's no dotfiles for".red(), group.red());
+        let mut groups = self.get_related_conditional_groups(group, false);
+        groups.push(group);
+
+        for group in groups {
+            let group_dir = self.dotfiles_dir.join("Configs").join(group);
+            if group_dir.exists() {
+                // iterate through all the files in group_dir
+                utils::group_dir_map(group_dir, symlink_file);
+            } else {
+                eprintln!("{} {}", "There's no dotfiles for".red(), group.red());
+            }
         }
     }
 
@@ -154,12 +187,17 @@ impl SymlinkHandler {
             }
         };
 
-        let group_dir = self.dotfiles_dir.join("Configs").join(group);
-        if group_dir.exists() {
-            // iterate through all the files in group_dir
-            utils::group_dir_map(group_dir, remove_symlink);
-        } else {
-            eprintln!("{} {}", "There's no group called".red(), group.red());
+        let mut groups = self.get_related_conditional_groups(group, true);
+        groups.push(group);
+
+        for group in groups {
+            let group_dir = self.dotfiles_dir.join("Configs").join(group);
+            if group_dir.exists() {
+                // iterate through all the files in group_dir
+                utils::group_dir_map(group_dir, remove_symlink);
+            } else {
+                eprintln!("{} {}", "There's no group called".red(), group.red());
+            }
         }
     }
 }

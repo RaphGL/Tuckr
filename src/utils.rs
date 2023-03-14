@@ -1,5 +1,6 @@
 //! A set of helper functions that reduce boilerplate
 
+use std::env;
 use std::fs;
 use std::path;
 
@@ -14,6 +15,17 @@ pub const NO_SUCH_FILE_OR_DIR: u8 = 4;
 pub const ENCRYPTION_FAILED: u8 = 5;
 /// Failed to decrypt referenced file
 pub const DECRYPTION_FAILED: u8 = 6;
+
+pub fn is_valid_target(group: &str) -> bool {
+    let target_os = format!("_{}", env::consts::OS);
+    let target_family = format!("_{}", env::consts::FAMILY);
+
+    if group.ends_with(&target_os) || group.ends_with(&target_family) {
+        true
+    } else {
+        false
+    }
+}
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
 pub fn get_dotfiles_path() -> Option<path::PathBuf> {
