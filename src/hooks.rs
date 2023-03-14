@@ -172,6 +172,8 @@ pub fn set_cmd(
                     utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
                 )?;
             }
+
+            break;
         } else {
             run_deploy_steps(DeployStages::new(), group)?;
         }

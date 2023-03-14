@@ -16,15 +16,11 @@ pub const ENCRYPTION_FAILED: u8 = 5;
 /// Failed to decrypt referenced file
 pub const DECRYPTION_FAILED: u8 = 6;
 
-pub fn is_valid_target(group: &str) -> bool {
+pub fn has_valid_target(group: &str) -> bool {
     let target_os = format!("_{}", env::consts::OS);
     let target_family = format!("_{}", env::consts::FAMILY);
 
-    if group.ends_with(&target_os) || group.ends_with(&target_family) {
-        true
-    } else {
-        false
-    }
+    group.ends_with(&target_os) || group.ends_with(&target_family)
 }
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory

@@ -139,7 +139,7 @@ impl SymlinkHandler {
                 .iter()
                 .filter(|f| {
                     let filename = f.file_name().unwrap().to_str().unwrap();
-                    filename.contains(group) && utils::is_valid_target(filename)
+                    filename.contains(group) && utils::has_valid_target(filename)
                 })
                 .collect()
         } else {
@@ -147,7 +147,7 @@ impl SymlinkHandler {
                 .iter()
                 .filter(|f| {
                     let filename = f.file_name().unwrap().to_str().unwrap();
-                    filename.contains(group) && utils::is_valid_target(filename)
+                    filename.contains(group) && utils::has_valid_target(filename)
                 })
                 .collect()
         };
@@ -341,7 +341,7 @@ pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode>
     Ok(())
 }
 
-fn handle_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
+fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled)]
     struct SymlinkRow<'a> {
         #[tabled(display_with = "display_option")]
@@ -515,7 +515,7 @@ pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
     let sym = SymlinkHandler::try_new()?;
     match groups {
         Some(groups) => print_groups_status(&sym, groups)?,
-        None => handle_global_status(&sym)?,
+        None => print_global_status(&sym)?,
     }
 
     Ok(())
