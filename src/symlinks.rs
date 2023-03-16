@@ -160,8 +160,7 @@ impl SymlinkHandler {
 
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
-        let mut groups = self.get_related_conditional_groups(group, false);
-        groups.push(group);
+        let groups = self.get_related_conditional_groups(group, false);
 
         for group in groups {
             let group_dir = self.dotfiles_dir.join("Configs").join(group);
@@ -187,8 +186,7 @@ impl SymlinkHandler {
             }
         };
 
-        let mut groups = self.get_related_conditional_groups(group, true);
-        groups.push(group);
+        let groups = self.get_related_conditional_groups(group, true);
 
         for group in groups {
             let group_dir = self.dotfiles_dir.join("Configs").join(group);
@@ -344,76 +342,56 @@ pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode>
 fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled)]
     struct SymlinkRow<'a> {
-        #[tabled(display_with = "display_option")]
         #[tabled(rename = "Symlinked")]
-        symlinked: Option<&'a str>,
+        symlinked: &'a str,
 
-        #[tabled(display_with = "display_option")]
         #[tabled(rename = "Not Symlinked")]
-        not_symlinked: Option<&'a str>,
+        not_symlinked: &'a str,
     }
 
-    // used on SymlinkRow so that table rows are empty if it's None
-    fn display_option<'a>(o: &Option<&'a str>) -> &'a str {
-        match o {
-            Some(s) => s,
-            None => "",
-        }
-    }
-
-    // Generates a Vec<SymlinkRow> for symlinked and not symlinked files
-    let mut symlinked_status: Vec<SymlinkRow> = Vec::new();
-    for sym in &sym.symlinked {
-        let symlinked_group = utils::to_group_name(sym.to_str().unwrap()).unwrap();
-        symlinked_status.push(SymlinkRow {
-            symlinked: Some(symlinked_group),
-            not_symlinked: None,
-        });
-    }
-
-    let mut notsym_status: Vec<SymlinkRow> = Vec::new();
-    for nsym in &sym.not_symlinked {
-        let notsym_group = utils::to_group_name(nsym.to_str().unwrap()).unwrap();
-        notsym_status.push(SymlinkRow {
-            symlinked: None,
-            not_symlinked: Some(notsym_group),
-        });
-    }
-
-    // Merges symlinked_status and notsym_status into a single Vec<SymlinkRow>
-    let mut status: Vec<SymlinkRow> = Vec::new();
-    // loops over the biggest vector so the resulting vector can encompass all values
-    for i in 0..if symlinked_status.len() > notsym_status.len() {
-        symlinked_status.len()
-    } else {
-        notsym_status.len()
-    } {
-        let sym = symlinked_status.get(i).unwrap_or(&SymlinkRow {
-            symlinked: None,
-            not_symlinked: None,
-        });
-
-        let nsym = notsym_status.get(i).unwrap_or(&SymlinkRow {
-            symlinked: None,
-            not_symlinked: None,
-        });
-
-        let new_sym = SymlinkRow {
-            symlinked: if sym.symlinked.is_none() && nsym.symlinked.is_some() {
-                nsym.symlinked
-            } else {
-                sym.symlinked
-            },
-
-            not_symlinked: if sym.not_symlinked.is_none() && nsym.not_symlinked.is_some() {
-                nsym.not_symlinked
-            } else {
-                sym.not_symlinked
-            },
+    macro_rules! get_valid_groups {
+        ($group_type:ident) => {
+            sym.$group_type
+                .iter()
+                .map(|group| group.file_name().unwrap().to_str().unwrap())
+                .filter(|group| utils::has_valid_target(group))
+                .collect::<Vec<_>>()
         };
-
-        status.push(new_sym);
     }
+
+    let mut symlinked = get_valid_groups!(symlinked);
+    let mut not_symlinked = get_valid_groups!(not_symlinked);
+    let mut not_owned = sym
+        .not_owned
+        .keys()
+        .filter(|group| utils::has_valid_target(group))
+        .collect::<Vec<_>>();
+
+    symlinked.sort();
+    not_symlinked.sort();
+    not_owned.sort();
+
+    // pads the smallest vector and zips it into a vec with (Symlinked, NotSymlinked) values
+    let status = if symlinked.len() > not_symlinked.len() {
+        symlinked
+            .iter()
+            .zip(not_symlinked.iter().chain(std::iter::repeat(&"")))
+            .map(|group| SymlinkRow {
+                symlinked: group.0,
+                not_symlinked: group.1,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        symlinked
+            .iter()
+            .chain(std::iter::repeat(&""))
+            .zip(not_symlinked.iter())
+            .map(|group| SymlinkRow {
+                symlinked: group.0,
+                not_symlinked: group.1,
+            })
+            .collect::<Vec<_>>()
+    };
 
     // --- Creates all the tables and prints them ---
     use tabled::{
@@ -428,7 +406,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         .with(Modify::new(Columns::single(0)).with(Format::new(|s| s.green().to_string())))
         .with(Modify::new(Columns::single(1)).with(Format::new(|s| s.red().to_string())));
 
-    let mut conflict_table = Table::builder(sym.not_owned.keys())
+    let mut conflict_table = Table::builder(&not_owned)
         .set_columns(["Conflicting Dotfiles".yellow().to_string()])
         .clone()
         .build();
@@ -437,11 +415,11 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         .with(Alignment::center());
 
     // Creates a table with sym_table and conflict_table
-    let mut final_table = col![sym_table];
-
-    if !sym.not_owned.is_empty() {
-        final_table = col![sym_table, conflict_table];
-    }
+    let mut final_table = if not_owned.is_empty() {
+        col![sym_table]
+    } else {
+        col![sym_table, conflict_table]
+    };
 
     final_table
         .with(Style::empty())
@@ -449,12 +427,12 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         .with(Alignment::center());
     println!("{final_table}");
 
-    if !sym.not_owned.is_empty() {
+    if !not_owned.is_empty() {
         println!("To learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
     }
 
-    // Determines exit code for the command
-    if !sym.symlinked.is_empty() && sym.not_symlinked.is_empty() && sym.not_owned.is_empty() {
+    // Determines exit code for the command based on the dotfiles' status
+    if !sym.symlinked.is_empty() && sym.not_symlinked.is_empty() && not_owned.is_empty() {
         Ok(())
     } else {
         Err(ExitCode::FAILURE)
@@ -463,6 +441,14 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
 fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
     'next_group: for group in &groups {
+        if !utils::has_valid_target(group) {
+            println!(
+                "{}",
+                (group.to_owned() + " is not available on this platform.").yellow()
+            );
+            continue;
+        }
+
         for item in &sym.symlinked {
             if item.file_name().unwrap().to_str().unwrap() == group {
                 println!("{}", (group.to_owned() + " is already symlinked.").green());
@@ -490,8 +476,6 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         for item in &sym.not_symlinked {
             if item.file_name().unwrap().to_str().unwrap() == group {
                 println!("{}", (group.to_owned() + " is not yet symlinked.").red());
-            } else {
-                println!("{}", (group.to_owned() + " does not exist.").yellow());
             }
         }
     }
