@@ -20,7 +20,7 @@ pub fn has_valid_target(group: &str) -> bool {
     let target_os = format!("_{}", env::consts::OS);
     let target_family = format!("_{}", env::consts::FAMILY);
 
-    group.ends_with(&target_os) || group.ends_with(&target_family) || !group.contains("_")
+    group.ends_with(&target_os) || group.ends_with(&target_family) || !group.contains('_')
 }
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory

@@ -132,7 +132,7 @@ impl SymlinkHandler {
 
     /// Returns all conditional groups with the same name that satify the current user's platform
     ///
-    /// symlinked: gets symlinked conditional groups otherwise gets not symlinked ones
+    /// symlinked: gets symlinked conditional groupsif true, otherwise gets not symlinked ones
     fn get_related_conditional_groups(&self, group: &str, symlinked: bool) -> Vec<&str> {
         let groups: Vec<&PathBuf> = if symlinked {
             self.symlinked
@@ -350,26 +350,57 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     }
 
     macro_rules! get_valid_groups {
-        ($group_type:ident) => {
-            sym.$group_type
+        ($group_type:ident) => {{
+            let mut group = sym
+                .$group_type
                 .iter()
                 .map(|group| group.file_name().unwrap().to_str().unwrap())
                 .filter(|group| utils::has_valid_target(group))
-                .collect::<Vec<_>>()
-        };
+                .map(|group| {
+                    // strips _windows, _linux, etc from the group name
+                    if let Some(no_cond_group) = group.split_once('_') {
+                        no_cond_group.0
+                    } else {
+                        group
+                    }
+                })
+                .collect::<Vec<_>>();
+            group.dedup();
+            group.sort();
+
+            group
+        }};
     }
 
-    let mut symlinked = get_valid_groups!(symlinked);
-    let mut not_symlinked = get_valid_groups!(not_symlinked);
-    let mut not_owned = sym
-        .not_owned
-        .keys()
-        .filter(|group| utils::has_valid_target(group))
-        .collect::<Vec<_>>();
+    let not_symlinked = get_valid_groups!(not_symlinked);
+    let symlinked = {
+        let mut symlinked = get_valid_groups!(symlinked);
+        symlinked = symlinked
+            .iter()
+            .filter(|group| !not_symlinked.contains(group))
+            .map(|group| group.to_owned())
+            .collect();
+        symlinked
+    };
 
-    symlinked.sort();
-    not_symlinked.sort();
-    not_owned.sort();
+    let not_owned = {
+        let mut not_owned = sym
+            .not_owned
+            .keys()
+            .filter(|group| utils::has_valid_target(group))
+            .map(|group| {
+                // strips _windows, _linux, etc from the group name
+                if let Some(no_cond_group) = group.split_once('_') {
+                    no_cond_group.0
+                } else {
+                    group
+                }
+            })
+            .collect::<Vec<_>>();
+        not_owned.sort();
+        not_owned.dedup();
+        not_owned
+    };
 
     // pads the smallest vector and zips it into a vec with (Symlinked, NotSymlinked) values
     let status = if symlinked.len() > not_symlinked.len() {
@@ -421,10 +452,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         col![sym_table, conflict_table]
     };
 
-    final_table
-        .with(Style::empty())
-        .with(Margin::new(4, 4, 1, 1))
-        .with(Alignment::center());
+    final_table.with(Style::empty()).with(Alignment::center());
     println!("{final_table}");
 
     if !not_owned.is_empty() {
