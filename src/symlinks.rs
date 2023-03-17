@@ -365,8 +365,8 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
                     }
                 })
                 .collect::<Vec<_>>();
-            group.dedup();
             group.sort();
+            group.dedup();
 
             group
         }};
