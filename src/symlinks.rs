@@ -263,12 +263,18 @@ pub fn add_cmd(
     force: bool,
     adopt: bool,
 ) -> Result<(), ExitCode> {
-    if force {
-        let mut answer = String::new();
-        print!("Are you sure you want to override conflicts? (N/y) ");
+    if force || adopt {
+        if force {
+            print!("Are you sure you want to override conflicts? (N/y) ");
+        } else if adopt {
+            print!("Are you sure you want to adopt conflicts? (N/y) ");
+        }
+
         std::io::stdout()
             .flush()
             .expect("Could not print to stdout");
+
+        let mut answer = String::new();
         std::io::stdin()
             .read_line(&mut answer)
             .expect("Could not read from stdin");
@@ -279,51 +285,53 @@ pub fn add_cmd(
         }
     }
 
+    fn handle_conflicting_files<F>(sym: &SymlinkHandler, group: &str, handle_conflict: F)
+    where
+        F: Fn(&PathBuf, &PathBuf),
+    {
+        for files in sym.not_owned.values() {
+            for file in files {
+                // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
+                // files thus forcing them to be symlinked
+                for group in sym.get_related_conditional_groups(group, false) {
+                    let group_path = sym.dotfiles_dir.join("Configs").join(group);
+                    utils::group_dir_map(group_path, |group_dir| {
+                        let group_dir = group_dir.path();
+                        handle_conflict(&group_dir, file)
+                    });
+                }
+            }
+        }
+    }
+
     foreach_group(groups, exclude, true, |sym, group| {
         if !sym.not_owned.is_empty() {
             // Symlink dotfile by force
             if force {
-                for files in sym.not_owned.values() {
-                    for file in files {
-                        // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
-                        // files thus forcing them to be symlinked
-                        let group_dir = sym.dotfiles_dir.join("Configs").join(group);
-                        utils::group_dir_map(group_dir, |group_file| {
-                            if &utils::to_home_path(group_file.path().to_str().unwrap()) == file {
-                                if file.is_dir() {
-                                    _ = fs::remove_dir_all(file);
-                                } else {
-                                    _ = fs::remove_file(file);
-                                }
-                            }
-                        });
+                handle_conflicting_files(sym, group, |group_dir, file| {
+                    if &utils::to_home_path(group_dir.to_str().unwrap()) == file {
+                        if file.is_dir() {
+                            _ = fs::remove_dir_all(file);
+                        } else {
+                            _ = fs::remove_file(file);
+                        }
                     }
-                }
+                })
             }
 
+            // Discard dotfile and adopt the conflicting dotfile
             if adopt {
-                // Discard dotfile and adopt the conflicting dotfile
-                let group_dir = utils::get_dotfiles_path()
-                    .unwrap()
-                    .join("Configs")
-                    .join(group);
-
-                for files in sym.not_owned.values() {
-                    for file in files {
-                        utils::group_dir_map(group_dir.clone(), |f| {
-                            let group_path = f.path();
-                            // only adopts dotfile if it matches requested group
-                            if utils::to_home_path(group_path.to_str().unwrap()) == file.clone() {
-                                if group_path.is_dir() {
-                                    _ = fs::remove_dir(&group_path);
-                                } else {
-                                    _ = fs::remove_file(&group_path);
-                                }
-                                _ = fs::rename(file, group_path);
-                            }
-                        });
+                handle_conflicting_files(sym, group, |group_path, file| {
+                    // only adopts dotfile if it matches requested group
+                    if utils::to_home_path(group_path.to_str().unwrap()) == file.clone() {
+                        if group_path.is_dir() {
+                            _ = fs::remove_dir(&group_path);
+                        } else {
+                            _ = fs::remove_file(&group_path);
+                        }
+                        _ = fs::rename(file, group_path);
                     }
-                }
+                })
             }
         }
 
