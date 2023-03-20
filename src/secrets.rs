@@ -161,6 +161,8 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
             let group = group.unwrap().file_name();
             decrypt_group(&group.to_str().unwrap().to_string())?;
         }
+
+        return Ok(())
     }
 
     for group in groups {

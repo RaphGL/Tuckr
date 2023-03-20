@@ -152,29 +152,27 @@ pub fn set_cmd(
         Ok(())
     };
 
-    for group in groups {
-        if group == "*" {
-            let dotfiles_dir = match utils::get_dotfiles_path() {
-                Some(dir) => dir.join("Hooks"),
-                None => {
-                    eprintln!(
-                        "{}",
-                        "Could not find the Hooks directory in your dotfiles".red()
-                    );
-                    return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
-                }
-            };
-
-            for folder in fs::read_dir(dotfiles_dir).unwrap() {
-                let folder = folder.unwrap();
-                run_deploy_steps(
-                    DeployStages::new(),
-                    utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
-                )?;
+    if groups.contains(&'*'.to_string()) {
+        let dotfiles_dir = match utils::get_dotfiles_path() {
+            Some(dir) => dir.join("Hooks"),
+            None => {
+                eprintln!(
+                    "{}",
+                    "Could not find the Hooks directory in your dotfiles".red()
+                );
+                return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
             }
+        };
 
-            break;
-        } else {
+        for folder in fs::read_dir(dotfiles_dir).unwrap() {
+            let folder = folder.unwrap();
+            run_deploy_steps(
+                DeployStages::new(),
+                utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
+            )?;
+        }
+    } else {
+        for group in groups {
             run_deploy_steps(DeployStages::new(), group)?;
         }
     }
