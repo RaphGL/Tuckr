@@ -2,9 +2,9 @@
 <br />
 <p align="center">
   <a href="https://github.com/RaphGL/Tuckr">
-    <!-- <img src="logo.png" alt="Logo" height="80"> -->
   </a>
 
+  <h1 align="center">Tuckr</h1>
   <h3 align="center">A super powered replacement for GNU Stow</h3>
   <p align="center">
     <br />
@@ -39,6 +39,7 @@
         <li><a href="#how-it-works">How it works</a></li>
         <li><a href="#using-hooks">Using hooks</a></li>
         <li><a href="#using-secrets">Using secrets</a></li>
+        <li><a href="#conditional-deployment">Conditional Deployment</a></li>
         <li><a href="#exit-codes">Exit codes</a></li>
       </ul>
     </li>
@@ -51,15 +52,15 @@
 Tuckr is a dotfile manager inspired by Stow and Git. Tuckr aims to make dotfile management less painful. It follows the same model as Stow, symlinking files onto $HOME. It works on all the major OSes (Linux, Windows, BSDs and MacOS).
 
 Tuckr aims to bring the simplicity of Stow to a dotfile manager with a very small learning curve.
-To achieve that goal Tuckr tries to only cover what is directly needed to manage dotfiles and nothing more. We won't wrap git, rm, cp or reimplement the functionality of a perfectly functioning separate utility unless it greatly impacts usability.
+To achieve that goal Tuckr tries to only cover what is directly needed to manage dotfiles and nothing else. We won't wrap git, rm, cp or reimplement the functionality that are perfeclty covered by other utilities in the system unless it greatly impacts usability.
 
 ### Goals:
 
 - No configuration
 - Commands can be run from anywhere
-- Symlinks are tracked and validated, you're given easy tools to manage them
-- All configuration is separated and handled as a logical unit (groups or programs)
-- Hooks, optionally write configuration scripts for each group
+- Symlinks are tracked and validated
+- All configuration grouped and handled as a logical unit 
+- Provide hooks, optionally write configuration scripts for each group
 - Easily encrypt and deploy sensitive configuration files
 
 <!-- GETTING STARTED -->
@@ -70,11 +71,11 @@ The following paths should be used for your dotfiles:
 
 Dotfile Path in each OS:
 
-| Platform       | Config Path                                | Home Path                 |
-| -------------- | ------------------------------------------ | ------------------------- |
-| Linux/BSDs/etc | $HOME/.config/dotfiles                     | $HOME/.dotfiles           |
-| MacOS          | $HOME/Library/Application Support/dotfiles | $HOME/.dotfiles           |
-| Windows        | C:\Users\<user>\AppData\Roaming/dotfiles   | C:\Users\<user>/.dotfiles |
+| Platform       | Config Path                                | Home Path            |
+| -------------- | ------------------------------------------ | -------------------- |
+| Linux/BSDs/etc | $HOME/.config/dotfiles                     | $HOME/.dotfiles      |
+| MacOS          | $HOME/Library/Application Support/dotfiles | $HOME/.dotfiles      |
+| Windows        | %HomePath%\AppData\Roaming/dotfiles        | %HomePath%/.dotfiles |
 
 To learn how to set it up for your dotfiles, check the `How it works` sections.
 
@@ -143,15 +144,17 @@ $ tuckr rm \* # removes all dotfiles from your system
 Usage: tuckr <COMMAND>
 
 Commands:
-  set        Setup groups and run their hooks
-  add        Deploy dotfiles for the supplied groups (alias: a)
-  rm         Remove dotfiles for the supplied groups
-  status     Get dotfiles' symlinking status (alias: s)
-  encrypt    Encrypt files and move them to dotfiles/Secrets (alias: e)
-  decrypt    Decrypt files (alias: d)
-  init       Initialize dotfile directory
-  from-stow  Convert a GNU Stow repo into Tuckr
-  help       Print this message or the help of the given subcommand(s)
+  status      Get dotfiles' symlinking status (alias: s)
+  add         Deploy dotfiles for the supplied groups (alias: a)
+  rm          Remove dotfiles for the supplied groups
+  set         Setup groups and run their hooks
+  encrypt     Encrypt files and move them to dotfiles/Secrets (alias: e)
+  decrypt     Decrypt files (alias: d)
+  ls-hooks    List available hooks
+  ls-secrets  List stored secrets
+  init        Initialize dotfile directory
+  from-stow   Convert a GNU Stow repo into Tuckr
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -234,6 +237,26 @@ Decrypt files from the groups <group_name...> and put them on their appropriate 
 tuckr decrypt <group_name...>
 ```
 
+### Conditional deployment
+Conditional deployment is used when a dotfile should only be deployment on a specific platform. This is done by creating a separate group with the same name suffixed with the desired platform.
+
+This group is entirely ignored on unsupported systems.
+
+Example:
+
+```sh
+Configs
+├── config
+├── config_unix # deployed on any unix system
+├── config_linux # linux only files
+├── config_macos # macos only files
+└── config_windows # windows only files
+```
+
+The groups that are supported on the target system will be treated as being a part of the original `config` group. One only needs to reference it to have all of the valid ones included as well.
+
+Any of the [options available](https://doc.rust-lang.org/reference/conditional-compilation.html#target_os) on Rust's `target_family` and `target_os` are valid targets.
+
 ### Exit codes
 
 For scripting purposes Tuckr has the following exit codes:
@@ -243,6 +266,8 @@ For scripting purposes Tuckr has the following exit codes:
 - `4` No such file or directory exists
 - `5` Encryption failed
 - `6` Decryption failed
+
+On success Tuckr returns whatever is he default success return code for the platform (0 on unix systems).
 
 <!-- LICENSE -->
 
