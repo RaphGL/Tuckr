@@ -21,22 +21,11 @@ use std::process::ExitCode;
 #[derive(Debug, Parser)]
 #[command(about, author, version, propagate_version = true)]
 enum Cli {
-    /// Setup groups and run their hooks
-    Set {
-        #[arg(required = true, value_name = "group")]
-        groups: Vec<String>,
-
-        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
-        /// Exclude certain groups from being added and hooked
-        exclude: Vec<String>,
-
-        #[arg(short, long)]
-        /// Override conflicting dotfiles
-        force: bool,
-
-        #[arg(short, long)]
-        /// Adopt conflicting dotfiles
-        adopt: bool,
+    #[command(alias = "s")]
+    /// Get dotfiles' symlinking status (alias: s)
+    Status {
+        #[arg(value_name = "group")]
+        groups: Option<Vec<String>>,
     },
 
     #[command(alias = "a")]
@@ -68,11 +57,22 @@ enum Cli {
         exclude: Vec<String>,
     },
 
-    #[command(alias = "s")]
-    /// Get dotfiles' symlinking status (alias: s)
-    Status {
-        #[arg(value_name = "group")]
-        groups: Option<Vec<String>>,
+    /// Setup groups and run their hooks
+    Set {
+        #[arg(required = true, value_name = "group")]
+        groups: Vec<String>,
+
+        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
+        /// Exclude certain groups from being added and hooked
+        exclude: Vec<String>,
+
+        #[arg(short, long)]
+        /// Override conflicting dotfiles
+        force: bool,
+
+        #[arg(short, long)]
+        /// Adopt conflicting dotfiles
+        adopt: bool,
     },
 
     #[command(alias = "e")]
@@ -91,6 +91,12 @@ enum Cli {
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
     },
+
+    /// List available hooks
+    LsHooks,
+
+    /// List stored secrets
+    LsSecrets,
 
     /// Initialize dotfile directory
     ///
@@ -125,6 +131,8 @@ fn main() -> ExitCode {
         Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
         Cli::Init => fileops::from_stow_cmd(),
         Cli::FromStow => fileops::init_cmd(),
+        Cli::LsHooks => fileops::ls_hooks_cmd(),
+        Cli::LsSecrets => fileops::ls_secrets_cmd(),
     };
 
     match exit_code {

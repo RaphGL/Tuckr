@@ -99,11 +99,7 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
             _ => (),
         }
 
-        let mut output = Command::new("sh")
-            .arg("-c")
-            .arg(file)
-            .spawn()
-            .expect("Failed to run hook");
+        let mut output = Command::new(file).spawn().expect("Failed to run hook");
 
         if output.wait().unwrap().success() {
             println!(
@@ -171,10 +167,12 @@ pub fn set_cmd(
                 utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
             )?;
         }
-    } else {
-        for group in groups {
-            run_deploy_steps(DeployStages::new(), group)?;
-        }
+
+        return Ok(());
+    }
+
+    for group in groups {
+        run_deploy_steps(DeployStages::new(), group)?;
     }
 
     Ok(())

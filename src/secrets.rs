@@ -25,10 +25,12 @@ impl SecretsHandler {
         // algorithm
         let input_key = rpassword::prompt_password("Password: ").unwrap();
         let mut input_key = input_key.trim().as_bytes().to_vec();
-        let mut hasher = Sha256::new();
 
-        hasher.update(&input_key);
-        let input_hash = hasher.finalize();
+        let input_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(&input_key);
+            hasher.finalize()
+        };
 
         // zeroes sensitive information from memory
         input_key.zeroize();
@@ -162,7 +164,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
             decrypt_group(&group.to_str().unwrap().to_string())?;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     for group in groups {

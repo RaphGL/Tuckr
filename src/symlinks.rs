@@ -114,8 +114,10 @@ impl SymlinkHandler {
                     Err(_) => {
                         self.not_symlinked.insert(group_dir.path());
                         self.symlinked.remove(&group_dir.path());
+
                         if PathBuf::from(&config_file).exists() {
                             let group_dir = group_dir.file_name().to_str().unwrap().to_string();
+
                             if let Some(group) = self.not_owned.get_mut(&group_dir) {
                                 group.push(config_file);
                             } else {
@@ -139,7 +141,7 @@ impl SymlinkHandler {
                 .iter()
                 .filter(|f| {
                     let filename = f.file_name().unwrap().to_str().unwrap();
-                    filename.contains(group) && utils::has_valid_target(filename)
+                    filename.starts_with(group) && utils::has_valid_target(filename)
                 })
                 .collect()
         } else {
@@ -147,7 +149,7 @@ impl SymlinkHandler {
                 .iter()
                 .filter(|f| {
                     let filename = f.file_name().unwrap().to_str().unwrap();
-                    filename.contains(group) && utils::has_valid_target(filename)
+                    filename.starts_with(group) && utils::has_valid_target(filename)
                 })
                 .collect()
         };
@@ -223,15 +225,15 @@ where
 
     // handles wildcard
     if groups.contains(&"*".to_string()) {
-        let symgroup = if symlinked {
+        let symgroups = if symlinked {
             &sym.not_symlinked
         } else {
             &sym.symlinked
         };
 
-        for p in symgroup {
+        for group_path in symgroups {
             // Takes the name of the group to be passed the function
-            let group_name = utils::to_group_name(p.to_str().unwrap()).unwrap();
+            let group_name = utils::to_group_name(group_path.to_str().unwrap()).unwrap();
             // Ignore groups in the excludes array
             if exclude.contains(&group_name.to_string()) {
                 continue;
@@ -245,7 +247,6 @@ where
     }
 
     for group in groups {
-        // add all groups if wildcard
         if exclude.contains(group) {
             continue;
         } else {
@@ -285,19 +286,22 @@ pub fn add_cmd(
         }
     }
 
-    fn handle_conflicting_files<F>(sym: &SymlinkHandler, group: &str, handle_conflict: F)
-    where
-        F: Fn(&PathBuf, &PathBuf),
-    {
+    /// Iterates through every file in group and lets the consumer compare it to the not owned file
+    /// and decide how to handle it
+    fn handle_conflicting_files(
+        sym: &SymlinkHandler,
+        group: &str,
+        handle_conflict: impl Fn(&PathBuf, &PathBuf),
+    ) {
         for files in sym.not_owned.values() {
             for file in files {
                 // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
                 // files thus forcing them to be symlinked
                 for group in sym.get_related_conditional_groups(group, false) {
                     let group_path = sym.dotfiles_dir.join("Configs").join(group);
-                    utils::group_dir_map(group_path, |group_dir| {
-                        let group_dir = group_dir.path();
-                        handle_conflict(&group_dir, file)
+                    utils::group_dir_map(group_path, |group_file| {
+                        let group_file = group_file.path();
+                        handle_conflict(&group_file, file)
                     });
                 }
             }
@@ -308,8 +312,8 @@ pub fn add_cmd(
         if !sym.not_owned.is_empty() {
             // Symlink dotfile by force
             if force {
-                handle_conflicting_files(sym, group, |group_dir, file| {
-                    if &utils::to_home_path(group_dir.to_str().unwrap()) == file {
+                handle_conflicting_files(sym, group, |group_file, file| {
+                    if &utils::to_home_path(group_file.to_str().unwrap()) == file {
                         if file.is_dir() {
                             _ = fs::remove_dir_all(file);
                         } else {
@@ -321,15 +325,15 @@ pub fn add_cmd(
 
             // Discard dotfile and adopt the conflicting dotfile
             if adopt {
-                handle_conflicting_files(sym, group, |group_path, file| {
+                handle_conflicting_files(sym, group, |group_file, file| {
                     // only adopts dotfile if it matches requested group
-                    if utils::to_home_path(group_path.to_str().unwrap()) == file.clone() {
-                        if group_path.is_dir() {
-                            _ = fs::remove_dir(&group_path);
+                    if utils::to_home_path(group_file.to_str().unwrap()) == file.clone() {
+                        if group_file.is_dir() {
+                            _ = fs::remove_dir(group_file);
                         } else {
-                            _ = fs::remove_file(&group_path);
+                            _ = fs::remove_file(group_file);
                         }
-                        _ = fs::rename(file, group_path);
+                        _ = fs::rename(file, group_file);
                     }
                 })
             }
@@ -464,7 +468,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     println!("{final_table}");
 
     if !not_owned.is_empty() {
-        println!("To learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
+        println!("\nTo learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
     }
 
     // Determines exit code for the command based on the dotfiles' status
@@ -516,11 +520,12 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         }
     }
 
-    let symlinked_groups: Vec<_> = sym.symlinked.iter().collect();
-    let symlinked_groups: Vec<_> = symlinked_groups
+    let symlinked_groups: Vec<_> = sym
+        .symlinked
         .iter()
         .map(|f| f.file_name().unwrap().to_str().unwrap())
         .collect();
+
     for group in groups {
         if !symlinked_groups.contains(&group.as_str()) {
             return Err(ExitCode::FAILURE);

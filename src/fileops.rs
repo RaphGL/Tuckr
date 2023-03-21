@@ -18,7 +18,7 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
     io::stdin().read_line(&mut answer).unwrap();
     let answer = answer.to_lowercase().trim().to_owned();
 
-    if answer != "y" {
+    if let "yes" | "y" = answer.as_str()  {
         return Ok(());
     }
 
@@ -66,4 +66,12 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     }
 
     Ok(())
+}
+
+pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
+    todo!()
+}
+
+pub fn ls_secrets_cmd() -> Result<(), ExitCode> {
+    todo!()
 }
