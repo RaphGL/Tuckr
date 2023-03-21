@@ -129,8 +129,8 @@ fn main() -> ExitCode {
         Cli::Status { groups } => symlinks::status_cmd(groups),
         Cli::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&group, &dotfiles),
         Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
-        Cli::Init => fileops::from_stow_cmd(),
-        Cli::FromStow => fileops::init_cmd(),
+        Cli::FromStow => fileops::from_stow_cmd(),
+        Cli::Init => fileops::init_cmd(),
         Cli::LsHooks => fileops::ls_hooks_cmd(),
         Cli::LsSecrets => fileops::ls_secrets_cmd(),
     };

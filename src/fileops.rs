@@ -12,15 +12,16 @@ use crate::utils;
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
-    print!("{}", "Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ".yellow());
+    print!("{}", "Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ");
     io::stdout().flush().unwrap();
 
     let mut answer = String::new();
     io::stdin().read_line(&mut answer).unwrap();
     let answer = answer.to_lowercase().trim().to_owned();
 
-    if let "yes" | "y" = answer.as_str() {
-        return Ok(());
+    match answer.as_str() {
+        "yes" | "y" => (),
+        _ => return Ok(()),
     }
 
     init_cmd()?;
@@ -54,17 +55,17 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_cmd() -> Result<(), ExitCode> {
-    if let Err(e) = fs::create_dir("Configs") {
-        eprintln!("{}", e.red());
+    macro_rules! create_dirs {
+        ($($dirname: literal),+) => {
+            $(
+            if let Err(e) = fs::create_dir($dirname) {
+                eprintln!("{}", e.red());
+                return Err(ExitCode::FAILURE);
+            })+
+        };
     }
 
-    if let Err(e) = fs::create_dir("Hooks") {
-        eprintln!("{}", e.red());
-    }
-
-    if let Err(e) = fs::create_dir("Secrets") {
-        eprintln!("{}", e.red());
-    }
+    create_dirs!("Configs", "Hooks", "Secrets");
 
     Ok(())
 }
@@ -91,9 +92,9 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     dirs_table
         .with(tabled::Style::empty())
         .with(tabled::Disable::row(tabled::object::FirstRow));
-        // TODO: add back once tabled::Split is available
-        //.with(tabled::Rotate::Left)
-        //.with(tabled::Disable::column(tabled::object::FirstColumn));
+    // TODO: add back once tabled::Split is available
+    //.with(tabled::Rotate::Left)
+    //.with(tabled::Disable::column(tabled::object::FirstColumn));
 
     println!("{dirs_table}");
 
