@@ -3,11 +3,12 @@
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
 use owo_colors::OwoColorize;
-use std::env;
-use std::fs;
 use std::io::{self, Write};
-use std::path;
 use std::process::ExitCode;
+use std::{env, fs, path};
+use tabled::TableIteratorExt;
+
+use crate::utils;
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
@@ -18,7 +19,7 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
     io::stdin().read_line(&mut answer).unwrap();
     let answer = answer.to_lowercase().trim().to_owned();
 
-    if let "yes" | "y" = answer.as_str()  {
+    if let "yes" | "y" = answer.as_str() {
         return Ok(());
     }
 
@@ -68,10 +69,43 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     Ok(())
 }
 
+fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
+    let dir = {
+        let dotfiles_dir = if let Some(dir) = utils::get_dotfiles_path() {
+            dir
+        } else {
+            return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+        };
+
+        dotfiles_dir.join(dirname)
+    };
+
+    let dirs = if let Ok(dir) = fs::read_dir(dir) {
+        dir.into_iter()
+            .map(|dir| dir.unwrap().file_name().to_str().unwrap().to_string())
+    } else {
+        return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+    };
+
+    let mut dirs_table = dirs.table();
+    dirs_table
+        .with(tabled::Style::empty())
+        .with(tabled::Disable::row(tabled::object::FirstRow));
+        // TODO: add back once tabled::Split is available
+        //.with(tabled::Rotate::Left)
+        //.with(tabled::Disable::column(tabled::object::FirstColumn));
+
+    println!("{dirs_table}");
+
+    Ok(())
+}
+
 pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
-    todo!()
+    list_tuckr_dir("Hooks")?;
+    Ok(())
 }
 
 pub fn ls_secrets_cmd() -> Result<(), ExitCode> {
-    todo!()
+    list_tuckr_dir("Secrets")?;
+    Ok(())
 }
