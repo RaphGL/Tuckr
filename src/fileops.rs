@@ -12,7 +12,7 @@ use crate::utils;
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
-    print!("{}", "Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ");
+    print!("Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ");
     io::stdout().flush().unwrap();
 
     let mut answer = String::new();

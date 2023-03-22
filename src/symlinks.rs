@@ -351,6 +351,27 @@ pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode>
     Ok(())
 }
 
+macro_rules! get_valid_groups {
+    ($symlinks:expr) => {{
+        let mut group = $symlinks
+            .iter()
+            .map(|group| group.file_name().unwrap().to_str().unwrap())
+            .filter(|group| utils::has_valid_target(group))
+            .map(|group| {
+                // strips _windows, _linux, etc from the group name
+                if let Some(no_cond_group) = group.split_once('_') {
+                    no_cond_group.0
+                } else {
+                    group
+                }
+            })
+            .collect::<Vec<_>>();
+        group.sort();
+
+        group
+    }};
+}
+
 fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled)]
     struct SymlinkRow<'a> {
@@ -361,37 +382,20 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         not_symlinked: &'a str,
     }
 
-    macro_rules! get_valid_groups {
-        ($group_type:ident) => {{
-            let mut group = sym
-                .$group_type
-                .iter()
-                .map(|group| group.file_name().unwrap().to_str().unwrap())
-                .filter(|group| utils::has_valid_target(group))
-                .map(|group| {
-                    // strips _windows, _linux, etc from the group name
-                    if let Some(no_cond_group) = group.split_once('_') {
-                        no_cond_group.0
-                    } else {
-                        group
-                    }
-                })
-                .collect::<Vec<_>>();
-            group.sort();
-            group.dedup();
+    let not_symlinked = {
+        let mut not_symlinked = get_valid_groups!(sym.not_symlinked);
+        not_symlinked.dedup();
+        not_symlinked
+    };
 
-            group
-        }};
-    }
-
-    let not_symlinked = get_valid_groups!(not_symlinked);
     let symlinked = {
-        let mut symlinked = get_valid_groups!(symlinked);
+        let mut symlinked = get_valid_groups!(sym.symlinked);
         symlinked = symlinked
             .iter()
             .filter(|group| !not_symlinked.contains(group))
             .map(|group| group.to_owned())
             .collect();
+        symlinked.dedup();
         symlinked
     };
 
@@ -480,56 +484,96 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 }
 
 fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
-    'next_group: for group in &groups {
-        if !utils::has_valid_target(group) {
-            println!(
-                "{}",
-                (group.to_owned() + " is not available on this platform.").yellow()
-            );
-            continue;
-        }
-
-        for item in &sym.symlinked {
-            if item.file_name().unwrap().to_str().unwrap() == group {
-                println!("{}", (group.to_owned() + " is already symlinked.").green());
-                continue 'next_group;
+    macro_rules! add_related_groups {
+        ($symgroup:ident, $symlinked:literal) => {
+            for i in 0..$symgroup.len() {
+                let group = $symgroup[i];
+                for group in sym.get_related_conditional_groups(group, $symlinked) {
+                    $symgroup.push(group);
+                }
             }
-        }
 
-        if let Some(files) = sym.not_owned.get(group) {
-            println!("The following {group} files are in conflict:");
-            for file in files {
-                println!("\t{}", file.to_str().unwrap().red());
-            }
-            println!(
-                "\n{}\n",
-                "Check `tuckr help add` to learn how to resolve them.".yellow()
-            );
-            continue;
-        }
+            $symgroup.sort();
+            $symgroup.dedup();
+        };
+    }
 
-        if sym.not_symlinked.is_empty() {
-            println!("{}", (group.to_owned() + " does not exist.").yellow());
-            continue;
-        }
+    let not_symlinked = {
+        let not_symlinked = get_valid_groups!(sym.not_symlinked);
 
-        for item in &sym.not_symlinked {
-            if item.file_name().unwrap().to_str().unwrap() == group {
-                println!("{}", (group.to_owned() + " is not yet symlinked.").red());
+        let mut not_symlinked = not_symlinked
+            .iter()
+            .map(|group| group.to_owned())
+            .filter(|group| groups.contains(&group.to_string()))
+            .collect::<Vec<_>>();
+
+        add_related_groups!(not_symlinked, false);
+
+        not_symlinked
+    };
+
+    let symlinked = {
+        let symlinked = get_valid_groups!(sym.symlinked);
+
+        let mut symlinked = symlinked
+            .iter()
+            .map(|group| group.to_owned())
+            .filter(|group| !not_symlinked.contains(group) && groups.contains(&group.to_string()))
+            .collect::<Vec<_>>();
+
+        add_related_groups!(symlinked, true);
+
+        symlinked
+    };
+
+    let unsupported = {
+        let mut unsupported = groups
+            .iter()
+            .filter(|group| !utils::has_valid_target(group))
+            .collect::<Vec<_>>();
+
+        unsupported.sort();
+        unsupported.dedup();
+        unsupported
+    };
+
+    if !not_symlinked.is_empty() {
+        println!("Not Symlinked:");
+        for group in &not_symlinked {
+            println!("\t{}", group.red());
+        }
+        println!();
+
+        for group in &not_symlinked {
+            if let Some(conflicts) = sym.not_owned.get(&group.to_string()) {
+                println!("Conflicting files:");
+                for conflict in conflicts {
+                    println!("\t{} -> {}", group.yellow(), conflict.to_str().unwrap());
+                }
+                println!();
             }
         }
     }
 
-    let symlinked_groups: Vec<_> = sym
-        .symlinked
-        .iter()
-        .map(|f| f.file_name().unwrap().to_str().unwrap())
-        .collect();
-
-    for group in groups {
-        if !symlinked_groups.contains(&group.as_str()) {
-            return Err(ExitCode::FAILURE);
+    if !symlinked.is_empty() {
+        println!("Symlinked:");
+        for group in symlinked {
+            println!("\t{}", group.green());
         }
+        println!();
+    }
+
+    if !unsupported.is_empty() {
+        println!("Not supported on this platform:");
+        for group in unsupported {
+            println!("\t{}", group.yellow());
+        }
+        println!();
+    }
+
+    if !not_symlinked.is_empty() {
+         println!("{}", "Check `tuckr help add` to learn how to resolve them.");
+        return Err(ExitCode::FAILURE);
     }
 
     Ok(())
