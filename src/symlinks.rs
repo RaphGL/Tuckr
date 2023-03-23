@@ -19,7 +19,6 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
-#[cfg(target_family = "unix")]
 fn symlink_file(f: fs::DirEntry) {
     let target_path = utils::to_home_path(f.path().to_str().unwrap());
 
