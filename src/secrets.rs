@@ -100,7 +100,9 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
         fs::create_dir_all(&dest_dir).unwrap();
     }
 
-    let home_dir = dirs::home_dir().unwrap();
+    // canonicalizing the home_dir so that it can work with
+    // windows' NT UNC paths (the paths used by fs::canonicalize on windows)
+    let home_dir = dirs::home_dir().unwrap().canonicalize().unwrap();
 
     for dotfile in dotfiles {
         let mut encrypted = handler.encrypt(dotfile)?;
