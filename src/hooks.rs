@@ -99,7 +99,13 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
             _ => (),
         }
 
-        let mut output = Command::new(file).spawn().expect("Failed to run hook");
+        let mut output = match Command::new(file).spawn() {
+            Ok(output) => output,
+            Err(e) => {
+                eprintln!("{e}");
+                return Err(ExitCode::FAILURE);
+            }
+        };
 
         if output.wait().unwrap().success() {
             println!(
