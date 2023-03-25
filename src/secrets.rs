@@ -5,7 +5,7 @@
 use crate::utils;
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
-use rand::rngs::OsRng;
+use rand::rngs;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -35,33 +35,27 @@ impl SecretsHandler {
         // zeroes sensitive information from memory
         input_key.zeroize();
 
-        let dotfiles_dir = match utils::get_dotfiles_path() {
-            Some(dir) => dir,
-            None => {
+        let Some(dotfiles_dir) = utils::get_dotfiles_path() else {
                 eprintln!("{}", "Couldn't find dotfiles directory".red());
                 return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
-            }
         };
 
         Ok(SecretsHandler {
             dotfiles_dir,
             key: input_hash,
-            nonce: XChaCha20Poly1305::generate_nonce(&mut OsRng),
+            nonce: XChaCha20Poly1305::generate_nonce(&mut rngs::OsRng),
         })
     }
 
     /// takes a path to a file and returns its encrypted content
     fn encrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
         let cipher = XChaCha20Poly1305::new(&self.key);
-        let dotfile = match fs::read(dotfile) {
-            Ok(f) => f,
-            Err(_) => {
+        let Ok(dotfile) = fs::read(dotfile) else {
                 eprintln!(
                     "{}",
                     format!("{} {}", "No such file or directory: ", dotfile).red()
                 );
                 return Err(ExitCode::from(utils::NO_SUCH_FILE_OR_DIR));
-            }
         };
 
         match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
@@ -105,15 +99,17 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
     let home_dir = dirs::home_dir().unwrap().canonicalize().unwrap();
 
     for dotfile in dotfiles {
-        let mut encrypted = handler.encrypt(dotfile)?;
-
-        let mut encrypted_file = handler.nonce.to_vec();
-
         let target_file = Path::new(dotfile).canonicalize().unwrap();
         let target_file = target_file.strip_prefix(&home_dir).unwrap();
 
-        let mut dir_path = target_file.to_path_buf();
-        dir_path.pop();
+        let dir_path = {
+            let mut tf = target_file.to_path_buf();
+            tf.pop();
+            tf
+        };
+
+        let mut encrypted = handler.encrypt(dotfile)?;
+        let mut encrypted_file = handler.nonce.to_vec();
 
         // makes sure all parent directories of the dotfile are created
         fs::create_dir_all(dest_dir.join(dir_path)).unwrap();
@@ -139,12 +135,9 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
         let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
         for secret in WalkDir::new(group_dir) {
-            let secret = match secret {
-                Ok(secret) => secret,
-                Err(_) => {
+            let Ok(secret) = secret else {
                     eprintln!("{}", (group.to_owned() + " does not exist.").red());
                     return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
-                }
             };
 
             if secret.file_type().is_dir() {

@@ -71,21 +71,17 @@ pub fn init_cmd() -> Result<(), ExitCode> {
 }
 
 fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
-    let dir = {
-        let dotfiles_dir = if let Some(dir) = utils::get_dotfiles_path() {
-            dir
-        } else {
-            return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
-        };
-
-        dotfiles_dir.join(dirname)
+    let dir = match utils::get_dotfiles_path() {
+        Some(dir) => dir.join(dirname),
+        None => return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES)),
     };
 
-    let dirs = if let Ok(dir) = fs::read_dir(dir) {
-        dir.into_iter()
-            .map(|dir| dir.unwrap().file_name().to_str().unwrap().to_string())
-    } else {
-        return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+    let dirs = match fs::read_dir(dir) {
+        Ok(dir) => dir
+            .into_iter()
+            .map(|dir| dir.unwrap().file_name().to_str().unwrap().to_string()),
+
+        Err(_) => return Err(ExitCode::from(utils::NO_SETUP_FOLDER)),
     };
 
     let mut dirs_table = dirs.table();

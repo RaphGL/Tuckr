@@ -17,9 +17,11 @@ pub const ENCRYPTION_FAILED: u8 = 5;
 pub const DECRYPTION_FAILED: u8 = 6;
 
 pub fn has_valid_target(group: &str) -> bool {
+    // Gets the current OS and OS family
     let target_os = format!("_{}", env::consts::OS);
     let target_family = format!("_{}", env::consts::FAMILY);
 
+    // returns true if a group has no suffix or its suffix matches the current OS
     group.ends_with(&target_os) || group.ends_with(&target_family) || !group.contains('_')
 }
 
@@ -105,7 +107,7 @@ pub fn group_dir_map<F: FnMut(fs::DirEntry)>(dir: path::PathBuf, mut func: F) {
 
 /// Prints a single row info box with title on the left
 /// and content on the right
-pub fn print_info_box(title: &str, content: &str) {
+ pub fn print_info_box(title: &str, content: &str) {
     let mut hook_box = tabled::builder::Builder::default()
         .set_columns([title])
         .add_record([content])

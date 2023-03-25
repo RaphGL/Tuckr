@@ -63,21 +63,15 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
         group.yellow().to_string().as_str(),
     );
 
-    let dotfiles_dir = match utils::get_dotfiles_path() {
-        Some(dir) => dir,
-        None => {
+    let Some(dotfiles_dir) =  utils::get_dotfiles_path() else {
             eprintln!("{}", "Could not find dotfiles directory".red());
             return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
-        }
     };
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
-    let group_dir = match fs::read_dir(group_dir) {
-        Ok(dir) => dir,
-        Err(_) => {
+    let Ok(group_dir) = fs::read_dir(group_dir) else {
             eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
             return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
-        }
     };
 
     for file in group_dir {

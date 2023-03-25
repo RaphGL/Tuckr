@@ -26,6 +26,7 @@ fn symlink_file(f: fs::DirEntry) {
     {
         _ = std::os::unix::fs::symlink(f.path(), target_path);
     }
+
     #[cfg(target_family = "windows")]
     {
         _ = std::os::windows::fs::symlink_file(f.path(), target_path);
@@ -73,12 +74,9 @@ impl SymlinkHandler {
     /// Returns a copy of self with all the fields set accordingly
     fn validate(mut self) -> Result<Self, ExitCode> {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
-        let dir = match fs::read_dir(self.dotfiles_dir.join("Configs")) {
-            Ok(dir) => dir,
-            Err(_) => {
+        let Ok(dir) = fs::read_dir(self.dotfiles_dir.join("Configs")) else {
                 eprintln!("{}", "There's no Configs folder set up".red());
                 return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
-            }
         };
 
         for file in dir {
@@ -358,10 +356,9 @@ macro_rules! get_valid_groups {
             .filter(|group| utils::has_valid_target(group))
             .map(|group| {
                 // strips _windows, _linux, etc from the group name
-                if let Some(no_cond_group) = group.split_once('_') {
-                    no_cond_group.0
-                } else {
-                    group
+                match group.split_once('_') {
+                    Some(no_cond_group) => no_cond_group.0,
+                    None => group,
                 }
             })
             .collect::<Vec<_>>();
@@ -405,10 +402,9 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
             .filter(|group| utils::has_valid_target(group))
             .map(|group| {
                 // strips _windows, _linux, etc from the group name
-                if let Some(no_cond_group) = group.split_once('_') {
-                    no_cond_group.0
-                } else {
-                    group
+                match group.split_once('_') {
+                    Some(no_cond_group) => no_cond_group.0,
+                    None => group,
                 }
             })
             .collect::<Vec<_>>();
@@ -571,7 +567,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
     }
 
     if !not_symlinked.is_empty() {
-         println!("Check `tuckr help add` to learn how to resolve them.");
+        println!("Check `tuckr help add` to learn how to resolve them.");
         return Err(ExitCode::FAILURE);
     }
 
