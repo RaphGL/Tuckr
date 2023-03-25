@@ -571,7 +571,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
     }
 
     if !not_symlinked.is_empty() {
-         println!("{}", "Check `tuckr help add` to learn how to resolve them.");
+         println!("Check `tuckr help add` to learn how to resolve them.");
         return Err(ExitCode::FAILURE);
     }
 

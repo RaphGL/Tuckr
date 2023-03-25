@@ -134,6 +134,10 @@ pub fn set_cmd(
     adopt: bool,
 ) -> Result<(), ExitCode> {
     let run_deploy_steps = |step: DeployStages, group: &str| -> Result<(), ExitCode> {
+        if !utils::has_valid_target(group) {
+            return Ok(());
+        }
+
         for i in step {
             match i {
                 DeployStep::Initialize => return Ok(()),
@@ -167,11 +171,9 @@ pub fn set_cmd(
         };
 
         for folder in fs::read_dir(dotfiles_dir).unwrap() {
-            let folder = folder.unwrap();
-            run_deploy_steps(
-                DeployStages::new(),
-                utils::to_group_name(folder.path().to_str().unwrap()).unwrap(),
-            )?;
+            let folder = folder.unwrap().path();
+            let group = utils::to_group_name(folder.to_str().unwrap()).unwrap();
+            run_deploy_steps(DeployStages::new(), group)?;
         }
 
         return Ok(());
