@@ -13,6 +13,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
+#[derive(Debug)]
 #[derive(PartialEq)]
 enum DeployStep {
     Initialize, // Default value before starting deployment
@@ -58,7 +59,7 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
         match hook_type {
             DeployStep::PreHook => "Running Prehook",
             DeployStep::PostHook => "Running Posthook",
-            _ => unreachable!(),
+            _ => panic!("{:?} is not a valid step.", hook_type),
         },
         group.yellow().to_string().as_str(),
     );

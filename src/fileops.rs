@@ -2,18 +2,20 @@
 //!
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
+use crate::utils;
 use owo_colors::OwoColorize;
 use std::fs;
 use std::io::{self, Write};
 use std::process::ExitCode;
 use tabled::TableIteratorExt;
 
-use crate::utils;
-
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
     // --- Getting user confirmation ---
-    print!("Are you sure you want to convert your dotfiles to tuckr?\nAll files starting with a dot will be ignored (y/N) ");
+    print!(
+        "Are you sure you want to convert your dotfiles to tuckr?\n\
+        All files starting with a dot will be ignored (y/N) "
+    );
     io::stdout().flush().unwrap();
 
     let mut answer = String::new();
