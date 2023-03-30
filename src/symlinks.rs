@@ -45,12 +45,9 @@ impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it dotfiles' status information
     fn try_new() -> Result<Self, ExitCode> {
         let dotfiles_dir = match utils::get_dotfiles_path() {
-            Some(dir) => dir,
-            None => {
-                eprintln!(
-                    "{}",
-                    "Could not find dotfiles, make sure it's in the right path".red()
-                );
+            Ok(dir) => dir,
+            Err(e) => {
+                eprintln!("{e}");
                 return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
             }
         };

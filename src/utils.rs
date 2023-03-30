@@ -26,22 +26,22 @@ pub fn has_valid_target(group: &str) -> bool {
 }
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
-pub fn get_dotfiles_path() -> Option<path::PathBuf> {
+pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
     let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
     let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
     if home_dotfiles.exists() {
-        Some(home_dotfiles)
+        Ok(home_dotfiles)
     } else if config_dotfiles.exists() {
-        Some(config_dotfiles)
+        Ok(config_dotfiles)
     } else if cfg!(test) {
-        Some(
-            std::env::temp_dir()
-                .join(format!("tuckr-{}", std::process::id()))
-                .join("dotfiles"),
-        )
+        Ok(std::env::temp_dir()
+            .join(format!("tuckr-{}", std::process::id()))
+            .join("dotfiles"))
     } else {
-        None
+        Err(format!("Couldn't find dotfiles directory.\n\
+            Initialize your dotfiles with `tuckr init` or make sure the dotfiles are set on either {} or {}.", 
+            config_dotfiles.to_str().unwrap(), home_dotfiles.to_str().unwrap()))
     }
 }
 
@@ -107,7 +107,7 @@ pub fn group_dir_map<F: FnMut(fs::DirEntry)>(dir: path::PathBuf, mut func: F) {
 
 /// Prints a single row info box with title on the left
 /// and content on the right
- pub fn print_info_box(title: &str, content: &str) {
+pub fn print_info_box(title: &str, content: &str) {
     let mut hook_box = tabled::builder::Builder::default()
         .set_columns([title])
         .add_record([content])

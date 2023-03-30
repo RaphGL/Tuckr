@@ -63,9 +63,12 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
         group.yellow().to_string().as_str(),
     );
 
-    let Some(dotfiles_dir) =  utils::get_dotfiles_path() else {
-            eprintln!("{}", "Could not find dotfiles directory".red());
+    let dotfiles_dir = match utils::get_dotfiles_path() {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("{e}");
             return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+        }
     };
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
@@ -154,12 +157,9 @@ pub fn set_cmd(
 
     if groups.contains(&'*'.to_string()) {
         let dotfiles_dir = match utils::get_dotfiles_path() {
-            Some(dir) => dir.join("Hooks"),
-            None => {
-                eprintln!(
-                    "{}",
-                    "Could not find the Hooks directory in your dotfiles".red()
-                );
+            Ok(dir) => dir.join("Hooks"),
+            Err(e) => {
+                eprintln!("{e}",);
                 return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
             }
         };

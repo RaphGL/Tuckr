@@ -3,32 +3,42 @@
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
 use owo_colors::OwoColorize;
+use std::fs;
 use std::io::{self, Write};
 use std::process::ExitCode;
-use std::{env, fs, path};
 use tabled::TableIteratorExt;
 
 use crate::utils;
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
-    print!("Are you sure you want to convert the current directory to tuckr?\nAll files starting with a dot will be ignored (y/N) ");
+    // --- Getting user confirmation ---
+    print!("Are you sure you want to convert your dotfiles to tuckr?\nAll files starting with a dot will be ignored (y/N) ");
     io::stdout().flush().unwrap();
 
     let mut answer = String::new();
     io::stdin().read_line(&mut answer).unwrap();
-    let answer = answer.to_lowercase().trim().to_owned();
+    let answer = answer.trim().to_lowercase();
 
     match answer.as_str() {
         "yes" | "y" => (),
         _ => return Ok(()),
     }
 
-    init_cmd()?;
+    // --- initializing required directory ---
+    let dotfiles_dir = match utils::get_dotfiles_path() {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("{e}");
+            return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+        }
+    };
 
-    let cwd = env::current_dir().unwrap();
-    let curr_path = cwd.to_str().unwrap();
-    let cwd = fs::read_dir(&cwd).expect("Could not open current directory");
+    let configs_path = dotfiles_dir.join("Configs");
+    fs::create_dir_all(&configs_path).expect("Could not create required directory.");
+
+    // --- Moving dotfiles to Configs/ ---
+    let cwd = fs::read_dir(&dotfiles_dir).expect("Could not open current directory");
     const IGNORED_FILES: &[&str] = &["COPYING", "LICENSE", "README.md"];
 
     for dir in cwd {
@@ -38,15 +48,13 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
             continue;
         }
 
-        let path = path::PathBuf::from(curr_path)
-            .join("Configs")
-            .join(&dirname);
+        let path = configs_path.join(&dirname);
 
         if !dirname.ends_with("Configs")
             && !dirname.ends_with("Hooks")
             && !dirname.ends_with("Secrets")
         {
-            fs::rename(dir.path().to_str().unwrap(), path).expect("Could not move files");
+            fs::rename(dir.path(), path).expect("Could not move files");
         }
     }
 
@@ -56,24 +64,35 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_cmd() -> Result<(), ExitCode> {
     macro_rules! create_dirs {
-        ($($dirname: literal),+) => {
+        ($($dirname: expr),+) => {
             $(
-            if let Err(e) = fs::create_dir($dirname) {
+            if let Err(e) = fs::create_dir_all($dirname) {
                 eprintln!("{}", e.red());
                 return Err(ExitCode::FAILURE);
             })+
         };
     }
 
-    create_dirs!("Configs", "Hooks", "Secrets");
+    let dotfiles_dir = dirs::config_dir().unwrap().join("dotfiles");
+
+    create_dirs!(
+        dotfiles_dir.join("Configs"),
+        dotfiles_dir.join("Hooks"),
+        dotfiles_dir.join("Secrets")
+    );
+
+    println!(
+        "A dotfiles directory has been created on {}.",
+        dotfiles_dir.to_str().unwrap()
+    );
 
     Ok(())
 }
 
 fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     let dir = match utils::get_dotfiles_path() {
-        Some(dir) => dir.join(dirname),
-        None => return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES)),
+        Ok(dir) => dir.join(dirname),
+        Err(_) => return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES)),
     };
 
     let dirs = match fs::read_dir(dir) {

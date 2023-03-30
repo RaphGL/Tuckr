@@ -35,9 +35,12 @@ impl SecretsHandler {
         // zeroes sensitive information from memory
         input_key.zeroize();
 
-        let Some(dotfiles_dir) = utils::get_dotfiles_path() else {
-                eprintln!("{}", "Couldn't find dotfiles directory".red());
+        let dotfiles_dir = match utils::get_dotfiles_path() {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("{e}");
                 return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+            }
         };
 
         Ok(SecretsHandler {
