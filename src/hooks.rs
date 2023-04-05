@@ -7,14 +7,13 @@
 //! 3. Post setup scripts are run
 
 use crate::symlinks;
-use crate::utils;
+use crate::utils::{self, DotfileGroup};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 enum DeployStep {
     Initialize, // Default value before starting deployment
     PreHook,
@@ -131,43 +130,46 @@ pub fn set_cmd(
     force: bool,
     adopt: bool,
 ) -> Result<(), ExitCode> {
-    let run_deploy_steps = |step: DeployStages, group: &str| -> Result<(), ExitCode> {
-        if !utils::has_valid_target(group) {
+    let run_deploy_steps = |step: DeployStages, group: DotfileGroup| -> Result<(), ExitCode> {
+        if !group.is_valid_target() {
             return Ok(());
         }
 
+        let group_name = group.to_group_name().unwrap();
         for i in step {
             match i {
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_hook(group, DeployStep::PreHook)?;
+                    run_hook(group_name, DeployStep::PreHook)?;
                 }
 
                 DeployStep::Symlink => {
-                    utils::print_info_box("Symlinking group", group.yellow().to_string().as_str());
+                    utils::print_info_box(
+                        "Symlinking group",
+                        group_name.yellow().to_string().as_str(),
+                    );
                     symlinks::add_cmd(groups, exclude, force, adopt)?;
                 }
 
-                DeployStep::PostHook => run_hook(group, DeployStep::PostHook)?,
+                DeployStep::PostHook => run_hook(group_name, DeployStep::PostHook)?,
             }
         }
 
         Ok(())
     };
 
-    if groups.contains(&'*'.to_string()) {
-        let dotfiles_dir = match utils::get_dotfiles_path() {
-            Ok(dir) => dir.join("Hooks"),
-            Err(e) => {
-                eprintln!("{e}",);
-                return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
-            }
-        };
+    let hooks_dir = match utils::get_dotfiles_path() {
+        Ok(dir) => dir.join("Hooks"),
+        Err(e) => {
+            eprintln!("{e}",);
+            return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+        }
+    };
 
-        for folder in fs::read_dir(dotfiles_dir).unwrap() {
-            let folder = folder.unwrap().path();
-            let group = utils::to_group_name(folder.to_str().unwrap()).unwrap();
+    if groups.contains(&'*'.to_string()) {
+        for folder in fs::read_dir(hooks_dir).unwrap() {
+            let group = DotfileGroup::from(folder.unwrap().path());
             run_deploy_steps(DeployStages::new(), group)?;
         }
 
@@ -175,6 +177,7 @@ pub fn set_cmd(
     }
 
     for group in groups {
+        let group = DotfileGroup::from(hooks_dir.join(group));
         run_deploy_steps(DeployStages::new(), group)?;
     }
 

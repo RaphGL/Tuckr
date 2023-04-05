@@ -2,7 +2,7 @@
 //!
 //! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
 
-use crate::utils;
+use crate::utils::{self, DotfileGroup};
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
 use rand::rngs;
@@ -131,15 +131,16 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
     let dest_dir = std::env::current_dir().unwrap();
 
-    let decrypt_group = |group: &String| -> Result<(), ExitCode> {
-        if exclude.contains(group) || !utils::has_valid_target(group) {
+    let decrypt_group = |group: DotfileGroup| -> Result<(), ExitCode> {
+        let group_name = group.to_group_name().unwrap().to_string();
+        if exclude.contains(&group_name) || group.is_valid_target() {
             return Ok(());
         }
 
-        let group_dir = handler.dotfiles_dir.join("Secrets").join(group);
+        let group_dir = handler.dotfiles_dir.join("Secrets").join(&group_name);
         for secret in WalkDir::new(group_dir) {
             let Ok(secret) = secret else {
-                    eprintln!("{}", (group.to_owned() + " does not exist.").red());
+                    eprintln!("{}", (group_name.to_owned() + " does not exist.").red());
                     return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
             };
 
@@ -158,15 +159,16 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
     if groups.contains(&"*".to_string()) {
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
-            let group = group.unwrap().file_name();
-            decrypt_group(&group.to_str().unwrap().to_string())?;
+            let group = DotfileGroup::from(group.unwrap().path());
+            decrypt_group(group)?;
         }
 
         return Ok(());
     }
 
     for group in groups {
-        decrypt_group(group)?;
+        let group = handler.dotfiles_dir.join("Secrets").join(group);
+        decrypt_group(DotfileGroup::from(group))?;
     }
 
     Ok(())
