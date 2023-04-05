@@ -2,7 +2,7 @@
 //!
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
-use crate::utils;
+use crate::utils::{self, ReturnCode};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::io::{self, Write};
@@ -32,7 +32,7 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");
-            return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+            return Err(ExitCode::from(ReturnCode::NoSetupFolder));
         }
     };
 
@@ -94,7 +94,7 @@ pub fn init_cmd() -> Result<(), ExitCode> {
 fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     let dir = match utils::get_dotfiles_path() {
         Ok(dir) => dir.join(dirname),
-        Err(_) => return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES)),
+        Err(_) => return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles)),
     };
 
     let dirs = match fs::read_dir(dir) {
@@ -102,7 +102,7 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
             .into_iter()
             .map(|dir| dir.unwrap().file_name().to_str().unwrap().to_string()),
 
-        Err(_) => return Err(ExitCode::from(utils::NO_SETUP_FOLDER)),
+        Err(_) => return Err(ExitCode::from(ReturnCode::NoSetupFolder)),
     };
 
     let mut dirs_table = dirs.table();

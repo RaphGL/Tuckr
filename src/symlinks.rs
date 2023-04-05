@@ -10,7 +10,7 @@
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
 //! $HOME equivalents are pointing to them and categorizing them accordingly.
 
-use crate::utils::{self, DotfileGroup};
+use crate::utils::{self, DotfileGroup, ReturnCode};
 use owo_colors::OwoColorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -48,7 +48,7 @@ impl SymlinkHandler {
             Ok(dir) => dir,
             Err(e) => {
                 eprintln!("{e}");
-                return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+                return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
             }
         };
 
@@ -73,7 +73,7 @@ impl SymlinkHandler {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
         let Ok(dir) = fs::read_dir(self.dotfiles_dir.join("Configs")) else {
                 eprintln!("{}", "There's no Configs folder set up".red());
-                return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+                return Err(ExitCode::from(ReturnCode::NoSetupFolder));
         };
 
         for file in dir {
@@ -675,5 +675,7 @@ mod tests {
             Err(_) => true,
             Ok(link) => link != *config_file,
         });
+
+        _ = fs::remove_dir(group_dir.as_path());
     }
 }

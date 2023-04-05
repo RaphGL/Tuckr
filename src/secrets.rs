@@ -2,7 +2,7 @@
 //!
 //! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
 
-use crate::utils::{self, DotfileGroup};
+use crate::utils::{self, DotfileGroup, ReturnCode};
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
 use rand::rngs;
@@ -39,7 +39,7 @@ impl SecretsHandler {
             Ok(path) => path,
             Err(e) => {
                 eprintln!("{e}");
-                return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+                return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
             }
         };
 
@@ -58,14 +58,14 @@ impl SecretsHandler {
                     "{}",
                     format!("{} {}", "No such file or directory: ", dotfile).red()
                 );
-                return Err(ExitCode::from(utils::NO_SUCH_FILE_OR_DIR));
+                return Err(ExitCode::from(ReturnCode::NoSuchFileOrDir));
         };
 
         match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
             Ok(f) => Ok(f),
             Err(e) => {
                 eprintln!("{}", e.red());
-                Err(ExitCode::from(utils::ENCRYPTION_FAILED))
+                Err(ExitCode::from(ReturnCode::EncryptionFailed))
             }
         }
     }
@@ -82,7 +82,7 @@ impl SecretsHandler {
             Ok(f) => Ok(f),
             Err(_) => {
                 eprintln!("{}", "Wrong password.".red());
-                Err(ExitCode::from(utils::DECRYPTION_FAILED))
+                Err(ExitCode::from(ReturnCode::DecryptionFailed))
             }
         }
     }
@@ -140,8 +140,8 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
         let group_dir = handler.dotfiles_dir.join("Secrets").join(&group_name);
         for secret in WalkDir::new(group_dir) {
             let Ok(secret) = secret else {
-                    eprintln!("{}", (group_name.to_owned() + " does not exist.").red());
-                    return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+                    eprintln!("{}", (group_name + " does not exist.").red());
+                    return Err(ExitCode::from(ReturnCode::NoSetupFolder));
             };
 
             if secret.file_type().is_dir() {

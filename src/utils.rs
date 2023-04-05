@@ -4,19 +4,27 @@ use std::env;
 use std::fs;
 use std::ops::Deref;
 use std::ops::DerefMut;
-use std::path;
+use std::{path, process};
 
 // Exit codes
 /// Couldn't find the dotfiles directory
-pub const COULDNT_FIND_DOTFILES: u8 = 2;
-/// No Configs/Hooks/Secrets folder setup
-pub const NO_SETUP_FOLDER: u8 = 3;
-/// Referenced file does not exist in the current directory
-pub const NO_SUCH_FILE_OR_DIR: u8 = 4;
-/// Failed to encrypt referenced file
-pub const ENCRYPTION_FAILED: u8 = 5;
-/// Failed to decrypt referenced file
-pub const DECRYPTION_FAILED: u8 = 6;
+pub enum ReturnCode {
+    CouldntFindDotfiles = 2,
+    /// No Configs/Hooks/Secrets folder setup
+    NoSetupFolder = 3,
+    /// Referenced file does not exist in the current directory
+    NoSuchFileOrDir = 4,
+    /// Failed to encrypt referenced file
+    EncryptionFailed = 5,
+    /// Failed to decrypt referenced file
+    DecryptionFailed = 6,
+}
+
+impl From<ReturnCode> for process::ExitCode {
+    fn from(value: ReturnCode) -> Self {
+        Self::from(value as u8)
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct DotfileGroup(path::PathBuf);

@@ -7,7 +7,7 @@
 //! 3. Post setup scripts are run
 
 use crate::symlinks;
-use crate::utils::{self, DotfileGroup};
+use crate::utils::{self, DotfileGroup, ReturnCode};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::path::PathBuf;
@@ -67,14 +67,14 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("{e}");
-            return Err(ExitCode::from(utils::COULDNT_FIND_DOTFILES));
+            return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
         }
     };
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
     let Ok(group_dir) = fs::read_dir(group_dir) else {
             eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
-            return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+            return Err(ExitCode::from(ReturnCode::NoSetupFolder));
     };
 
     for file in group_dir {
@@ -163,7 +163,7 @@ pub fn set_cmd(
         Ok(dir) => dir.join("Hooks"),
         Err(e) => {
             eprintln!("{e}",);
-            return Err(ExitCode::from(utils::NO_SETUP_FOLDER));
+            return Err(ExitCode::from(ReturnCode::NoSetupFolder));
         }
     };
 
