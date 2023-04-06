@@ -67,14 +67,14 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("{e}");
-            return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
+            return Err(ReturnCode::CouldntFindDotfiles.into());
         }
     };
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
     let Ok(group_dir) = fs::read_dir(group_dir) else {
             eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
-            return Err(ExitCode::from(ReturnCode::NoSetupFolder));
+            return Err(ReturnCode::NoSetupFolder.into());
     };
 
     for file in group_dir {
@@ -163,7 +163,7 @@ pub fn set_cmd(
         Ok(dir) => dir.join("Hooks"),
         Err(e) => {
             eprintln!("{e}",);
-            return Err(ExitCode::from(ReturnCode::NoSetupFolder));
+            return Err(ReturnCode::NoSetupFolder.into());
         }
     };
 

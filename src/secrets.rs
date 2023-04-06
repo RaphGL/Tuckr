@@ -39,7 +39,7 @@ impl SecretsHandler {
             Ok(path) => path,
             Err(e) => {
                 eprintln!("{e}");
-                return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
+                return Err(ReturnCode::CouldntFindDotfiles.into());
             }
         };
 
@@ -58,14 +58,14 @@ impl SecretsHandler {
                     "{}",
                     format!("{} {}", "No such file or directory: ", dotfile).red()
                 );
-                return Err(ExitCode::from(ReturnCode::NoSuchFileOrDir));
+                return Err(ReturnCode::NoSuchFileOrDir.into());
         };
 
         match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
             Ok(f) => Ok(f),
             Err(e) => {
                 eprintln!("{}", e.red());
-                Err(ExitCode::from(ReturnCode::EncryptionFailed))
+                Err(ReturnCode::EncryptionFailed.into())
             }
         }
     }
@@ -82,7 +82,7 @@ impl SecretsHandler {
             Ok(f) => Ok(f),
             Err(_) => {
                 eprintln!("{}", "Wrong password.".red());
-                Err(ExitCode::from(ReturnCode::DecryptionFailed))
+                Err(ReturnCode::DecryptionFailed.into())
             }
         }
     }
@@ -141,7 +141,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
         for secret in WalkDir::new(group_dir) {
             let Ok(secret) = secret else {
                     eprintln!("{}", (group_name + " does not exist.").red());
-                    return Err(ExitCode::from(ReturnCode::NoSetupFolder));
+                    return Err(ReturnCode::NoSetupFolder.into());
             };
 
             if secret.file_type().is_dir() {

@@ -32,7 +32,7 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");
-            return Err(ExitCode::from(ReturnCode::NoSetupFolder));
+            return Err(ReturnCode::NoSetupFolder.into());
         }
     };
 
@@ -94,7 +94,7 @@ pub fn init_cmd() -> Result<(), ExitCode> {
 fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     let dir = match utils::get_dotfiles_path() {
         Ok(dir) => dir.join(dirname),
-        Err(_) => return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles)),
+        Err(_) => return Err(ReturnCode::CouldntFindDotfiles.into()),
     };
 
     let dirs = match fs::read_dir(dir) {
@@ -102,7 +102,7 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
             .into_iter()
             .map(|dir| dir.unwrap().file_name().to_str().unwrap().to_string()),
 
-        Err(_) => return Err(ExitCode::from(ReturnCode::NoSetupFolder)),
+        Err(_) => return Err(ReturnCode::NoSetupFolder.into()),
     };
 
     let mut dirs_table = dirs.table();

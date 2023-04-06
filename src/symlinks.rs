@@ -48,7 +48,7 @@ impl SymlinkHandler {
             Ok(dir) => dir,
             Err(e) => {
                 eprintln!("{e}");
-                return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
+                return Err(ReturnCode::CouldntFindDotfiles.into());
             }
         };
 
@@ -73,7 +73,7 @@ impl SymlinkHandler {
         // Opens and loops through each of Dotfiles/Configs' dotfiles
         let Ok(dir) = fs::read_dir(self.dotfiles_dir.join("Configs")) else {
                 eprintln!("{}", "There's no Configs folder set up".red());
-                return Err(ExitCode::from(ReturnCode::NoSetupFolder));
+                return Err(ReturnCode::NoSetupFolder.into());
         };
 
         for file in dir {
