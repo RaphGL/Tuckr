@@ -92,6 +92,12 @@ enum Cli {
         exclude: Vec<String>,
     },
 
+    /// Copy files into groups
+    Push { group: String, files: Vec<String> },
+
+    /// Remove groups from dotfiles/Configs
+    Pop { groups: Vec<String> },
+
     /// List available hooks
     LsHooks,
 
@@ -133,6 +139,8 @@ fn main() -> ExitCode {
         Cli::Init => fileops::init_cmd(),
         Cli::LsHooks => fileops::ls_hooks_cmd(),
         Cli::LsSecrets => fileops::ls_secrets_cmd(),
+        Cli::Push { group, files } => fileops::push_cmd(group, &files),
+        Cli::Pop { groups } => fileops::pop_cmd(&groups),
     };
 
     match exit_code {

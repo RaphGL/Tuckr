@@ -6,6 +6,7 @@ use crate::utils::{self, ReturnCode};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use tabled::TableIteratorExt;
 
@@ -87,6 +88,85 @@ pub fn init_cmd() -> Result<(), ExitCode> {
         "A dotfiles directory has been created on {}.",
         dotfiles_dir.to_str().unwrap()
     );
+
+    Ok(())
+}
+
+pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match utils::get_dotfiles_path() {
+        Ok(dir) => dir.join("Configs").join(group),
+        Err(e) => {
+            eprintln!("{e}");
+            return Err(ReturnCode::CouldntFindDotfiles.into());
+        }
+    };
+
+    let home_dir = dirs::home_dir().unwrap();
+
+    for file in files {
+        let file = PathBuf::from(file).canonicalize().unwrap();
+        let target_file = dotfiles_dir.join(file.strip_prefix(&home_dir).unwrap());
+        let target_dir = target_file.parent().unwrap();
+
+        if !target_dir.exists() {
+            fs::create_dir_all(target_dir).unwrap();
+            fs::copy(file, target_file).unwrap();
+        } else {
+            println!(
+                "{} already exists. Do you want to override it? (y/N)",
+                target_file.to_str().unwrap()
+            );
+            std::io::stdout().flush().unwrap();
+            let mut confirmation = String::new();
+            std::io::stdin().read_line(&mut confirmation).unwrap();
+
+            let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
+
+            if confirmed {
+                fs::create_dir_all(target_dir).unwrap();
+                fs::copy(file, target_file).unwrap();
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match utils::get_dotfiles_path() {
+        Ok(dir) => dir.join("Configs"),
+        Err(e) => {
+            eprintln!("{e}");
+            return Err(ReturnCode::CouldntFindDotfiles.into());
+        }
+    };
+
+    println!("The following groups will be removed:");
+    for group in groups {
+        print!("\t{}", group.yellow());
+    }
+    print!("\n\nDo you want to proceed? (y/N) ");
+    std::io::stdout().flush().unwrap();
+    let mut confirmation = String::new();
+    std::io::stdin().read_line(&mut confirmation).unwrap();
+
+    let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
+
+    if !confirmed {
+        return Ok(());
+    }
+
+    for group in groups {
+        let group_dir = dotfiles_dir.join(group);
+        if !group_dir.exists() {
+            eprintln!("{group} does not exist.");
+            return Err(ReturnCode::NoSuchFileOrDir.into());
+        }
+
+        if group_dir.is_dir() {
+            fs::remove_dir_all(group_dir).unwrap();
+        }
+    }
 
     Ok(())
 }
