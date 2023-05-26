@@ -19,17 +19,18 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
-fn symlink_file(f: fs::DirEntry) {
-    let target_path = DotfileGroup::from(f.path()).to_home_path();
+fn symlink_file(f: PathBuf) {
+    let src_path = f;
+    let target_path = DotfileGroup::from(src_path.clone()).to_target_path();
 
     #[cfg(target_family = "unix")]
     {
-        _ = std::os::unix::fs::symlink(f.path(), target_path);
+        _ = std::os::unix::fs::symlink(src_path, target_path);
     }
 
     #[cfg(target_family = "windows")]
     {
-        _ = std::os::windows::fs::symlink_file(f.path(), target_path);
+        _ = std::os::windows::fs::symlink_file(src_path, target_path);
     }
 }
 
@@ -83,10 +84,9 @@ impl SymlinkHandler {
                 continue;
             }
 
-            // Checks for the files in each of the groups' dirs
             group_dir.map(|f| {
-                let config_file = DotfileGroup::from(f.path());
-                let home_config_file = config_file.to_home_path();
+                let config_file = DotfileGroup::from(f.into());
+                let home_config_file = config_file.to_target_path();
 
                 match fs::read_link(&home_config_file) {
                     Ok(f) => {
@@ -173,8 +173,8 @@ impl SymlinkHandler {
 
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
     fn remove(&self, group: &str) {
-        let remove_symlink = |file: fs::DirEntry| {
-            let dotfile = DotfileGroup::from(file.path()).to_home_path();
+        let remove_symlink = |file: PathBuf| {
+            let dotfile = DotfileGroup::from(file.into()).to_target_path();
             if let Ok(linked) = fs::read_link(&dotfile) {
                 let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                 let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
@@ -288,7 +288,7 @@ pub fn add_cmd(
     fn handle_conflicting_files(
         sym: &SymlinkHandler,
         group: &str,
-        handle_conflict: impl Fn(fs::DirEntry, &PathBuf),
+        handle_conflict: impl Fn(PathBuf, &PathBuf),
     ) {
         for files in sym.not_owned.values() {
             for file in files {
@@ -309,8 +309,8 @@ pub fn add_cmd(
             // Symlink dotfile by force
             if force {
                 handle_conflicting_files(sym, group, |group_file, file| {
-                    let group_file = DotfileGroup::from(group_file.path());
-                    if &group_file.to_home_path() == file {
+                    let group_file = DotfileGroup::from(group_file.into());
+                    if &group_file.to_target_path() == file {
                         if file.is_dir() {
                             _ = fs::remove_dir_all(file);
                         } else {
@@ -324,8 +324,8 @@ pub fn add_cmd(
             if adopt {
                 handle_conflicting_files(sym, group, |group_file, file| {
                     // only adopts dotfile if it matches requested group
-                    let group_file = DotfileGroup::from(group_file.path());
-                    if &group_file.to_home_path() == file {
+                    let group_file = DotfileGroup::from(group_file.into());
+                    if &group_file.to_target_path() == file {
                         if group_file.is_dir() {
                             _ = fs::remove_dir(group_file.as_path());
                         } else {
@@ -544,7 +544,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
             if let Some(conflicts) = sym.not_owned.get(&group.to_string()) {
                 println!("Conflicting files:");
                 for conflict in conflicts {
-                    let conflict = DotfileGroup::from(conflict.to_owned()).to_home_path();
+                    let conflict = DotfileGroup::from(conflict.to_owned()).to_target_path();
                     println!("\t{} -> {}", group.yellow(), conflict.to_str().unwrap());
                 }
                 println!();
@@ -640,13 +640,13 @@ mod tests {
         sym.add(group_name);
 
         let file = DotfileGroup::from(group_dir.join("group.test"));
-        assert!(match fs::read_link(file.to_home_path()) {
+        assert!(match fs::read_link(file.to_target_path()) {
             Ok(link) => link == *file,
             Err(_) => false,
         });
 
         let config_file = DotfileGroup::from(group_dir.clone().join(".config").join("group.test"));
-        assert!(match fs::read_link(config_file.to_home_path()) {
+        assert!(match fs::read_link(config_file.to_target_path()) {
             Ok(link) => link == *config_file,
             Err(_) => false,
         });
@@ -665,13 +665,13 @@ mod tests {
         sym.remove(group_name);
 
         let file = DotfileGroup::from(group_dir.join("group.test"));
-        assert!(match fs::read_link(file.to_home_path()) {
+        assert!(match fs::read_link(file.to_target_path()) {
             Err(_) => true,
             Ok(link) => link != *file,
         });
 
         let config_file = DotfileGroup::from(group_dir.clone().join(".config").join("group.test"));
-        assert!(match fs::read_link(config_file.to_home_path()) {
+        assert!(match fs::read_link(config_file.to_target_path()) {
             Err(_) => true,
             Ok(link) => link != *config_file,
         });
