@@ -85,7 +85,7 @@ impl SymlinkHandler {
             }
 
             group_dir.map(|f| {
-                let config_file = DotfileGroup::from(f.into());
+                let config_file = DotfileGroup::from(f);
                 let home_config_file = config_file.to_target_path();
 
                 match fs::read_link(&home_config_file) {
@@ -174,7 +174,7 @@ impl SymlinkHandler {
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
     fn remove(&self, group: &str) {
         let remove_symlink = |file: PathBuf| {
-            let dotfile = DotfileGroup::from(file.into()).to_target_path();
+            let dotfile = DotfileGroup::from(file).to_target_path();
             if let Ok(linked) = fs::read_link(&dotfile) {
                 let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                 let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
@@ -309,7 +309,7 @@ pub fn add_cmd(
             // Symlink dotfile by force
             if force {
                 handle_conflicting_files(sym, group, |group_file, file| {
-                    let group_file = DotfileGroup::from(group_file.into());
+                    let group_file = DotfileGroup::from(group_file);
                     if &group_file.to_target_path() == file {
                         if file.is_dir() {
                             _ = fs::remove_dir_all(file);
@@ -324,7 +324,7 @@ pub fn add_cmd(
             if adopt {
                 handle_conflicting_files(sym, group, |group_file, file| {
                     // only adopts dotfile if it matches requested group
-                    let group_file = DotfileGroup::from(group_file.into());
+                    let group_file = DotfileGroup::from(group_file);
                     if &group_file.to_target_path() == file {
                         if group_file.is_dir() {
                             _ = fs::remove_dir(group_file.as_path());

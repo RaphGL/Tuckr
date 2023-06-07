@@ -7,8 +7,7 @@ use owo_colors::OwoColorize;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::ExitCode;
-use tabled::TableIteratorExt;
+use std::process::{Command, ExitCode};
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
@@ -177,25 +176,17 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
         Err(_) => return Err(ReturnCode::CouldntFindDotfiles.into()),
     };
 
-    let dirs = match fs::read_dir(dir) {
-        Ok(dir) => dir
-            .into_iter()
-            .map(|dir| dir.unwrap().file_name().to_str().unwrap().to_string()),
-
-        Err(_) => return Err(ReturnCode::NoSetupFolder.into()),
-    };
-
-    let mut dirs_table = dirs.table();
-    dirs_table
-        .with(tabled::Style::empty())
-        .with(tabled::Disable::row(tabled::object::FirstRow));
-    // TODO: add back once tabled::Split is available
-    //.with(tabled::Rotate::Left)
-    //.with(tabled::Disable::column(tabled::object::FirstColumn));
-
-    println!("{dirs_table}");
-
-    Ok(())
+    match Command::new(if cfg!(target_family = "unix") {
+        "ls"
+    } else {
+        "dir"
+    })
+    .arg(dir)
+    .spawn()
+    {
+        Ok(_) => Ok(()),
+        Err(_) => Err(ExitCode::FAILURE),
+    }
 }
 
 pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
