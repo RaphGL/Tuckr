@@ -182,7 +182,7 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
         "dir"
     })
     .arg(dir)
-    .spawn()
+    .status()
     {
         Ok(_) => Ok(()),
         Err(_) => Err(ExitCode::FAILURE),
