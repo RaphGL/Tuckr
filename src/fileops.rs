@@ -93,7 +93,7 @@ pub fn init_cmd() -> Result<(), ExitCode> {
 
 pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
     let dotfiles_dir = match utils::get_dotfiles_path() {
-        Ok(dir) => dir.join("Configs").join(group),
+        Ok(dir) => dir.join("Configs").join(&group),
         Err(e) => {
             eprintln!("{e}");
             return Err(ReturnCode::CouldntFindDotfiles.into());
@@ -101,6 +101,11 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
     };
 
     let home_dir = dirs::home_dir().unwrap();
+    
+    if files.len() == 0 {
+        eprintln!("No files were provided to push to {}.", group);
+        return Err(ExitCode::FAILURE);
+    }
 
     for file in files {
         let file = PathBuf::from(file).canonicalize().unwrap();
@@ -140,6 +145,25 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
         }
     };
 
+    let mut valid_groups = Vec::new();
+    let mut invalid_groups = Vec::new();
+    for group in groups {
+        let group_dir = dotfiles_dir.join(group);
+        if !group_dir.exists() {
+            invalid_groups.push(group);
+        } else {
+            valid_groups.push(group_dir);
+        }
+    }
+
+    if invalid_groups.len() > 0 {
+        for group in invalid_groups {
+            eprintln!("{} does not exist.", group);
+        }
+
+        return Err(ReturnCode::NoSuchFileOrDir.into());
+    }
+
     println!("The following groups will be removed:");
     for group in groups {
         print!("\t{}", group.yellow());
@@ -155,15 +179,9 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    for group in groups {
-        let group_dir = dotfiles_dir.join(group);
-        if !group_dir.exists() {
-            eprintln!("{group} does not exist.");
-            return Err(ReturnCode::NoSuchFileOrDir.into());
-        }
-
-        if group_dir.is_dir() {
-            fs::remove_dir_all(group_dir).unwrap();
+    for group in valid_groups {
+        if group.is_dir() {
+            fs::remove_dir_all(group).unwrap();
         }
     }
 
