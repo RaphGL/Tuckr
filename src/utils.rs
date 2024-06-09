@@ -1,10 +1,8 @@
 //! A set of helper functions that reduce boilerplate
 
 use std::env;
-use std::ops::Deref;
-use std::ops::DerefMut;
-use std::{path, process};
 use std::fs;
+use std::{path, process};
 
 // Exit codes
 /// Couldn't find the dotfiles directory
@@ -27,32 +25,54 @@ impl From<ReturnCode> for process::ExitCode {
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]
-pub struct DotfileGroup(path::PathBuf);
-
-impl Deref for DotfileGroup {
-    type Target = path::PathBuf;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for DotfileGroup {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
+pub struct DotfileGroup {
+    pub path: path::PathBuf,
+    pub name: String,
 }
 
 impl DotfileGroup {
-    pub fn from(group_path: path::PathBuf) -> DotfileGroup {
-        DotfileGroup(group_path)
+    pub fn from(group_path: path::PathBuf) -> Option<DotfileGroup> {
+        /// Extracts group name from tuckr directories
+        pub fn to_group_name(group_path: &path::PathBuf) -> Option<String> {
+            let path = group_path.to_str().unwrap();
+            let dir = if path.contains("Configs") {
+                "Configs"
+            } else if path.contains("Hooks") {
+                "Hooks"
+            } else if path.contains("Secrets") {
+                "Secrets"
+            } else {
+                return None;
+            };
+
+            // uses join("") so that the path appends / or \ depending on platform
+            let config_path = path::PathBuf::from("dotfiles").join(dir).join("");
+            let path = path.split_once(config_path.to_str().unwrap())?.1;
+
+            if let Some(path) = path.split_once(path::MAIN_SEPARATOR) {
+                return Some(path.0.to_string());
+            }
+
+            Some(path.to_string())
+        }
+
+        let group_str = group_path.to_str().unwrap();
+        Some(DotfileGroup {
+            name: if !group_str.contains(path::MAIN_SEPARATOR) {
+                group_str.to_string()
+            } else {
+                to_group_name(&group_path)?
+            },
+            path: group_path,
+        })
     }
 
+    /// Returns true if the target can be used by the current platform
     pub fn is_valid_target(&self) -> bool {
         // Gets the current OS and OS family
         let target_os = format!("_{}", env::consts::OS);
         let target_family = format!("_{}", env::consts::FAMILY);
-        let group = self.0.file_name().unwrap().to_str().unwrap();
+        let group = self.path.file_name().unwrap().to_str().unwrap();
 
         // returns true if a group has no suffix or its suffix matches the current OS
         group.ends_with(&target_os) || group.ends_with(&target_family) || !group.contains('_')
@@ -60,7 +80,7 @@ impl DotfileGroup {
 
     /// Checks whether the current groups is targetting the root path aka `/`
     pub fn targets_root(&self) -> bool {
-        let group = self.0.clone();
+        let group = self.path.clone();
         let dotfiles_dir = get_dotfiles_path().unwrap().join("Configs").join("Root");
         let dotfiles_dir = dotfiles_dir.to_str().unwrap();
 
@@ -76,7 +96,7 @@ impl DotfileGroup {
         // uses join("") so that the path appends / or \ depending on platform
         let dotfiles_configs_path = get_dotfiles_path().unwrap().join("Configs").join("");
         let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
-        let group_path = self.0.clone();
+        let group_path = self.path.clone();
         let group_path = {
             let group_path = group_path.to_str().unwrap();
             let group_path = group_path.strip_prefix(dotfiles_configs_path).unwrap();
@@ -93,33 +113,9 @@ impl DotfileGroup {
         }
     }
 
-    /// Extracts group name from tuckr directories
-    pub fn to_group_name(&self) -> Option<&str> {
-        let path = self.0.to_str().unwrap();
-        let dir = if path.contains("Configs") {
-            "Configs"
-        } else if path.contains("Hooks") {
-            "Hooks"
-        } else if path.contains("Secrets") {
-            "Secrets"
-        } else {
-            return None;
-        };
-
-        // uses join("") so that the path appends / or \ depending on platform
-        let config_path = path::PathBuf::from("dotfiles").join(dir).join("");
-        let path = path.split_once(config_path.to_str().unwrap()).unwrap().1;
-
-        if let Some(path) = path.split_once(path::MAIN_SEPARATOR) {
-            return Some(path.0);
-        }
-
-        Some(path)
-    }
-
     /// Goes through every file in Configs/<group_dir> and applies the function
     pub fn map<F: FnMut(path::PathBuf)>(&self, mut func: F) {
-        let dir = self.0.clone();
+        let dir = self.path.clone();
         let group_dir = match fs::read_dir(&dir) {
             Ok(f) => f,
             Err(_) => panic!("{} does not exist", dir.to_str().unwrap()),
@@ -207,7 +203,7 @@ mod tests {
 
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.zshrc
-            DotfileGroup::from(group).to_target_path(),
+            DotfileGroup::from(group).unwrap().to_target_path(),
             // /home/$USER/.zshrc
             dirs::home_dir().unwrap().join(".zshrc")
         );
@@ -233,36 +229,9 @@ mod tests {
 
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.config/$group
-            DotfileGroup::from(config_path).to_target_path(),
+            DotfileGroup::from(config_path).unwrap().to_target_path(),
             // /home/$USER/.config/$group
             dirs::config_dir().unwrap().join("group")
-        );
-    }
-
-    #[test]
-    fn to_group_name() {
-        // /home/$USER/.config/dotfiles/Configs/zsh
-        let zsh_configs = dirs::config_dir()
-            .unwrap()
-            .join("dotfiles")
-            .join("Configs")
-            .join("zsh");
-
-        assert_eq!(
-            DotfileGroup::from(zsh_configs).to_group_name().unwrap(),
-            "zsh"
-        );
-
-        // /home/$USER/.config/dotfiles/Hooks/zsh
-        let zsh_hooks = dirs::config_dir()
-            .unwrap()
-            .join("dotfiles")
-            .join("Hooks")
-            .join("zsh");
-
-        assert_eq!(
-            DotfileGroup::from(zsh_hooks).to_group_name().unwrap(),
-            "zsh"
         );
     }
 }

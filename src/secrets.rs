@@ -11,7 +11,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use walkdir::WalkDir;
-use zeroize::Zeroize;
 
 struct SecretsHandler {
     dotfiles_dir: PathBuf,
@@ -24,16 +23,7 @@ impl SecretsHandler {
         // makes a hash of the password so that it can fit on the 256 bit buffer used by the
         // algorithm
         let input_key = rpassword::prompt_password("Password: ").unwrap();
-        let mut input_key = input_key.trim().as_bytes().to_vec();
-
-        let input_hash = {
-            let mut hasher = Sha256::new();
-            hasher.update(&input_key);
-            hasher.finalize()
-        };
-
-        // zeroes sensitive information from memory
-        input_key.zeroize();
+        let input_hash = Sha256::digest(input_key);
 
         let dotfiles_dir = match utils::get_dotfiles_path() {
             Ok(path) => path,
@@ -54,11 +44,11 @@ impl SecretsHandler {
     fn encrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let Ok(dotfile) = fs::read(dotfile) else {
-                eprintln!(
-                    "{}",
-                    format!("{} {}", "No such file or directory: ", dotfile).red()
-                );
-                return Err(ReturnCode::NoSuchFileOrDir.into());
+            eprintln!(
+                "{}",
+                format!("{} {}", "No such file or directory: ", dotfile).red()
+            );
+            return Err(ReturnCode::NoSuchFileOrDir.into());
         };
 
         match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
@@ -132,16 +122,15 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
     let dest_dir = std::env::current_dir().unwrap();
 
     let decrypt_group = |group: DotfileGroup| -> Result<(), ExitCode> {
-        let group_name = group.to_group_name().unwrap().to_string();
-        if exclude.contains(&group_name) || group.is_valid_target() {
+        if exclude.contains(&group.name) || group.is_valid_target() {
             return Ok(());
         }
 
-        let group_dir = handler.dotfiles_dir.join("Secrets").join(&group_name);
+        let group_dir = handler.dotfiles_dir.join("Secrets").join(&group.name);
         for secret in WalkDir::new(group_dir) {
             let Ok(secret) = secret else {
-                    eprintln!("{}", (group_name + " does not exist.").red());
-                    return Err(ReturnCode::NoSetupFolder.into());
+                eprintln!("{}", (group.name + " does not exist.").red());
+                return Err(ReturnCode::NoSetupFolder.into());
             };
 
             if secret.file_type().is_dir() {
@@ -159,7 +148,10 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
     if groups.contains(&"*".to_string()) {
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
-            let group = DotfileGroup::from(group.unwrap().path());
+            let Some(group) = DotfileGroup::from(group.unwrap().path()) else {
+                eprintln!("Received an invalid group path.");
+                return Err(ExitCode::FAILURE);
+            };
             decrypt_group(group)?;
         }
 
@@ -168,7 +160,11 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
     for group in groups {
         let group = handler.dotfiles_dir.join("Secrets").join(group);
-        decrypt_group(DotfileGroup::from(group))?;
+        let Some(group) = DotfileGroup::from(group) else {
+            eprintln!("Received an invalid group path.");
+            return Err(ExitCode::FAILURE);
+        };
+        decrypt_group(group)?;
     }
 
     Ok(())

@@ -73,8 +73,8 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
     let Ok(group_dir) = fs::read_dir(group_dir) else {
-            eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
-            return Err(ReturnCode::NoSetupFolder.into());
+        eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
+        return Err(ReturnCode::NoSetupFolder.into());
     };
 
     for file in group_dir {
@@ -135,24 +135,23 @@ pub fn set_cmd(
             return Ok(());
         }
 
-        let group_name = group.to_group_name().unwrap();
         for i in step {
             match i {
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_hook(group_name, DeployStep::PreHook)?;
+                    run_hook(&group.name, DeployStep::PreHook)?;
                 }
 
                 DeployStep::Symlink => {
                     utils::print_info_box(
                         "Symlinking group",
-                        group_name.yellow().to_string().as_str(),
+                        group.name.yellow().to_string().as_str(),
                     );
                     symlinks::add_cmd(groups, exclude, force, adopt)?;
                 }
 
-                DeployStep::PostHook => run_hook(group_name, DeployStep::PostHook)?,
+                DeployStep::PostHook => run_hook(&group.name, DeployStep::PostHook)?,
             }
         }
 
@@ -169,7 +168,10 @@ pub fn set_cmd(
 
     if groups.contains(&'*'.to_string()) {
         for folder in fs::read_dir(hooks_dir).unwrap() {
-            let group = DotfileGroup::from(folder.unwrap().path());
+            let Some(group) = DotfileGroup::from(folder.unwrap().path()) else {
+                eprintln!("Received an invalid group path.");
+                return Err(ExitCode::FAILURE);
+            };
             run_deploy_steps(DeployStages::new(), group)?;
         }
 
@@ -177,7 +179,10 @@ pub fn set_cmd(
     }
 
     for group in groups {
-        let group = DotfileGroup::from(hooks_dir.join(group));
+        let Some(group) = DotfileGroup::from(hooks_dir.join(group)) else {
+            eprintln!("Received an invalid group path.");
+            return Err(ExitCode::FAILURE);
+        };
         run_deploy_steps(DeployStages::new(), group)?;
     }
 
