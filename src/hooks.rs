@@ -130,6 +130,14 @@ pub fn set_cmd(
     force: bool,
     adopt: bool,
 ) -> Result<(), ExitCode> {
+    if let Some(invalid_groups) = utils::check_invalid_groups(utils::DotfileType::Hooks, groups) {
+        for group in invalid_groups {
+            eprintln!("{}", format!("{group} does not exist.").red());
+        }
+
+        return Err(ReturnCode::NoSuchFileOrDir.into());
+    }
+
     let run_deploy_steps = |step: DeployStages, group: DotfileGroup| -> Result<(), ExitCode> {
         if !group.is_valid_target() {
             return Ok(());

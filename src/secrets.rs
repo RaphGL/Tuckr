@@ -117,6 +117,13 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
 
 /// Decrypts secrets
 pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    if let Some(invalid_groups) = utils::check_invalid_groups(utils::DotfileType::Secrets, groups) {
+        for group in invalid_groups {
+            eprintln!("{}", format!("{group} does not exist.").red());
+        }
+        return Err(ReturnCode::DecryptionFailed.into());
+    }
+
     let handler = SecretsHandler::try_new()?;
 
     let dest_dir = std::env::current_dir().unwrap();

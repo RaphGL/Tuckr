@@ -1,5 +1,6 @@
 //! A set of helper functions that reduce boilerplate
 
+use crate::utils;
 use std::env;
 use std::fs;
 use std::{path, process};
@@ -159,6 +160,43 @@ pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
             Initialize your dotfiles with `tuckr init` or make sure the dotfiles are set on either {} or {}.", 
             config_dotfiles.to_str().unwrap(), home_dotfiles.to_str().unwrap()))
     }
+}
+
+#[derive(Copy, Clone)]
+pub enum DotfileType {
+    Configs,
+    Secrets,
+    Hooks,
+}
+
+/// Returns if a config has been setup for <group> on <dtype>
+pub fn dotfile_contains(dtype: DotfileType, group: &str) -> bool {
+    let target_dir = match dtype {
+        DotfileType::Configs => "Configs",
+        DotfileType::Secrets => "Secrets",
+        DotfileType::Hooks => "Hooks",
+    };
+
+    let Ok(dotfiles_dir) = get_dotfiles_path() else {
+        return false;
+    };
+    let group_src = dotfiles_dir.join(target_dir).join(group);
+    group_src.exists()
+}
+
+pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec<String>> {
+    let mut invalid_groups = Vec::new();
+    for group in groups {
+        if !utils::dotfile_contains(dtype, group) {
+            invalid_groups.push(group.clone());
+        }
+    }
+
+    if !invalid_groups.is_empty() {
+        return Some(invalid_groups);
+    }
+
+    None
 }
 
 /// Prints a single row info box with title on the left

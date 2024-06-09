@@ -10,7 +10,7 @@
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
 //! $HOME equivalents are pointing to them and categorizing them accordingly.
 
-use crate::utils::{self, DotfileGroup, ReturnCode};
+use crate::utils::{self, DotfileGroup, DotfileType, ReturnCode};
 use owo_colors::OwoColorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -156,12 +156,6 @@ impl SymlinkHandler {
         }
     }
 
-    /// Returns if a config has been setup for <group>
-    fn contains(&self, group: &str) -> bool {
-        let group_src = self.dotfiles_dir.join("Configs").join(group);
-        group_src.exists()
-    }
-
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
         let groups = self.get_related_conditional_groups(group, false);
@@ -226,13 +220,7 @@ where
     let sym = SymlinkHandler::try_new()?;
 
     // detect if user provided an invalid group
-    let mut invalid_groups = Vec::new();
-    for group in groups {
-        if !sym.contains(group) && group != "*" {
-            invalid_groups.push(group);
-        }
-    }
-    if !invalid_groups.is_empty() {
+    if let Some(invalid_groups) = utils::check_invalid_groups(DotfileType::Configs, groups) {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} doesn't exist.").red());
         }
@@ -301,57 +289,46 @@ pub fn add_cmd(
         }
     }
 
-    /// Iterates through every file in group and lets the consumer compare it to the not owned file
-    /// and decide how to handle it
-    fn handle_conflicting_files(
-        sym: &SymlinkHandler,
-        group: &str,
-        handle_conflict: impl Fn(PathBuf, &PathBuf),
-    ) {
-        for files in sym.not_owned.values() {
-            for file in files {
-                // removing everything from sym.not_owned makes so sym.add() doesn't ignore those
-                // files thus forcing them to be symlinked
-                for group in sym.get_related_conditional_groups(group, false) {
-                    let group_path =
-                        DotfileGroup::from(sym.dotfiles_dir.join("Configs").join(&group.name))
-                            .unwrap();
-                    group_path.map(|group_file| handle_conflict(group_file, file));
-                }
-            }
-        }
-    }
-
     foreach_group(groups, exclude, true, |sym, group| {
         if !sym.not_owned.is_empty() {
             // Symlink dotfile by force
             if force {
-                handle_conflicting_files(sym, group, |group_file, file| {
-                    let group_file = DotfileGroup::from(group_file).unwrap();
-                    if &group_file.to_target_path() == file {
-                        if file.is_dir() {
-                            _ = fs::remove_dir_all(file);
-                        } else {
-                            _ = fs::remove_file(file);
+                for (group, group_files) in &sym.not_owned {
+                    if !groups.contains(group) {
+                        continue;
+                    }
+
+                    for file in group_files {
+                        let file = DotfileGroup::from(file.clone()).unwrap();
+                        let target_file = file.to_target_path();
+                        if target_file.is_dir() {
+                            fs::remove_dir_all(target_file).unwrap();
+                        } else if target_file.is_file() {
+                            fs::remove_file(target_file).unwrap();
                         }
                     }
-                })
+                }
             }
 
             // Discard dotfile and adopt the conflicting dotfile
             if adopt {
-                handle_conflicting_files(sym, group, |group_file, file| {
-                    // only adopts dotfile if it matches requested group
-                    let group = DotfileGroup::from(group_file).unwrap();
-                    if &group.to_target_path() == file {
-                        if group.path.is_dir() {
-                            _ = fs::remove_dir(group.path.as_path());
-                        } else {
-                            _ = fs::remove_file(group.path.as_path());
-                        }
-                        _ = fs::rename(file, group.path.as_path());
+                for (group, group_files) in &sym.not_owned {
+                    if !groups.contains(group) {
+                        continue;
                     }
-                })
+
+                    for file in group_files {
+                        let file = DotfileGroup::from(file.clone()).unwrap();
+                        let target_file = file.to_target_path();
+                        if target_file.is_dir() {
+                            fs::remove_dir_all(&file.path).unwrap();
+                        } else if target_file.is_file() {
+                            fs::remove_file(&file.path).unwrap();
+                        }
+
+                        fs::rename(target_file, file.path).unwrap();
+                    }
+                }
             }
         }
 
@@ -588,15 +565,10 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         println!();
     }
 
-    let mut invalid_groups = Vec::new();
-    for group in groups {
-        if !sym.contains(&group) && group != "*" {
-            invalid_groups.push(group);
-        }
-    }
-    if !invalid_groups.is_empty() {
+    let invalid_groups = utils::check_invalid_groups(DotfileType::Configs, &groups);
+    if let Some(invalid_groups) = &invalid_groups {
         eprintln!("{}", "Following groups do not exist:".red());
-        for group in &invalid_groups {
+        for group in invalid_groups {
             eprintln!("\t{}", group.red());
         }
     }
@@ -605,7 +577,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         println!("\nCheck `tuckr help add` to learn how to fix symlinks.");
     }
 
-    if !invalid_groups.is_empty() {
+    if let None = invalid_groups {
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
