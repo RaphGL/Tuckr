@@ -156,8 +156,10 @@ impl SymlinkHandler {
         }
     }
 
+    /// Returns if a config has been setup for <group>
     fn contains(&self, group: &str) -> bool {
-        todo!()
+        let group_src = self.dotfiles_dir.join("Configs").join(group);
+        group_src.exists()
     }
 
     /// Symlinks all the files of a group to the user's $HOME
@@ -204,15 +206,13 @@ impl SymlinkHandler {
     }
 }
 
-/// groups: the groups will be applied to
+/// groups: the groups that will be iterated
 ///
 /// exclude: the groups that will be ignored
 ///
 /// symlinked: whether it should be applied to symlinked or non symlinked groups
 /// iterates over each group in the dotfiles and calls a function F giving it the SymlinkHandler
 /// instance and the name of the group that's being handled
-///
-/// This abstracts this recurrent loop allowing handle groups just by their names
 fn foreach_group<F>(
     groups: &[String],
     exclude: &[String],
@@ -224,6 +224,20 @@ where
 {
     // loads the runtime information needed to carry out actions
     let sym = SymlinkHandler::try_new()?;
+
+    // detect if user provided an invalid group
+    let mut invalid_groups = Vec::new();
+    for group in groups {
+        if !sym.contains(group) && group != "*" {
+            invalid_groups.push(group);
+        }
+    }
+    if !invalid_groups.is_empty() {
+        for group in invalid_groups {
+            eprintln!("{}", format!("{group} doesn't exist.").red());
+        }
+        return Err(ReturnCode::NoSetupFolder.into());
+    }
 
     // handles wildcard
     if groups.contains(&"*".to_string()) {
@@ -574,9 +588,25 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         println!();
     }
 
+    let mut invalid_groups = Vec::new();
+    for group in groups {
+        if !sym.contains(&group) && group != "*" {
+            invalid_groups.push(group);
+        }
+    }
+    if !invalid_groups.is_empty() {
+        eprintln!("{}", "Following groups do not exist:".red());
+        for group in &invalid_groups {
+            eprintln!("\t{}", group.red());
+        }
+    }
+
     if !not_symlinked.is_empty() {
-        println!("Check `tuckr help add` to learn how to resolve them.");
-        return Err(ExitCode::FAILURE);
+        println!("\nCheck `tuckr help add` to learn how to fix symlinks.");
+    }
+
+    if !invalid_groups.is_empty() {
+        return Err(ReturnCode::NoSetupFolder.into());
     }
 
     Ok(())
