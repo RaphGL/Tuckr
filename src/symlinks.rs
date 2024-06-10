@@ -571,10 +571,11 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         for group in invalid_groups {
             eprintln!("\t{}", group.red());
         }
+        println!();
     }
 
     if !not_symlinked.is_empty() {
-        println!("\nCheck `tuckr help add` to learn how to fix symlinks.");
+        println!("Check `tuckr help add` to learn how to fix symlinks.");
     }
 
     if let None = invalid_groups {

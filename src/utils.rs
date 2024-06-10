@@ -187,7 +187,7 @@ pub fn dotfile_contains(dtype: DotfileType, group: &str) -> bool {
 pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec<String>> {
     let mut invalid_groups = Vec::new();
     for group in groups {
-        if !utils::dotfile_contains(dtype, group) {
+        if !utils::dotfile_contains(dtype, group) && group != "*" {
             invalid_groups.push(group.clone());
         }
     }
