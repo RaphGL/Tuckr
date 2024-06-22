@@ -3,7 +3,10 @@
 use crate::utils;
 use std::env;
 use std::fs;
-use std::{path, process};
+use std::{
+    path::{self, Component},
+    process,
+};
 
 // Exit codes
 /// Couldn't find the dotfiles directory
@@ -25,46 +28,57 @@ impl From<ReturnCode> for process::ExitCode {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct DotfileGroup {
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Dotfile {
     pub path: path::PathBuf,
-    pub name: String,
+    pub group_path: path::PathBuf,
+    pub group_name: String,
 }
 
-impl DotfileGroup {
-    pub fn from(group_path: path::PathBuf) -> Option<DotfileGroup> {
+impl Dotfile {
+    pub fn from(file_path: path::PathBuf) -> Option<Dotfile> {
         /// Extracts group name from tuckr directories
-        pub fn to_group_name(group_path: &path::PathBuf) -> Option<String> {
-            let path = group_path.to_str().unwrap();
-            let dir = if path.contains("Configs") {
-                "Configs"
-            } else if path.contains("Hooks") {
-                "Hooks"
-            } else if path.contains("Secrets") {
-                "Secrets"
+        pub fn to_group_path(group_path: &path::PathBuf) -> Option<path::PathBuf> {
+            let dotfiles_dir = get_dotfiles_path().unwrap();
+            let configs_dir = dotfiles_dir.join("Configs");
+            let hooks_dir = dotfiles_dir.join("Hooks");
+            let secrets_dir = dotfiles_dir.join("Secrets");
+
+            let dir = if group_path.starts_with(&configs_dir) {
+                configs_dir
+            } else if group_path.starts_with(&hooks_dir) {
+                hooks_dir
+            } else if group_path.starts_with(&secrets_dir) {
+                secrets_dir
             } else {
                 return None;
             };
 
-            // uses join("") so that the path appends / or \ depending on platform
-            let config_path = path::PathBuf::from("dotfiles").join(dir).join("");
-            let path = path.split_once(config_path.to_str().unwrap())?.1;
+            let group = if *group_path == dir {
+                Some(dir)
+            } else {
+                let Component::Normal(groupname) = group_path
+                    .strip_prefix(&dir)
+                    .unwrap()
+                    .components()
+                    .next()
+                    .unwrap()
+                else {
+                    return None;
+                };
 
-            if let Some(path) = path.split_once(path::MAIN_SEPARATOR) {
-                return Some(path.0.to_string());
-            }
+                Some(dir.join(groupname))
+            };
 
-            Some(path.to_string())
+            group
         }
 
-        let group_str = group_path.to_str().unwrap();
-        Some(DotfileGroup {
-            name: if !group_str.contains(path::MAIN_SEPARATOR) {
-                group_str.to_string()
-            } else {
-                to_group_name(&group_path)?
-            },
-            path: group_path,
+        let group_path = to_group_path(&file_path).unwrap();
+
+        Some(Dotfile {
+            group_name: group_path.file_name().unwrap().to_str().unwrap().into(),
+            path: file_path,
+            group_path,
         })
     }
 
@@ -115,27 +129,26 @@ impl DotfileGroup {
     }
 
     /// Goes through every file in Configs/<group_dir> and applies the function
-    pub fn map<F: FnMut(path::PathBuf)>(&self, mut func: F) {
-        let dir = self.path.clone();
-        let group_dir = match fs::read_dir(&dir) {
+    pub fn map<F>(&self, mut func: F)
+    where
+        F: FnMut(Dotfile),
+    {
+        let dir = match fs::read_dir(&self.path) {
             Ok(f) => f,
-            Err(_) => panic!("{} does not exist", dir.to_str().unwrap()),
+            Err(_) => panic!("{} does not exist", self.path.to_str().unwrap()),
         };
 
-        for file in group_dir {
-            let file = file.unwrap();
-            match file.file_name().to_str().unwrap() {
-                // Special folders that should not be handled directly ("owned" by the system)
-                // everything inside of it should be handled instead
-                ".config" | "Pictures" | "Documents" | "Desktop" | "Downloads" | "Public"
-                | "Templates" | "Videos" => {
-                    for file in fs::read_dir(file.path()).unwrap() {
-                        func(file.unwrap().path());
-                    }
-                }
+        let mut queue: Vec<path::PathBuf> = dir.map(|f| f.unwrap().path()).collect();
 
-                _ => {
-                    func(file.path());
+        while !queue.is_empty() {
+            let curr_file = queue.pop().unwrap();
+
+            func(Dotfile::from(curr_file.clone()).unwrap());
+
+            if curr_file.is_dir() {
+                for dir in fs::read_dir(curr_file).unwrap() {
+                    let dir = dir.unwrap();
+                    queue.push(dir.path());
                 }
             }
         }
@@ -215,7 +228,7 @@ pub fn print_info_box(title: &str, content: &str) {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::DotfileGroup;
+    use crate::utils::Dotfile;
 
     #[test]
     fn get_dotfiles_path() {
@@ -241,7 +254,7 @@ mod tests {
 
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.zshrc
-            DotfileGroup::from(group).unwrap().to_target_path(),
+            Dotfile::from(group).unwrap().to_target_path(),
             // /home/$USER/.zshrc
             dirs::home_dir().unwrap().join(".zshrc")
         );
@@ -267,7 +280,7 @@ mod tests {
 
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.config/$group
-            DotfileGroup::from(config_path).unwrap().to_target_path(),
+            Dotfile::from(config_path).unwrap().to_target_path(),
             // /home/$USER/.config/$group
             dirs::config_dir().unwrap().join("group")
         );

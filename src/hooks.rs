@@ -7,7 +7,7 @@
 //! 3. Post setup scripts are run
 
 use crate::symlinks;
-use crate::utils::{self, DotfileGroup, ReturnCode};
+use crate::utils::{self, Dotfile, ReturnCode};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::path::PathBuf;
@@ -138,7 +138,7 @@ pub fn set_cmd(
         return Err(ReturnCode::NoSuchFileOrDir.into());
     }
 
-    let run_deploy_steps = |step: DeployStages, group: DotfileGroup| -> Result<(), ExitCode> {
+    let run_deploy_steps = |step: DeployStages, group: Dotfile| -> Result<(), ExitCode> {
         if !group.is_valid_target() {
             return Ok(());
         }
@@ -148,18 +148,18 @@ pub fn set_cmd(
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_hook(&group.name, DeployStep::PreHook)?;
+                    run_hook(&group.group_name, DeployStep::PreHook)?;
                 }
 
                 DeployStep::Symlink => {
                     utils::print_info_box(
                         "Symlinking group",
-                        group.name.yellow().to_string().as_str(),
+                        group.group_name.yellow().to_string().as_str(),
                     );
                     symlinks::add_cmd(groups, exclude, force, adopt)?;
                 }
 
-                DeployStep::PostHook => run_hook(&group.name, DeployStep::PostHook)?,
+                DeployStep::PostHook => run_hook(&group.group_name, DeployStep::PostHook)?,
             }
         }
 
@@ -176,7 +176,7 @@ pub fn set_cmd(
 
     if groups.contains(&'*'.to_string()) {
         for folder in fs::read_dir(hooks_dir).unwrap() {
-            let Some(group) = DotfileGroup::from(folder.unwrap().path()) else {
+            let Some(group) = Dotfile::from(folder.unwrap().path()) else {
                 eprintln!("Received an invalid group path.");
                 return Err(ExitCode::FAILURE);
             };
@@ -187,7 +187,7 @@ pub fn set_cmd(
     }
 
     for group in groups {
-        let Some(group) = DotfileGroup::from(hooks_dir.join(group)) else {
+        let Some(group) = Dotfile::from(hooks_dir.join(group)) else {
             eprintln!("Received an invalid group path.");
             return Err(ExitCode::FAILURE);
         };

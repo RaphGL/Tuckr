@@ -2,7 +2,7 @@
 //!
 //! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
 
-use crate::utils::{self, DotfileGroup, ReturnCode};
+use crate::utils::{self, Dotfile, ReturnCode};
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
 use rand::rngs;
@@ -128,15 +128,15 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
     let dest_dir = std::env::current_dir().unwrap();
 
-    let decrypt_group = |group: DotfileGroup| -> Result<(), ExitCode> {
-        if exclude.contains(&group.name) || group.is_valid_target() {
+    let decrypt_group = |group: Dotfile| -> Result<(), ExitCode> {
+        if exclude.contains(&group.group_name) || group.is_valid_target() {
             return Ok(());
         }
 
-        let group_dir = handler.dotfiles_dir.join("Secrets").join(&group.name);
+        let group_dir = handler.dotfiles_dir.join("Secrets").join(&group.group_path);
         for secret in WalkDir::new(group_dir) {
             let Ok(secret) = secret else {
-                eprintln!("{}", (group.name + " does not exist.").red());
+                eprintln!("{}", (group.group_name + " does not exist.").red());
                 return Err(ReturnCode::NoSetupFolder.into());
             };
 
@@ -155,7 +155,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
     if groups.contains(&"*".to_string()) {
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
-            let Some(group) = DotfileGroup::from(group.unwrap().path()) else {
+            let Some(group) = Dotfile::from(group.unwrap().path()) else {
                 eprintln!("Received an invalid group path.");
                 return Err(ExitCode::FAILURE);
             };
@@ -167,7 +167,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
     for group in groups {
         let group = handler.dotfiles_dir.join("Secrets").join(group);
-        let Some(group) = DotfileGroup::from(group) else {
+        let Some(group) = Dotfile::from(group) else {
             eprintln!("Received an invalid group path.");
             return Err(ExitCode::FAILURE);
         };

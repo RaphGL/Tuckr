@@ -142,7 +142,7 @@ fn main() -> ExitCode {
         Cli::Push { group, files } => fileops::push_cmd(group, &files),
         Cli::Pop { groups } => fileops::pop_cmd(&groups),
     };
-    
+
     match exit_code {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => e,
