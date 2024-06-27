@@ -140,9 +140,7 @@ impl Dotfile {
 
         let mut queue: Vec<path::PathBuf> = dir.map(|f| f.unwrap().path()).collect();
 
-        while !queue.is_empty() {
-            let curr_file = queue.pop().unwrap();
-
+        while let Some(curr_file) = queue.pop() {
             func(Dotfile::from(curr_file.clone()).unwrap());
 
             if curr_file.is_dir() {

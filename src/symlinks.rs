@@ -83,7 +83,9 @@ impl SymlinkHandler {
         let mut not_symlinked: HashMap<String, Vec<Dotfile>> = HashMap::new();
         let mut not_owned: HashMap<String, Vec<Dotfile>> = HashMap::new();
 
+        // iterates over every file inside dotfiles/Config
         configs_dir.map(|f| {
+            // skip group directories it would try to link dotfiles/Configs/Groups to the users home
             if f.path == f.group_path {
                 return;
             }
@@ -117,13 +119,24 @@ impl SymlinkHandler {
             }
         });
 
-        let remove_empty_groups = move |mut group_type: HashMap<String, Vec<Dotfile>>| {
+        fn remove_empty_groups(
+            mut group_type: HashMap<String, Vec<Dotfile>>,
+        ) -> HashMap<String, Vec<Dotfile>> {
             group_type
                 .iter_mut()
-                .map(|(k, v)| (k.to_owned(), v.to_owned()))
                 .filter(|(_, v)| !v.is_empty())
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
                 .collect()
-        };
+        }
+
+        // removes entry for paths that are subpaths of another entry
+        // this ensures that symlinks are shallow
+        //
+        // shallow:  means that they don't completely symlink a whole directory,
+        // only the files that are specified in the users dotfiles dir
+        {
+            // todo!
+        }
 
         self.symlinked = remove_empty_groups(symlinked);
         self.not_symlinked = remove_empty_groups(not_symlinked);
@@ -232,15 +245,15 @@ where
             &sym.symlinked
         };
 
-        for (group, _) in symgroups {
+        for group in symgroups.keys() {
             // Takes the name of the group to be passed the function
             // Ignore groups in the excludes array
-            if exclude.contains(&group) {
+            if exclude.contains(group) {
                 continue;
             }
             // do something with the group name
             // passing the sym context
-            func(&sym, &group);
+            func(&sym, group);
         }
 
         return Ok(());
@@ -361,8 +374,6 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         symlinked.len(),
         not_symlinked.len()
     );
-
-    println!("{:?}", sym.symlinked.get("alacritty").unwrap());
 
     let empty_str = String::from("");
     let status: Vec<SymlinkRow> = {
@@ -542,7 +553,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         println!("Check `tuckr help add` to learn how to fix symlinks.");
     }
 
-    if let None = invalid_groups {
+    if invalid_groups.is_none() {
         return Err(ReturnCode::NoSetupFolder.into());
     }
 

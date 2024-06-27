@@ -101,8 +101,8 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
     };
 
     let home_dir = dirs::home_dir().unwrap();
-    
-    if files.len() == 0 {
+
+    if files.is_empty() {
         eprintln!("No files were provided to push to {}.", group);
         return Err(ExitCode::FAILURE);
     }
@@ -156,7 +156,7 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
         }
     }
 
-    if invalid_groups.len() > 0 {
+    if invalid_groups.is_empty() {
         for group in invalid_groups {
             eprintln!("{} does not exist.", group);
         }
