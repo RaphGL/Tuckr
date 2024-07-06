@@ -12,7 +12,7 @@
 
 use crate::utils::{self, Dotfile, DotfileType, ReturnCode};
 use owo_colors::OwoColorize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -40,12 +40,14 @@ fn symlink_file(f: PathBuf) {
     }
 }
 
+type HashCache = HashMap<String, HashSet<Dotfile>>;
+
 /// Handles dotfile symlinking and their current status
 struct SymlinkHandler {
-    dotfiles_dir: PathBuf,                        // path to the dotfiles directory
-    symlinked: HashMap<String, Vec<Dotfile>>,     // path to symlinked groups in Dotfiles/Configs
-    not_symlinked: HashMap<String, Vec<Dotfile>>, // path to groups that aren't symlinked to $HOME
-    not_owned: HashMap<String, Vec<Dotfile>>, // key: group the file belongs to, value: list of conflicting files from that group
+    dotfiles_dir: PathBuf,    // path to the dotfiles directory
+    symlinked: HashCache,     // dotfiles that have been symlinked from Dotfiles/Configs
+    not_symlinked: HashCache, // dotfiles that haven't been symlinked to $HOME yet
+    not_owned: HashCache, // dotfiles that are symlinks but points somewhere outside of Dotfiles/Configs
 }
 
 impl SymlinkHandler {
@@ -61,9 +63,9 @@ impl SymlinkHandler {
 
         let symlinker = SymlinkHandler {
             dotfiles_dir,
-            symlinked: HashMap::new(),
-            not_symlinked: HashMap::new(),
-            not_owned: HashMap::new(),
+            symlinked: HashCache::new(),
+            not_symlinked: HashCache::new(),
+            not_owned: HashCache::new(),
         };
 
         // this fills the symlinker with dotfile status information
@@ -79,11 +81,11 @@ impl SymlinkHandler {
     fn validate(mut self) -> Result<Self, ExitCode> {
         let configs_dir = Dotfile::from(self.dotfiles_dir.join("Configs")).unwrap();
 
-        let mut symlinked: HashMap<String, Vec<Dotfile>> = HashMap::new();
-        let mut not_symlinked: HashMap<String, Vec<Dotfile>> = HashMap::new();
-        let mut not_owned: HashMap<String, Vec<Dotfile>> = HashMap::new();
+        let mut symlinked = HashCache::new();
+        let mut not_symlinked = HashCache::new();
+        let mut not_owned = HashCache::new();
 
-        // iterates over every file inside dotfiles/Config
+        // iterates over every file inside dotfiles/Config and determines their symlink status
         configs_dir.map(|f| {
             // skip group directories it would try to link dotfiles/Configs/Groups to the users home
             if f.path == f.group_path {
@@ -91,6 +93,7 @@ impl SymlinkHandler {
             }
 
             let target = f.to_target_path();
+
             if target.is_symlink() {
                 let link = match fs::read_link(target) {
                     Ok(link) => link,
@@ -104,39 +107,72 @@ impl SymlinkHandler {
                     symlinked.entry(f.group_name.clone()).or_default();
 
                     let group = symlinked.get_mut(&f.group_name).unwrap();
-                    group.push(f);
+                    group.insert(f);
                 } else {
                     not_owned.entry(f.group_name.clone()).or_default();
 
                     let group = not_owned.get_mut(&f.group_name).unwrap();
-                    group.push(f);
+                    group.insert(f);
                 }
             } else {
+                if target.is_dir() && target.read_dir().unwrap().next().is_some() {
+                    return;
+                }
+
                 not_symlinked.entry(f.group_name.clone()).or_default();
 
                 let group = not_symlinked.get_mut(&f.group_name).unwrap();
-                group.push(f);
+                group.insert(f);
             }
         });
 
-        fn remove_empty_groups(
-            mut group_type: HashMap<String, Vec<Dotfile>>,
-        ) -> HashMap<String, Vec<Dotfile>> {
+        fn remove_empty_groups(group_type: HashCache) -> HashCache {
             group_type
-                .iter_mut()
+                .iter()
                 .filter(|(_, v)| !v.is_empty())
                 .map(|(k, v)| (k.to_owned(), v.to_owned()))
                 .collect()
         }
 
-        // removes entry for paths that are subpaths of another entry
-        // this ensures that symlinks are shallow
+        // removes entries for paths that are subpaths of another entry (canonicalization).
+        // this procedure makes so that symlinks are shallow.
         //
-        // shallow:  means that they don't completely symlink a whole directory,
-        // only the files that are specified in the users dotfiles dir
-        {
-            // todo!
+        // shallow symlinking: only symlinking files/directories that don't exist already
+        fn canonicalize_groups(groups: &mut HashCache) {
+            for files in groups.values_mut() {
+                let files_copy = files.clone();
+
+                for file in &files_copy {
+                    for file2 in &files_copy {
+                        if file2.path != file.path && file2.path.starts_with(&file.path) {
+                            files.remove(file2);
+                        }
+                    }
+                }
+            }
         }
+
+        // canonicalizes not_symlinked based on symlinked cache
+        //
+        // this is necessary because if a directory is canonicalized and symlinked,
+        // files inside it won't be symlinked and thus marked as `not_symlinked` wrongly.
+        for (group, files) in &symlinked {
+            if let Some(unsymlinked_group) = not_symlinked.get_mut(group) {
+                let unsymlinked_group_copy = unsymlinked_group.clone();
+
+                for file1 in files {
+                    for file2 in unsymlinked_group_copy.iter() {
+                        if file2.path.starts_with(&file1.path) {
+                            unsymlinked_group.remove(file2);
+                        }
+                    }
+                }
+            }
+        }
+
+        canonicalize_groups(&mut symlinked);
+        canonicalize_groups(&mut not_symlinked);
+        canonicalize_groups(&mut not_owned);
 
         self.symlinked = remove_empty_groups(symlinked);
         self.not_symlinked = remove_empty_groups(not_symlinked);
@@ -155,7 +191,11 @@ impl SymlinkHandler {
             &self.not_symlinked
         }
         .iter()
-        .filter(|(group, files)| group.starts_with(target_group) && files[0].is_valid_target())
+        .filter(|(group, files)| {
+            group.starts_with(target_group) &&
+                // any file in this group is in the same target so just pick any file to check
+                 files.iter().next().unwrap().is_valid_target()
+        })
         .map(|(group, _)| group.clone())
         .collect()
     }
@@ -277,13 +317,13 @@ pub fn add_cmd(
     force: bool,
     adopt: bool,
 ) -> Result<(), ExitCode> {
-    if force || adopt {
-        if force {
-            print!("Are you sure you want to override conflicts? (N/y) ");
-        } else if adopt {
-            print!("Are you sure you want to adopt conflicts? (N/y) ");
-        }
+    if force {
+        print!("Are you sure you want to override conflicts? (N/y) ");
+    } else if adopt {
+        print!("Are you sure you want to adopt conflicts? (N/y) ");
+    }
 
+    if force || adopt {
         std::io::stdout()
             .flush()
             .expect("Could not print to stdout");
@@ -300,10 +340,10 @@ pub fn add_cmd(
     }
 
     foreach_group(groups, exclude, true, |sym, group| {
-        if !sym.not_owned.is_empty() {
-            // Symlink dotfile by force
-            if force {
-                for (group, group_files) in &sym.not_owned {
+        // Symlink dotfile by force
+        if force {
+            let remove_overlapping_files = |status_group: &HashCache| {
+                for (group, group_files) in status_group {
                     if !groups.contains(group) {
                         continue;
                     }
@@ -317,11 +357,16 @@ pub fn add_cmd(
                         }
                     }
                 }
-            }
+            };
 
-            // Discard dotfile and adopt the conflicting dotfile
-            if adopt {
-                for (group, group_files) in &sym.not_owned {
+            remove_overlapping_files(&sym.not_owned);
+            remove_overlapping_files(&sym.not_symlinked);
+        }
+
+        // Discard dotfile and adopt the conflicting dotfile
+        if adopt {
+            let adopt_overlapping_files = |status_group: &HashCache| {
+                for (group, group_files) in status_group {
                     if !groups.contains(group) {
                         continue;
                     }
@@ -337,7 +382,10 @@ pub fn add_cmd(
                         fs::rename(target_file, &file.path).unwrap();
                     }
                 }
-            }
+            };
+
+            adopt_overlapping_files(&sym.not_owned);
+            adopt_overlapping_files(&sym.not_symlinked);
         }
 
         sym.add(group)
@@ -368,12 +416,6 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         .keys()
         .filter(|group| !not_symlinked.contains(group))
         .collect();
-
-    println!(
-        "symlinked: {}\nnot_symlinked: {}",
-        symlinked.len(),
-        not_symlinked.len()
-    );
 
     let empty_str = String::from("");
     let status: Vec<SymlinkRow> = {
