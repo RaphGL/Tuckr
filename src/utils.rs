@@ -1,4 +1,4 @@
-//! A set of helper functions that reduce boilerplate
+//! Contains utilities to handle dotfiles
 
 use crate::utils;
 use std::env;
@@ -36,7 +36,7 @@ pub struct Dotfile {
 }
 
 impl Dotfile {
-    pub fn from(file_path: path::PathBuf) -> Option<Dotfile> {
+    pub fn try_from(file_path: path::PathBuf) -> Option<Dotfile> {
         /// Extracts group name from tuckr directories
         pub fn to_group_path(group_path: &path::PathBuf) -> Option<path::PathBuf> {
             let dotfiles_dir = get_dotfiles_path().unwrap();
@@ -95,14 +95,8 @@ impl Dotfile {
 
     /// Checks whether the current groups is targetting the root path aka `/`
     pub fn targets_root(&self) -> bool {
-        let group = self.path.clone();
-        let dotfiles_dir = get_dotfiles_path().unwrap().join("Configs").join("Root");
-        let dotfiles_dir = dotfiles_dir.to_str().unwrap();
-
-        if group.to_str().unwrap().contains(dotfiles_dir) {
-            return true;
-        }
-        false
+        let root_dir = get_dotfiles_path().unwrap().join("Configs").join("Root");
+        self.group_path.starts_with(root_dir)
     }
 
     /// Converts a path string from dotfiles/Configs to where they should be
@@ -141,7 +135,7 @@ impl Dotfile {
         let mut queue: Vec<path::PathBuf> = dir.map(|f| f.unwrap().path()).collect();
 
         while let Some(curr_file) = queue.pop() {
-            func(Dotfile::from(curr_file.clone()).unwrap());
+            func(Dotfile::try_from(curr_file.clone()).unwrap());
 
             if curr_file.is_dir() {
                 for dir in fs::read_dir(curr_file).unwrap() {
@@ -235,14 +229,12 @@ mod tests {
         // /home/$USER/.config/dotfiles
         let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
-        assert!(match super::get_dotfiles_path().unwrap() {
-            path if path == home_dotfiles || path == config_dotfiles => true,
-            _ => false,
-        });
+        let path_found = super::get_dotfiles_path().unwrap();
+        assert!(path_found == home_dotfiles || path_found == config_dotfiles);
     }
 
     #[test]
-    fn group_to_home_path() {
+    fn dotfile_to_target_path() {
         let group = dirs::config_dir()
             .unwrap()
             .join("dotfiles")
@@ -252,7 +244,7 @@ mod tests {
 
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.zshrc
-            Dotfile::from(group).unwrap().to_target_path(),
+            Dotfile::try_from(group).unwrap().to_target_path(),
             // /home/$USER/.zshrc
             dirs::home_dir().unwrap().join(".zshrc")
         );
@@ -278,9 +270,20 @@ mod tests {
 
         assert_eq!(
             // /home/$USER/.config/dotfiles/Configs/zsh/.config/$group
-            Dotfile::from(config_path).unwrap().to_target_path(),
+            Dotfile::try_from(config_path).unwrap().to_target_path(),
             // /home/$USER/.config/$group
             dirs::config_dir().unwrap().join("group")
         );
+    }
+
+    #[test]
+    fn dotfile_targets_root() {
+        let dotfiles_dir = super::get_dotfiles_path().unwrap().join("Configs");
+
+        let root_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Root")).unwrap();
+        assert!(root_dotfile.targets_root());
+
+        let nonroot_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Zsh")).unwrap();
+        assert!(!nonroot_dotfile.targets_root());
     }
 }

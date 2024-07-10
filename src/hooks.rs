@@ -176,7 +176,7 @@ pub fn set_cmd(
 
     if groups.contains(&'*'.to_string()) {
         for folder in fs::read_dir(hooks_dir).unwrap() {
-            let Some(group) = Dotfile::from(folder.unwrap().path()) else {
+            let Some(group) = Dotfile::try_from(folder.unwrap().path()) else {
                 eprintln!("Received an invalid group path.");
                 return Err(ExitCode::FAILURE);
             };
@@ -187,7 +187,7 @@ pub fn set_cmd(
     }
 
     for group in groups {
-        let Some(group) = Dotfile::from(hooks_dir.join(group)) else {
+        let Some(group) = Dotfile::try_from(hooks_dir.join(group)) else {
             eprintln!("Received an invalid group path.");
             return Err(ExitCode::FAILURE);
         };

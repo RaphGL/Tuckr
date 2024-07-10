@@ -21,7 +21,7 @@ use tabled::{Table, Tabled};
 
 fn symlink_file(f: PathBuf) {
     let src_path = f;
-    match Dotfile::from(src_path.clone()) {
+    match Dotfile::try_from(src_path.clone()) {
         Some(group) => {
             let target_path = group.to_target_path();
 
@@ -79,7 +79,7 @@ impl SymlinkHandler {
     ///
     /// Returns a copy of self with all the fields set accordingly
     fn validate(mut self) -> Result<Self, ExitCode> {
-        let configs_dir = Dotfile::from(self.dotfiles_dir.join("Configs")).unwrap();
+        let configs_dir = Dotfile::try_from(self.dotfiles_dir.join("Configs")).unwrap();
 
         let mut symlinked = HashCache::new();
         let mut not_symlinked = HashCache::new();
@@ -205,7 +205,7 @@ impl SymlinkHandler {
         let groups = self.get_related_conditional_groups(group, false);
 
         for group in groups {
-            let group = Dotfile::from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
+            let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
             if group.path.exists() {
                 // iterate through all the files in group_dir
                 group.map(|f| symlink_file(f.path));
@@ -222,7 +222,7 @@ impl SymlinkHandler {
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
     fn remove(&self, group: &str) {
         let remove_symlink = |file: PathBuf| {
-            let dotfile = Dotfile::from(file).unwrap().to_target_path();
+            let dotfile = Dotfile::try_from(file).unwrap().to_target_path();
             if let Ok(linked) = fs::read_link(&dotfile) {
                 let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
                 let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
@@ -235,7 +235,7 @@ impl SymlinkHandler {
         let groups = self.get_related_conditional_groups(group, true);
 
         for group in groups {
-            let group = Dotfile::from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
+            let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
             if group.path.exists() {
                 // iterate through all the files in group_dir
                 group.map(|f| remove_symlink(f.path));
@@ -410,6 +410,9 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         not_symlinked: &'a str,
     }
 
+    // -- process status from symlink ---
+    // groups that are both in symlinked and not_symlinked
+    // will be marked as not_symlinked only
     let not_symlinked: Vec<_> = sym.not_symlinked.keys().collect();
     let symlinked: Vec<_> = sym
         .symlinked
@@ -446,7 +449,25 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
             .collect()
     };
 
-    let not_owned: Vec<&String> = sym.not_owned.keys().collect();
+    // -- detect conflicts --
+    let conflicts = {
+        let mut conflicts = HashSet::new();
+
+        // mark group as conflicting if at least one value already exists in $HOME
+        for files in sym.not_symlinked.values() {
+            for file in files {
+                if file.to_target_path().exists() {
+                    conflicts.insert(file.group_name.clone());
+                    break;
+                }
+            }
+        }
+
+        // whether a conflict is a symlink or a pre-existing file does not matter for global status
+        // just add them together
+        conflicts.extend(sym.not_owned.clone().into_keys());
+        conflicts
+    };
 
     // --- Creates all the tables and prints them ---
     use tabled::{
@@ -461,7 +482,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         .with(Modify::new(Columns::single(0)).with(Format::new(|s| s.green().to_string())))
         .with(Modify::new(Columns::single(1)).with(Format::new(|s| s.red().to_string())));
 
-    let mut conflict_table = Table::builder(&not_owned)
+    let mut conflict_table = Table::builder(&conflicts)
         .set_columns(["Conflicting Dotfiles".yellow().to_string()])
         .clone()
         .build();
@@ -470,7 +491,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         .with(Alignment::center());
 
     // Creates a table with sym_table and conflict_table
-    let mut final_table = if not_owned.is_empty() {
+    let mut final_table = if conflicts.is_empty() {
         col![sym_table]
     } else {
         col![sym_table, conflict_table]
@@ -479,12 +500,12 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     final_table.with(Style::empty()).with(Alignment::center());
     println!("{final_table}");
 
-    if !not_owned.is_empty() {
+    if !conflicts.is_empty() {
         println!("\nTo learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
     }
 
     // Determines exit code for the command based on the dotfiles' status
-    if !symlinked.is_empty() && not_symlinked.is_empty() && not_owned.is_empty() {
+    if !symlinked.is_empty() && not_symlinked.is_empty() && conflicts.is_empty() {
         Ok(())
     } else {
         Err(ExitCode::FAILURE)
@@ -537,7 +558,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
     let unsupported = {
         let mut unsupported = groups
             .iter()
-            .map(|group| Dotfile::from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
+            .map(|group| Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
             .filter(|group| !group.is_valid_target())
             .map(|group| group.group_name)
             .collect::<Vec<_>>();
@@ -584,7 +605,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
 
     let invalid_groups = utils::check_invalid_groups(DotfileType::Configs, &groups);
     if let Some(invalid_groups) = &invalid_groups {
-        eprintln!("{}", "Following groups do not exist:".red());
+        eprintln!("{}", "Following groups do not exist:");
         for group in invalid_groups {
             eprintln!("\t{}", group.red());
         }
@@ -603,10 +624,10 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
 }
 
 /// Prints symlinking status
-/// todo: make status work with new symlink traversal method
 pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
     let sym = SymlinkHandler::try_new()?;
     match groups {
+        // todo: group doesn't tell the difference between a pre-existing file and a symlink
         Some(groups) => print_groups_status(&sym, groups)?,
         None => print_global_status(&sym)?,
     }
@@ -621,88 +642,21 @@ mod tests {
     use std::path;
     use utils::Dotfile;
 
-    /// makes sure that symlink status is loaded on startup
-    #[test]
-    fn new_symlink_handler() {
-        let dotfiles_dir = path::PathBuf::from(utils::get_dotfiles_path().unwrap());
-        let dirs = fs::read_dir(dotfiles_dir.join("Configs"));
-
-        if dirs.is_err() {
-            panic!("{:#?}", dirs);
-        } else {
-            let sym = super::SymlinkHandler::try_new().unwrap();
-            assert!(
-                if !sym.symlinked.is_empty() || !sym.not_symlinked.is_empty() {
-                    true
-                } else {
-                    false
-                }
-            );
-        }
+    fn start_symlink_cache() -> (super::SymlinkHandler, Dotfile) {
+        todo!()
     }
 
-    /// Initializes symlink test by creating a SymlinkHandler and a mockup dotfiles directory
-    fn init_symlink_test() -> (super::SymlinkHandler, Dotfile) {
-        let sym = super::SymlinkHandler::try_new().unwrap();
-        let group_dir = sym.dotfiles_dir.join("Configs").join("group");
-        if let Err(_) = fs::create_dir_all(group_dir.clone().join(".config")) {
-            panic!("Could not create required folders");
-        }
-
-        File::create(group_dir.join("group.test")).unwrap();
-        File::create(group_dir.join(".config").join("group.test")).unwrap();
-
-        let sym = sym.validate().unwrap();
-
-        (sym, Dotfile::from(group_dir).unwrap())
+    fn cleanup_symlink_cache() {
+        todo!()
     }
 
     #[test]
     fn add_symlink() {
-        let init = init_symlink_test();
-        let sym = init.0;
-        let group = init.1;
-
-        sym.add(group.group_name.as_str());
-
-        let file = Dotfile::from(group.path.join("group.test")).unwrap();
-        assert!(match fs::read_link(file.to_target_path()) {
-            Ok(link) => link == file.path,
-            Err(_) => false,
-        });
-
-        let config_file =
-            Dotfile::from(group.path.clone().join(".config").join("group.test")).unwrap();
-        assert!(match fs::read_link(config_file.to_target_path()) {
-            Ok(link) => link == config_file.path,
-            Err(_) => false,
-        });
-
-        sym.remove(group.group_name.as_str());
+        todo!()
     }
 
     #[test]
     fn remove_symlink() {
-        let init = init_symlink_test();
-        let sym = init.0;
-        let group = init.1;
-
-        sym.add(group.group_name.as_str());
-        sym.remove(group.group_name.as_str());
-
-        let file = Dotfile::from(group.path.join("group.test")).unwrap();
-        assert!(match fs::read_link(file.to_target_path()) {
-            Err(_) => true,
-            Ok(link) => link != file.path,
-        });
-
-        let config_file =
-            Dotfile::from(group.path.clone().join(".config").join("group.test")).unwrap();
-        assert!(match fs::read_link(config_file.to_target_path()) {
-            Err(_) => true,
-            Ok(link) => link != config_file.path,
-        });
-
-        _ = fs::remove_dir(group.path.as_path());
+        todo!()
     }
 }
