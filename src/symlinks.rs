@@ -400,6 +400,24 @@ pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode>
     Ok(())
 }
 
+fn get_conflicts_in_cache(cache: &HashCache) -> HashCache {
+    let mut conflicts = HashCache::new();
+
+    // mark group as conflicting if at least one value already exists in $HOME
+    for files in cache.values() {
+        for file in files {
+            if file.to_target_path().exists() {
+                conflicts.entry(file.group_name.clone()).or_default();
+                let entry = conflicts.get_mut(&file.group_name).unwrap();
+                entry.insert(file.clone());
+            }
+        }
+    }
+
+    conflicts
+}
+
+// todo: make command aware of conditional groups
 fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled, Debug)]
     struct SymlinkRow<'a> {
@@ -449,25 +467,14 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
             .collect()
     };
 
-    // -- detect conflicts --
-    let conflicts = {
-        let mut conflicts = HashSet::new();
-
-        // mark group as conflicting if at least one value already exists in $HOME
-        for files in sym.not_symlinked.values() {
-            for file in files {
-                if file.to_target_path().exists() {
-                    conflicts.insert(file.group_name.clone());
-                    break;
-                }
-            }
-        }
-
-        // whether a conflict is a symlink or a pre-existing file does not matter for global status
-        // just add them together
-        conflicts.extend(sym.not_owned.clone().into_keys());
-        conflicts
-    };
+    // --- detect conflicts ---
+    let conflicts = get_conflicts_in_cache(&sym.not_symlinked);
+    // whether a conflict is a symlink or a pre-existing file does not matter for global status
+    // so we just add them together
+    let conflicts = conflicts
+        .keys()
+        .chain(sym.not_owned.keys())
+        .collect::<HashSet<_>>();
 
     // --- Creates all the tables and prints them ---
     use tabled::{
@@ -513,47 +520,37 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 }
 
 fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
-    macro_rules! add_related_groups {
-        ($symgroup:ident, $symlinked:literal) => {
-            for i in 0..$symgroup.len() {
-                let group = &$symgroup[i];
-                for group in sym.get_related_conditional_groups(group.as_str(), $symlinked) {
-                    $symgroup.push(group);
+    fn get_related_groups_with_filter(
+        sym: &SymlinkHandler,
+        symlinked: bool,
+        group_is_valid: impl Fn(&String) -> bool,
+    ) -> Vec<String> {
+        let mut groups = Vec::new();
+        let status = if symlinked {
+            &sym.symlinked
+        } else {
+            &sym.not_symlinked
+        };
+
+        for base_group in status.keys() {
+            if group_is_valid(base_group) {
+                for group in sym.get_related_conditional_groups(base_group, symlinked) {
+                    groups.push(group);
                 }
             }
+        }
 
-            $symgroup.sort();
-            $symgroup.dedup();
-        };
+        groups.sort();
+        groups.dedup();
+        groups
     }
 
-    let not_symlinked = {
-        let not_symlinked: Vec<_> = sym.not_symlinked.keys().collect();
+    let not_symlinked =
+        get_related_groups_with_filter(&sym, false, |group| groups.contains(&group.to_string()));
 
-        let mut not_symlinked: Vec<_> = not_symlinked
-            .iter()
-            .map(|group| group.to_string())
-            .filter(|group| groups.contains(&group.to_string()))
-            .collect();
-
-        add_related_groups!(not_symlinked, false);
-
-        not_symlinked
-    };
-
-    let symlinked = {
-        let symlinked: Vec<_> = sym.symlinked.keys().collect();
-
-        let mut symlinked = symlinked
-            .iter()
-            .map(|group| group.to_string())
-            .filter(|group| !not_symlinked.contains(group) && groups.contains(&group.to_string()))
-            .collect::<Vec<_>>();
-
-        add_related_groups!(symlinked, true);
-
-        symlinked
-    };
+    let symlinked = get_related_groups_with_filter(&sym, true, |group| {
+        !not_symlinked.contains(group) && groups.contains(&group.to_string())
+    });
 
     let unsupported = {
         let mut unsupported = groups
@@ -568,23 +565,39 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         unsupported
     };
 
-    if !not_symlinked.is_empty() {
+    if !not_symlinked.is_empty() || !sym.not_owned.is_empty() {
         println!("Not Symlinked:");
         for group in &not_symlinked {
             println!("\t{}", group.red());
         }
         println!();
 
-        for group in &not_symlinked {
-            if let Some(conflicts) = sym.not_owned.get(&group.to_string()) {
-                println!("Conflicting files:");
-                for conflict in conflicts {
-                    let conflict = conflict.to_target_path();
-                    println!("\t{} -> {}", group.yellow(), conflict.to_str().unwrap());
-                }
-                println!();
+        let file_conflicts = get_conflicts_in_cache(&sym.not_symlinked);
+
+        println!("Conflicting files:");
+        for (group, conflicts) in file_conflicts {
+            for conflict in conflicts {
+                let conflict = conflict.to_target_path();
+                println!(
+                    "\t{} -> {} (already exists)",
+                    group.yellow(),
+                    conflict.display()
+                );
             }
         }
+
+        for (group, conflicts) in &sym.not_owned {
+            for conflict in conflicts {
+                let conflict = conflict.to_target_path();
+                println!(
+                    "\t{} -> {} (symlinks to elsewhere)",
+                    group.yellow(),
+                    conflict.display()
+                );
+            }
+        }
+
+        println!();
     }
 
     if !symlinked.is_empty() {
@@ -605,7 +618,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
 
     let invalid_groups = utils::check_invalid_groups(DotfileType::Configs, &groups);
     if let Some(invalid_groups) = &invalid_groups {
-        eprintln!("{}", "Following groups do not exist:");
+        eprintln!("Following groups do not exist:");
         for group in invalid_groups {
             eprintln!("\t{}", group.red());
         }
@@ -627,7 +640,6 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
 pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
     let sym = SymlinkHandler::try_new()?;
     match groups {
-        // todo: group doesn't tell the difference between a pre-existing file and a symlink
         Some(groups) => print_groups_status(&sym, groups)?,
         None => print_global_status(&sym)?,
     }

@@ -189,6 +189,7 @@ pub fn dotfile_contains(dtype: DotfileType, group: &str) -> bool {
     group_src.exists()
 }
 
+/// Returns all groups in the slice that don't have a corresponding directory in dotfiles/{Configs,Hooks,Secrets}
 pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec<String>> {
     let mut invalid_groups = Vec::new();
     for group in groups {
@@ -197,11 +198,11 @@ pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec
         }
     }
 
-    if !invalid_groups.is_empty() {
-        return Some(invalid_groups);
+    if invalid_groups.is_empty() {
+        None
+    } else {
+        Some(invalid_groups)
     }
-
-    None
 }
 
 /// Prints a single row info box with title on the left
