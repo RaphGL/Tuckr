@@ -2,7 +2,7 @@
 //!
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
-use crate::utils::{self, ReturnCode};
+use crate::dotfiles::{self, ReturnCode};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::io::{self, Write};
@@ -28,7 +28,7 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
     }
 
     // --- initializing required directory ---
-    let dotfiles_dir = match utils::get_dotfiles_path() {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");
@@ -92,7 +92,7 @@ pub fn init_cmd() -> Result<(), ExitCode> {
 }
 
 pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
-    let dotfiles_dir = match utils::get_dotfiles_path() {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir.join("Configs").join(&group),
         Err(e) => {
             eprintln!("{e}");
@@ -137,7 +137,7 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
 }
 
 pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
-    let dotfiles_dir = match utils::get_dotfiles_path() {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir.join("Configs"),
         Err(e) => {
             eprintln!("{e}");
@@ -189,7 +189,7 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
 }
 
 fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
-    let dir = match utils::get_dotfiles_path() {
+    let dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir.join(dirname),
         Err(_) => return Err(ReturnCode::CouldntFindDotfiles.into()),
     };

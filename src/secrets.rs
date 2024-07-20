@@ -2,7 +2,7 @@
 //!
 //! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
 
-use crate::utils::{self, Dotfile, ReturnCode};
+use crate::dotfiles::{self, Dotfile, ReturnCode};
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
 use rand::rngs;
@@ -25,7 +25,7 @@ impl SecretsHandler {
         let input_key = rpassword::prompt_password("Password: ").unwrap();
         let input_hash = Sha256::digest(input_key);
 
-        let dotfiles_dir = match utils::get_dotfiles_path() {
+        let dotfiles_dir = match dotfiles::get_dotfiles_path() {
             Ok(path) => path,
             Err(e) => {
                 eprintln!("{e}");
@@ -117,7 +117,9 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
 
 /// Decrypts secrets
 pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    if let Some(invalid_groups) = utils::check_invalid_groups(utils::DotfileType::Secrets, groups) {
+    if let Some(invalid_groups) =
+        dotfiles::check_invalid_groups(dotfiles::DotfileType::Secrets, groups)
+    {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} does not exist.").red());
         }

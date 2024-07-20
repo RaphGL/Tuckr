@@ -9,11 +9,11 @@
 //! groups which contains all user scripts, configs and scripts, these are used to label them on tuckr
 //! so you can add or remove them anytime
 
+mod dotfiles;
 mod fileops;
 mod hooks;
 mod secrets;
 mod symlinks;
-mod utils;
 
 use clap::Parser;
 use std::process::ExitCode;

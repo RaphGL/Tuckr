@@ -6,8 +6,8 @@
 //! 2. Dotfiles are symlinked
 //! 3. Post setup scripts are run
 
+use crate::dotfiles::{self, Dotfile, ReturnCode};
 use crate::symlinks;
-use crate::utils::{self, Dotfile, ReturnCode};
 use owo_colors::OwoColorize;
 use std::fs;
 use std::path::PathBuf;
@@ -54,7 +54,7 @@ impl Iterator for DeployStages {
 
 /// Runs hooks of type PreHook or PostHook
 fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
-    utils::print_info_box(
+    dotfiles::print_info_box(
         match hook_type {
             DeployStep::PreHook => "Running Prehook",
             DeployStep::PostHook => "Running Posthook",
@@ -63,7 +63,7 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
         group.yellow().to_string().as_str(),
     );
 
-    let dotfiles_dir = match utils::get_dotfiles_path() {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("{e}");
@@ -113,7 +113,7 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
                     .as_str()
             );
         } else {
-            utils::print_info_box(
+            dotfiles::print_info_box(
                 "Failed to hook".red().to_string().as_str(),
                 format!("{group} {filename}").as_str(),
             );
@@ -130,7 +130,9 @@ pub fn set_cmd(
     force: bool,
     adopt: bool,
 ) -> Result<(), ExitCode> {
-    if let Some(invalid_groups) = utils::check_invalid_groups(utils::DotfileType::Hooks, groups) {
+    if let Some(invalid_groups) =
+        dotfiles::check_invalid_groups(dotfiles::DotfileType::Hooks, groups)
+    {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} does not exist.").red());
         }
@@ -152,7 +154,7 @@ pub fn set_cmd(
                 }
 
                 DeployStep::Symlink => {
-                    utils::print_info_box(
+                    dotfiles::print_info_box(
                         "Symlinking group",
                         group.group_name.yellow().to_string().as_str(),
                     );
@@ -166,7 +168,7 @@ pub fn set_cmd(
         Ok(())
     };
 
-    let hooks_dir = match utils::get_dotfiles_path() {
+    let hooks_dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir.join("Hooks"),
         Err(e) => {
             eprintln!("{e}",);

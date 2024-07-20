@@ -10,7 +10,7 @@
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
 //! $HOME equivalents are pointing to them and categorizing them accordingly.
 
-use crate::utils::{self, Dotfile, DotfileType, ReturnCode};
+use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
 use owo_colors::OwoColorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -53,7 +53,7 @@ struct SymlinkHandler {
 impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it dotfiles' status information
     fn try_new() -> Result<Self, ExitCode> {
-        let dotfiles_dir = match utils::get_dotfiles_path() {
+        let dotfiles_dir = match dotfiles::get_dotfiles_path() {
             Ok(dir) => dir,
             Err(e) => {
                 eprintln!("{e}");
@@ -157,14 +157,16 @@ impl SymlinkHandler {
         // this is necessary because if a directory is canonicalized and symlinked,
         // files inside it won't be symlinked and thus marked as `not_symlinked` wrongly.
         for (group, files) in &symlinked {
-            if let Some(unsymlinked_group) = not_symlinked.get_mut(group) {
-                let unsymlinked_group_copy = unsymlinked_group.clone();
+            let Some(unsymlinked_group) = not_symlinked.get_mut(group) else {
+                continue;
+            };
 
-                for file1 in files {
-                    for file2 in unsymlinked_group_copy.iter() {
-                        if file2.path.starts_with(&file1.path) {
-                            unsymlinked_group.remove(file2);
-                        }
+            let unsymlinked_group_copy = unsymlinked_group.clone();
+
+            for file1 in files {
+                for file2 in unsymlinked_group_copy.iter() {
+                    if file2.path.starts_with(&file1.path) {
+                        unsymlinked_group.remove(file2);
                     }
                 }
             }
@@ -221,7 +223,7 @@ impl SymlinkHandler {
 
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
     fn remove(&self, group: &str) {
-        let remove_symlink = |file: PathBuf| {
+        fn remove_symlink(file: PathBuf) {
             let dotfile = Dotfile::try_from(file).unwrap().to_target_path();
             if let Ok(linked) = fs::read_link(&dotfile) {
                 let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
@@ -230,14 +232,13 @@ impl SymlinkHandler {
                     fs::remove_file(dotfile).unwrap();
                 }
             }
-        };
+        }
 
         let groups = self.get_related_conditional_groups(group, true);
 
         for group in groups {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
             if group.path.exists() {
-                // iterate through all the files in group_dir
                 group.map(|f| remove_symlink(f.path));
             } else {
                 eprintln!(
@@ -270,7 +271,7 @@ where
     let sym = SymlinkHandler::try_new()?;
 
     // detect if user provided an invalid group
-    if let Some(invalid_groups) = utils::check_invalid_groups(DotfileType::Configs, groups) {
+    if let Some(invalid_groups) = dotfiles::check_invalid_groups(DotfileType::Configs, groups) {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} doesn't exist.").red());
         }
@@ -302,9 +303,8 @@ where
     for group in groups {
         if exclude.contains(group) {
             continue;
-        } else {
-            func(&sym, group);
         }
+        func(&sym, group);
     }
 
     Ok(())
@@ -407,11 +407,13 @@ fn get_conflicts_in_cache(cache: &HashCache) -> HashCache {
     // mark group as conflicting if at least one value already exists in $HOME
     for files in cache.values() {
         for file in files {
-            if file.to_target_path().exists() {
-                conflicts.entry(file.group_name.clone()).or_default();
-                let entry = conflicts.get_mut(&file.group_name).unwrap();
-                entry.insert(file.clone());
+            if !file.to_target_path().exists() {
+                continue;
             }
+
+            conflicts.entry(file.group_name.clone()).or_default();
+            let entry = conflicts.get_mut(&file.group_name).unwrap();
+            entry.insert(file.clone());
         }
     }
 
@@ -441,12 +443,10 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
     let empty_str = String::from("");
     let status: Vec<SymlinkRow> = {
-        use std::cmp::Ordering;
-        let (longest, shortest, symlinked_is_longest) = {
-            match symlinked.len().cmp(&not_symlinked.len()) {
-                Ordering::Greater | Ordering::Equal => (&symlinked, &not_symlinked, true),
-                Ordering::Less => (&not_symlinked, &symlinked, false),
-            }
+        let (longest, shortest, symlinked_is_longest) = if symlinked.len() >= not_symlinked.len() {
+            (&symlinked, &not_symlinked, true)
+        } else {
+            (&not_symlinked, &symlinked, false)
         };
 
         longest
@@ -472,10 +472,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     let conflicts = get_conflicts_in_cache(&sym.not_symlinked);
     // whether a conflict is a symlink or a pre-existing file does not matter for global status
     // so we just add them together
-    let conflicts = conflicts
-        .keys()
-        .chain(sym.not_owned.keys())
-        .collect::<HashSet<_>>();
+    let conflicts: HashSet<_> = conflicts.keys().chain(sym.not_owned.keys()).collect();
 
     // --- Creates all the tables and prints them ---
     use tabled::{
@@ -536,10 +533,11 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         // merges conditional groups into their base group
         // eg: `dotfile_unix` gets merged into the `dotfile` group
         for base_group in status.keys() {
-            if group_is_valid(base_group) {
-                for group in sym.get_related_conditional_groups(base_group, symlinked) {
-                    groups.push(group);
-                }
+            if !group_is_valid(base_group) {
+                continue;
+            }
+            for group in sym.get_related_conditional_groups(base_group, symlinked) {
+                groups.push(group);
             }
         }
 
@@ -549,9 +547,9 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
     }
 
     let not_symlinked =
-        get_related_groups_with_filter(&sym, false, |group| groups.contains(&group.to_string()));
+        get_related_groups_with_filter(sym, false, |group| groups.contains(&group.to_string()));
 
-    let symlinked = get_related_groups_with_filter(&sym, true, |group| {
+    let symlinked = get_related_groups_with_filter(sym, true, |group| {
         !not_symlinked.contains(group) && groups.contains(&group.to_string())
     });
 
@@ -619,7 +617,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         println!();
     }
 
-    let invalid_groups = utils::check_invalid_groups(DotfileType::Configs, &groups);
+    let invalid_groups = dotfiles::check_invalid_groups(DotfileType::Configs, &groups);
     if let Some(invalid_groups) = &invalid_groups {
         eprintln!("Following groups do not exist:");
         for group in invalid_groups {
@@ -652,10 +650,10 @@ pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils;
+    use crate::dotfiles;
+    use dotfiles::Dotfile;
     use std::fs::{self, File};
     use std::path;
-    use utils::Dotfile;
 
     fn start_symlink_cache() -> (super::SymlinkHandler, Dotfile) {
         todo!()

@@ -1,6 +1,6 @@
 //! Contains utilities to handle dotfiles
 
-use crate::utils;
+use crate::dotfiles;
 use std::env;
 use std::fs;
 use std::{
@@ -193,7 +193,7 @@ pub fn dotfile_contains(dtype: DotfileType, group: &str) -> bool {
 pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec<String>> {
     let mut invalid_groups = Vec::new();
     for group in groups {
-        if !utils::dotfile_contains(dtype, group) && group != "*" {
+        if !dotfiles::dotfile_contains(dtype, group) && group != "*" {
             invalid_groups.push(group.clone());
         }
     }
@@ -221,7 +221,7 @@ pub fn print_info_box(title: &str, content: &str) {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::Dotfile;
+    use crate::dotfiles::Dotfile;
 
     #[test]
     fn get_dotfiles_path() {
