@@ -431,7 +431,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         not_symlinked: &'a str,
     }
 
-    // -- process status from symlink ---
+    // --- process status from symlink ---
     // groups that are both in symlinked and not_symlinked
     // will be marked as not_symlinked only
     let not_symlinked: Vec<_> = sym.not_symlinked.keys().collect();
@@ -518,40 +518,41 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 }
 
 fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
-    fn get_related_groups_with_filter(
-        sym: &SymlinkHandler,
-        symlinked: bool,
-        group_is_valid: impl Fn(&String) -> bool,
-    ) -> Vec<String> {
-        let mut groups = Vec::new();
-        let status = if symlinked {
-            &sym.symlinked
-        } else {
-            &sym.not_symlinked
+    let get_related_groups =
+        |sym: &SymlinkHandler, not_symlinked_groups: Option<&Vec<String>>| -> Vec<String> {
+            let mut related_groups = Vec::new();
+
+            let symlinked = not_symlinked_groups.is_some();
+
+            // merges conditional groups into their base group
+            // eg: `dotfile_unix` gets merged into the `dotfile` group
+            for base_group in &groups {
+                match not_symlinked_groups {
+                    Some(not_symlinked) => {
+                        if not_symlinked.contains(base_group) {
+                            continue;
+                        }
+                    }
+
+                    None => {
+                        if !sym.not_symlinked.contains_key(base_group) {
+                            continue;
+                        }
+                    }
+                }
+
+                for group in sym.get_related_conditional_groups(&base_group, symlinked) {
+                    related_groups.push(group);
+                }
+            }
+
+            related_groups.sort();
+            related_groups.dedup();
+            related_groups
         };
 
-        // merges conditional groups into their base group
-        // eg: `dotfile_unix` gets merged into the `dotfile` group
-        for base_group in status.keys() {
-            if !group_is_valid(base_group) {
-                continue;
-            }
-            for group in sym.get_related_conditional_groups(base_group, symlinked) {
-                groups.push(group);
-            }
-        }
-
-        groups.sort();
-        groups.dedup();
-        groups
-    }
-
-    let not_symlinked =
-        get_related_groups_with_filter(sym, false, |group| groups.contains(&group.to_string()));
-
-    let symlinked = get_related_groups_with_filter(sym, true, |group| {
-        !not_symlinked.contains(group) && groups.contains(&group.to_string())
-    });
+    let not_symlinked = get_related_groups(sym, None);
+    let symlinked = get_related_groups(sym, Some(&not_symlinked));
 
     let not_owned: HashCache = sym
         .not_owned
