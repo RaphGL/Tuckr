@@ -87,9 +87,9 @@ impl Dotfile {
         // Gets the current OS and OS family
         let target_os = format!("_{}", env::consts::OS);
         let target_family = format!("_{}", env::consts::FAMILY);
-        let group = self.path.file_name().unwrap().to_str().unwrap();
 
         // returns true if a group has no suffix or its suffix matches the current OS
+        let group = self.group_name.as_str();
         group.ends_with(&target_os) || group.ends_with(&target_family) || !group.contains('_')
     }
 

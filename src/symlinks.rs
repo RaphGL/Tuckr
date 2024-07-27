@@ -47,7 +47,7 @@ struct SymlinkHandler {
     dotfiles_dir: PathBuf,    // path to the dotfiles directory
     symlinked: HashCache,     // dotfiles that have been symlinked from Dotfiles/Configs
     not_symlinked: HashCache, // dotfiles that haven't been symlinked to $HOME yet
-    not_owned: HashCache, // dotfiles that are symlinks but points somewhere outside of Dotfiles/Configs
+    not_owned: HashCache, // dotfiles that are symlinks but points somewhere outside of their respective Dotfiles/Configs's group dir
 }
 
 impl SymlinkHandler {
@@ -87,7 +87,7 @@ impl SymlinkHandler {
 
         // iterates over every file inside dotfiles/Config and determines their symlink status
         configs_dir.map(|f| {
-            // skip group directories it would try to link dotfiles/Configs/Groups to the users home
+            // skip group directories otherwise it would try to link dotfiles/Configs/Groups to the users home
             if f.path == f.group_path {
                 return;
             }
@@ -115,7 +115,7 @@ impl SymlinkHandler {
                     group.insert(f);
                 }
             } else {
-                if target.is_dir() && target.read_dir().unwrap().next().is_some() {
+                if target.is_dir() {
                     return;
                 }
 
@@ -420,7 +420,6 @@ fn get_conflicts_in_cache(cache: &HashCache) -> HashCache {
     conflicts
 }
 
-// todo: make command aware of conditional groups
 fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled, Debug)]
     struct SymlinkRow<'a> {
@@ -434,15 +433,38 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     // --- process status from symlink ---
     // groups that are both in symlinked and not_symlinked
     // will be marked as not_symlinked only
-    let not_symlinked: Vec<_> = sym.not_symlinked.keys().collect();
-    let symlinked: Vec<_> = sym
-        .symlinked
-        .keys()
-        .filter(|group| !not_symlinked.contains(group))
-        .collect();
+
+    let (symlinked, not_symlinked) = {
+        let mut not_symlinked: Vec<_> = sym.not_symlinked.keys().collect();
+
+        let mut symlinked: Vec<_> = sym
+            .symlinked
+            .keys()
+            .filter(|group| {
+                if sym.get_related_conditional_groups(group, false).is_empty()
+                    // ignore conditional groups
+                    && !group.contains('_')
+                {
+                    true
+                } else {
+                    not_symlinked.push(group);
+                    false
+                }
+            })
+            .collect();
+
+        symlinked.sort();
+
+        let mut not_symlinked: Vec<_> = not_symlinked
+            .into_iter()
+            .filter(|group| !group.contains('_'))
+            .collect();
+        not_symlinked.sort();
+        (symlinked, not_symlinked)
+    };
 
     let empty_str = String::from("");
-    let status: Vec<SymlinkRow> = {
+    let status_rows: Vec<SymlinkRow> = {
         let (longest, shortest, symlinked_is_longest) = if symlinked.len() >= not_symlinked.len() {
             (&symlinked, &not_symlinked, true)
         } else {
@@ -479,7 +501,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         col, format::Format, object::Columns, object::Rows, Alignment, Margin, Modify, Style,
     };
 
-    let mut sym_table = Table::new(status);
+    let mut sym_table = Table::new(status_rows);
     sym_table
         .with(Style::rounded())
         .with(Margin::new(4, 4, 1, 1))
@@ -506,7 +528,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     println!("{final_table}");
 
     if !conflicts.is_empty() {
-        println!("\nTo learn more about conflicting dotfiles run: `tuckr status <group...>`\n")
+        println!("\nTo learn more about conflicting dotfiles run: `tuckr status <group...>`")
     }
 
     // Determines exit code for the command based on the dotfiles' status
@@ -518,38 +540,41 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 }
 
 fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
-    let get_related_groups =
-        |sym: &SymlinkHandler, not_symlinked_groups: Option<&Vec<String>>| -> Vec<String> {
-            let mut related_groups = Vec::new();
+    let get_related_groups = |sym: &SymlinkHandler,
+                              not_symlinked_groups: Option<&Vec<String>>|
+     -> Vec<String> {
+        let mut related_groups = Vec::new();
 
-            let symlinked = not_symlinked_groups.is_some();
+        let symlinked = not_symlinked_groups.is_some();
 
-            // merges conditional groups into their base group
-            // eg: `dotfile_unix` gets merged into the `dotfile` group
-            for base_group in &groups {
+        // merges conditional groups into their base group
+        // eg: `dotfile_unix` gets merged into the `dotfile` group
+        for base_group in &groups {
+            let related_cond_groups = sym.get_related_conditional_groups(&base_group, symlinked);
+
+            for group in related_cond_groups {
                 match not_symlinked_groups {
                     Some(not_symlinked) => {
-                        if not_symlinked.contains(base_group) {
+                        if not_symlinked.contains(&group) {
                             continue;
                         }
                     }
 
                     None => {
-                        if !sym.not_symlinked.contains_key(base_group) {
+                        if !sym.not_symlinked.contains_key(&group) {
                             continue;
                         }
                     }
                 }
 
-                for group in sym.get_related_conditional_groups(&base_group, symlinked) {
-                    related_groups.push(group);
-                }
+                related_groups.push(group);
             }
+        }
 
-            related_groups.sort();
-            related_groups.dedup();
-            related_groups
-        };
+        related_groups.sort();
+        related_groups.dedup();
+        related_groups
+    };
 
     let not_symlinked = get_related_groups(sym, None);
     let symlinked = get_related_groups(sym, Some(&not_symlinked));
