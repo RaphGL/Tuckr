@@ -96,6 +96,7 @@ enum Cli {
     Push { group: String, files: Vec<String> },
 
     /// Remove groups from dotfiles/Configs
+    #[command(arg_required_else_help = true)]
     Pop { groups: Vec<String> },
 
     /// List available hooks

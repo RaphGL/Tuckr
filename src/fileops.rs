@@ -84,8 +84,12 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     );
 
     println!(
-        "A dotfiles directory has been created on {}.",
-        dotfiles_dir.to_str().unwrap()
+        "{}",
+        format!(
+            "A dotfiles directory has been created on {}.",
+            dotfiles_dir.to_str().unwrap()
+        )
+        .yellow()
     );
 
     Ok(())
@@ -103,21 +107,32 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
     let home_dir = dirs::home_dir().unwrap();
 
     if files.is_empty() {
-        eprintln!("No files were provided to push to {}.", group);
+        eprintln!(
+            "{}",
+            format!("No files were provided to push to `{}`.", group).red()
+        );
         return Err(ExitCode::FAILURE);
     }
 
+    let mut any_file_failed = false;
     for file in files {
-        let file = PathBuf::from(file).canonicalize().unwrap();
+        let file = PathBuf::from(file);
+        if !file.exists() {
+            eprintln!("{}", format!("{} does not exist.", file.display()).yellow());
+            any_file_failed = true;
+            continue;
+        }
+
+        let file = file.canonicalize().unwrap();
         let target_file = dotfiles_dir.join(file.strip_prefix(&home_dir).unwrap());
         let target_dir = target_file.parent().unwrap();
 
-        if !target_dir.exists() {
+        if !target_file.exists() {
             fs::create_dir_all(target_dir).unwrap();
             fs::copy(file, target_file).unwrap();
         } else {
-            println!(
-                "{} already exists. Do you want to override it? (y/N)",
+            print!(
+                "{} already exists. Do you want to override it? (y/N) ",
                 target_file.to_str().unwrap()
             );
             std::io::stdout().flush().unwrap();
@@ -133,7 +148,11 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
         }
     }
 
-    Ok(())
+    if any_file_failed {
+        Err(ReturnCode::NoSuchFileOrDir.into())
+    } else {
+        Ok(())
+    }
 }
 
 pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
@@ -149,6 +168,11 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
     let mut invalid_groups = Vec::new();
     for group in groups {
         let group_dir = dotfiles_dir.join(group);
+        if !group_dir.is_dir() {
+            invalid_groups.push(group);
+            continue;
+        }
+
         if !group_dir.exists() {
             invalid_groups.push(group);
         } else {
@@ -156,7 +180,7 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
         }
     }
 
-    if invalid_groups.is_empty() {
+    if !invalid_groups.is_empty() {
         for group in invalid_groups {
             eprintln!("{} does not exist.", group);
         }
@@ -166,9 +190,9 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
 
     println!("The following groups will be removed:");
     for group in groups {
-        print!("\t{}", group.yellow());
+        println!("\t{}", group.yellow());
     }
-    print!("\n\nDo you want to proceed? (y/N) ");
+    print!("\nDo you want to proceed? (y/N) ");
     std::io::stdout().flush().unwrap();
     let mut confirmation = String::new();
     std::io::stdin().read_line(&mut confirmation).unwrap();
@@ -179,10 +203,8 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    for group in valid_groups {
-        if group.is_dir() {
-            fs::remove_dir_all(group).unwrap();
-        }
+    for group_path in valid_groups {
+        fs::remove_dir_all(group_path).unwrap();
     }
 
     Ok(())
