@@ -5,7 +5,7 @@
 //! - symlinked: all files that have been symlinked
 //! - not_symlinked: files that haven't been symlinked yet
 //! - not_owned: files that have the same name on dotfiles/Configs but that do not belong to us,
-//! therefore they are in conflict
+//!   therefore they are in conflict
 //!
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
 //! $HOME equivalents are pointing to them and categorizing them accordingly.
@@ -540,41 +540,40 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 }
 
 fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
-    let get_related_groups = |sym: &SymlinkHandler,
-                              not_symlinked_groups: Option<&Vec<String>>|
-     -> Vec<String> {
-        let mut related_groups = Vec::new();
+    let get_related_groups =
+        |sym: &SymlinkHandler, not_symlinked_groups: Option<&Vec<String>>| -> Vec<String> {
+            let mut related_groups = Vec::new();
 
-        let symlinked = not_symlinked_groups.is_some();
+            let symlinked = not_symlinked_groups.is_some();
 
-        // merges conditional groups into their base group
-        // eg: `dotfile_unix` gets merged into the `dotfile` group
-        for base_group in &groups {
-            let related_cond_groups = sym.get_related_conditional_groups(&base_group, symlinked);
+            // merges conditional groups into their base group
+            // eg: `dotfile_unix` gets merged into the `dotfile` group
+            for base_group in &groups {
+                let related_cond_groups = sym.get_related_conditional_groups(base_group, symlinked);
 
-            for group in related_cond_groups {
-                match not_symlinked_groups {
-                    Some(not_symlinked) => {
-                        if not_symlinked.contains(&group) {
-                            continue;
+                for group in related_cond_groups {
+                    match not_symlinked_groups {
+                        Some(not_symlinked) => {
+                            if not_symlinked.contains(&group) {
+                                continue;
+                            }
+                        }
+
+                        None => {
+                            if !sym.not_symlinked.contains_key(&group) {
+                                continue;
+                            }
                         }
                     }
 
-                    None => {
-                        if !sym.not_symlinked.contains_key(&group) {
-                            continue;
-                        }
-                    }
+                    related_groups.push(group);
                 }
-
-                related_groups.push(group);
             }
-        }
 
-        related_groups.sort();
-        related_groups.dedup();
-        related_groups
-    };
+            related_groups.sort();
+            related_groups.dedup();
+            related_groups
+        };
 
     let not_symlinked = get_related_groups(sym, None);
     let symlinked = get_related_groups(sym, Some(&not_symlinked));
