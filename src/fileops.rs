@@ -11,23 +11,6 @@ use std::process::{Command, ExitCode};
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
-    // --- Getting user confirmation ---
-    print!(
-        "Are you sure you want to convert your dotfiles to tuckr?\n\
-        All files starting with a dot will be ignored (y/N) "
-    );
-    io::stdout().flush().unwrap();
-
-    let mut answer = String::new();
-    io::stdin().read_line(&mut answer).unwrap();
-    let answer = answer.trim().to_lowercase();
-
-    match answer.as_str() {
-        "yes" | "y" => (),
-        _ => return Ok(()),
-    }
-
-    // --- initializing required directory ---
     let dotfiles_dir = match dotfiles::get_dotfiles_path() {
         Ok(path) => path,
         Err(e) => {
@@ -36,17 +19,39 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
         }
     };
 
+    // --- Getting user confirmation ---
+    println!(
+        "{}",
+        format!(
+            "The dotfiles at `{}` will be converted into Tuckr.",
+            dotfiles_dir.display()
+        )
+        .yellow()
+    );
+    print!("Are you sure you want to convert your dotfiles to tuckr? (y/N)");
+    io::stdout().flush().unwrap();
+
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer).unwrap();
+    if !matches!(answer.trim().to_lowercase().as_str(), "yes" | "y") {
+        return Ok(());
+    }
+
+    // --- initializing required directory ---
     let configs_path = dotfiles_dir.join("Configs");
     fs::create_dir_all(&configs_path).expect("Could not create required directory.");
 
     // --- Moving dotfiles to Configs/ ---
     let cwd = fs::read_dir(&dotfiles_dir).expect("Could not open current directory");
-    const IGNORED_FILES: &[&str] = &["COPYING", "LICENSE", "README.md"];
 
-    for dir in cwd {
-        let dir = dir.unwrap();
+    for file in cwd {
+        let dir = file.unwrap();
+        if !dir.metadata().unwrap().is_dir() {
+            continue;
+        }
+
         let dirname = dir.file_name().to_str().unwrap().to_owned();
-        if dirname.starts_with('.') || IGNORED_FILES.contains(&dirname.as_str()) {
+        if dirname.starts_with('.') {
             continue;
         }
 

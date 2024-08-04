@@ -22,7 +22,7 @@ use tabled::{Table, Tabled};
 fn symlink_file(f: PathBuf) {
     let src_path = f;
     match Dotfile::try_from(src_path.clone()) {
-        Some(group) => {
+        Ok(group) => {
             let target_path = group.to_target_path();
 
             #[cfg(target_family = "unix")]
@@ -36,7 +36,10 @@ fn symlink_file(f: PathBuf) {
             }
         }
 
-        None => eprintln!("Failed to link {}", src_path.to_str().unwrap()),
+        Err(err) => {
+            eprintln!("{}", err);
+            eprintln!("Failed to link {}.", src_path.to_str().unwrap());
+        }
     }
 }
 
@@ -183,6 +186,10 @@ impl SymlinkHandler {
         Ok(self)
     }
 
+    fn is_empty(&self) -> bool {
+        self.symlinked.is_empty() && self.not_symlinked.is_empty() && self.not_owned.is_empty()
+    }
+
     /// Returns all conditional groups with the same name that satify the current user's platform
     ///
     /// symlinked: gets symlinked conditional groupsif true, otherwise gets not symlinked ones
@@ -238,15 +245,17 @@ impl SymlinkHandler {
 
         for group in groups {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
-            if group.path.exists() {
-                group.map(|f| remove_symlink(f.path));
-            } else {
+
+            if !group.path.exists() {
                 eprintln!(
                     "{} {}",
                     "There's no group called".red(),
                     group.group_name.red()
                 );
+                continue;
             }
+
+            group.map(|f| remove_symlink(f.path));
         }
     }
 }
@@ -665,6 +674,13 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
 /// Prints symlinking status
 pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
     let sym = SymlinkHandler::try_new()?;
+
+    if sym.is_empty() {
+        println!("{}", "No dotfiles have been setup yet".yellow());
+        println!("To get started: add dotfiles using `tuckr push` or add them manually to dotfiles/Configs.");
+        return Err(ReturnCode::NoSetupFolder.into());
+    }
+
     match groups {
         Some(groups) => print_groups_status(&sym, groups)?,
         None => print_global_status(&sym)?,

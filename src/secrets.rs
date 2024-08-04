@@ -157,7 +157,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
     if groups.contains(&"*".to_string()) {
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
-            let Some(group) = Dotfile::try_from(group.unwrap().path()) else {
+            let Ok(group) = Dotfile::try_from(group.unwrap().path()) else {
                 eprintln!("Received an invalid group path.");
                 return Err(ExitCode::FAILURE);
             };
@@ -169,7 +169,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
 
     for group in groups {
         let group = handler.dotfiles_dir.join("Secrets").join(group);
-        let Some(group) = Dotfile::try_from(group) else {
+        let Ok(group) = Dotfile::try_from(group) else {
             eprintln!("Received an invalid group path.");
             return Err(ExitCode::FAILURE);
         };

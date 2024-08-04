@@ -35,53 +35,57 @@ pub struct Dotfile {
     pub group_name: String,
 }
 
-impl Dotfile {
-    pub fn try_from(file_path: path::PathBuf) -> Option<Dotfile> {
+impl TryFrom<path::PathBuf> for Dotfile {
+    type Error = String;
+
+    fn try_from(value: path::PathBuf) -> Result<Self, Self::Error> {
         /// Extracts group name from tuckr directories
-        pub fn to_group_path(group_path: &path::PathBuf) -> Option<path::PathBuf> {
-            let dotfiles_dir = get_dotfiles_path().unwrap();
+        pub fn to_group_path(group_path: &path::PathBuf) -> Result<path::PathBuf, String> {
+            let dotfiles_dir = get_dotfiles_path()?;
             let configs_dir = dotfiles_dir.join("Configs");
             let hooks_dir = dotfiles_dir.join("Hooks");
             let secrets_dir = dotfiles_dir.join("Secrets");
 
-            let dir = if group_path.starts_with(&configs_dir) {
+            let dotfile_root_dir = if group_path.starts_with(&configs_dir) {
                 configs_dir
             } else if group_path.starts_with(&hooks_dir) {
                 hooks_dir
             } else if group_path.starts_with(&secrets_dir) {
                 secrets_dir
             } else {
-                return None;
+                return Err("path does not belong to dotfiles.".into());
             };
 
-            let group = if *group_path == dir {
-                Some(dir)
+            let group = if *group_path == dotfile_root_dir {
+                Ok(dotfile_root_dir)
             } else {
-                let Component::Normal(groupname) = group_path
-                    .strip_prefix(&dir)
+                let Component::Normal(group_relpath) = group_path
+                    .strip_prefix(&dotfile_root_dir)
                     .unwrap()
                     .components()
                     .next()
                     .unwrap()
                 else {
-                    return None;
+                    return Err("failed to get group path relative to dotfile dir.".into());
                 };
 
-                Some(dir.join(groupname))
+                Ok(dotfile_root_dir.join(group_relpath))
             };
 
             group
         }
 
-        let group_path = to_group_path(&file_path).unwrap();
+        let group_path = to_group_path(&value)?;
 
-        Some(Dotfile {
+        Ok(Dotfile {
             group_name: group_path.file_name().unwrap().to_str().unwrap().into(),
-            path: file_path,
+            path: value,
             group_path,
         })
     }
+}
 
+impl Dotfile {
     /// Returns true if the target can be used by the current platform
     pub fn is_valid_target(&self) -> bool {
         // Gets the current OS and OS family
@@ -199,10 +203,10 @@ pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec
     }
 
     if invalid_groups.is_empty() {
-        None
-    } else {
-        Some(invalid_groups)
+        return None;
     }
+
+    Some(invalid_groups)
 }
 
 /// Prints a single row info box with title on the left
