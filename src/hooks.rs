@@ -13,6 +13,20 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
+/// Prints a single row info box with title on the left
+/// and content on the right
+fn print_info_box(title: &str, content: &str) {
+    let mut hook_box = tabled::builder::Builder::default()
+        .set_columns([title])
+        .add_record([content])
+        .to_owned()
+        .build();
+    hook_box
+        .with(tabled::Rotate::Left)
+        .with(tabled::Style::rounded().off_vertical());
+    println!("{hook_box}");
+}
+
 #[derive(Debug, PartialEq)]
 enum DeployStep {
     Initialize, // Default value before starting deployment
@@ -54,7 +68,7 @@ impl Iterator for DeployStages {
 
 /// Runs hooks of type PreHook or PostHook
 fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
-    dotfiles::print_info_box(
+    print_info_box(
         match hook_type {
             DeployStep::PreHook => "Running Prehook",
             DeployStep::PostHook => "Running Posthook",
@@ -104,19 +118,12 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
             }
         };
 
-        if output.wait().unwrap().success() {
-            println!(
-                "{}",
-                format!("Hooked {group} {filename} successfully")
-                    .green()
-                    .to_string()
-                    .as_str()
-            );
-        } else {
-            dotfiles::print_info_box(
+        if !output.wait().unwrap().success() {
+            print_info_box(
                 "Failed to hook".red().to_string().as_str(),
                 format!("{group} {filename}").as_str(),
             );
+            return Err(ExitCode::FAILURE);
         }
     }
 
@@ -154,7 +161,7 @@ pub fn set_cmd(
                 }
 
                 DeployStep::Symlink => {
-                    dotfiles::print_info_box(
+                    print_info_box(
                         "Symlinking group",
                         group.group_name.yellow().to_string().as_str(),
                     );
@@ -178,8 +185,12 @@ pub fn set_cmd(
 
     if groups.contains(&'*'.to_string()) {
         for folder in fs::read_dir(hooks_dir).unwrap() {
-            let Ok(group) = Dotfile::try_from(folder.unwrap().path()) else {
-                eprintln!("Received an invalid group path.");
+            let folder = folder.unwrap().path();
+            let Ok(group) = Dotfile::try_from(folder.clone()) else {
+                eprintln!(
+                    "{}",
+                    format!("Got an invalid group: {}", folder.display()).red()
+                );
                 return Err(ExitCode::FAILURE);
             };
             run_deploy_steps(DeployStages::new(), group)?;
@@ -189,8 +200,12 @@ pub fn set_cmd(
     }
 
     for group in groups {
-        let Ok(group) = Dotfile::try_from(hooks_dir.join(group)) else {
-            eprintln!("Received an invalid group path.");
+        let hook_path = hooks_dir.join(group);
+        let Ok(group) = Dotfile::try_from(hook_path.clone()) else {
+            eprintln!(
+                "{}",
+                format!("Got an invalid group: {}", hook_path.display()).red()
+            );
             return Err(ExitCode::FAILURE);
         };
         run_deploy_steps(DeployStages::new(), group)?;

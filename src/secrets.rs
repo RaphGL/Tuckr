@@ -20,11 +20,6 @@ struct SecretsHandler {
 
 impl SecretsHandler {
     fn try_new() -> Result<Self, ExitCode> {
-        // makes a hash of the password so that it can fit on the 256 bit buffer used by the
-        // algorithm
-        let input_key = rpassword::prompt_password("Password: ").unwrap();
-        let input_hash = Sha256::digest(input_key);
-
         let dotfiles_dir = match dotfiles::get_dotfiles_path() {
             Ok(path) => path,
             Err(e) => {
@@ -32,6 +27,11 @@ impl SecretsHandler {
                 return Err(ReturnCode::CouldntFindDotfiles.into());
             }
         };
+
+        // makes a hash of the password so that it can fit on the 256 bit buffer used by the
+        // algorithm
+        let input_key = rpassword::prompt_password("Password: ").unwrap();
+        let input_hash = Sha256::digest(input_key);
 
         Ok(SecretsHandler {
             dotfiles_dir,
@@ -117,6 +117,8 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
 
 /// Decrypts secrets
 pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    let handler = SecretsHandler::try_new()?;
+
     if let Some(invalid_groups) =
         dotfiles::check_invalid_groups(dotfiles::DotfileType::Secrets, groups)
     {
@@ -125,8 +127,6 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
         }
         return Err(ReturnCode::DecryptionFailed.into());
     }
-
-    let handler = SecretsHandler::try_new()?;
 
     let dest_dir = std::env::current_dir().unwrap();
 

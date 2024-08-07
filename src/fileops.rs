@@ -91,10 +91,10 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     println!(
         "{}",
         format!(
-            "A dotfiles directory has been created on {}.",
+            "A dotfiles directory has been created on `{}`.",
             dotfiles_dir.to_str().unwrap()
         )
-        .yellow()
+        .green()
     );
 
     Ok(())
@@ -218,7 +218,10 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
 fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     let dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir.join(dirname),
-        Err(_) => return Err(ReturnCode::CouldntFindDotfiles.into()),
+        Err(err) => {
+            eprintln!("{err}");
+            return Err(ReturnCode::CouldntFindDotfiles.into());
+        }
     };
 
     match Command::new(if cfg!(target_family = "unix") {

@@ -1,5 +1,7 @@
 //! Contains utilities to handle dotfiles
 
+use owo_colors::OwoColorize;
+
 use crate::dotfiles;
 use std::env;
 use std::fs;
@@ -165,9 +167,13 @@ pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
             .join(format!("tuckr-{}", std::process::id()))
             .join("dotfiles"))
     } else {
-        Err(format!("Couldn't find dotfiles directory.\n\
-            Initialize your dotfiles with `tuckr init` or make sure the dotfiles are set on either {} or {}.", 
-            config_dotfiles.to_str().unwrap(), home_dotfiles.to_str().unwrap()))
+        Err(format!(
+            "{}\n\n\
+            Make sure a `{}` directory exists.\n\
+            Or use `tuckr init`.",
+            "Couldn't find dotfiles directory.".yellow(),
+            config_dotfiles.display(),
+        ))
     }
 }
 
@@ -207,20 +213,6 @@ pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec
     }
 
     Some(invalid_groups)
-}
-
-/// Prints a single row info box with title on the left
-/// and content on the right
-pub fn print_info_box(title: &str, content: &str) {
-    let mut hook_box = tabled::builder::Builder::default()
-        .set_columns([title])
-        .add_record([content])
-        .to_owned()
-        .build();
-    hook_box
-        .with(tabled::Rotate::Left)
-        .with(tabled::Style::rounded().off_vertical());
-    println!("{hook_box}");
 }
 
 #[cfg(test)]
