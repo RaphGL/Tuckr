@@ -93,7 +93,11 @@ enum Cli {
     },
 
     /// Copy files into groups
-    Push { group: String, files: Vec<String> },
+    Push {
+        group: String,
+        #[arg(required = true)]
+        files: Vec<String>,
+    },
 
     /// Remove groups from dotfiles/Configs
     #[command(arg_required_else_help = true)]
@@ -112,6 +116,10 @@ enum Cli {
 
     /// Convert a GNU Stow repo into Tuckr
     FromStow,
+
+    /// Returns the group the files belongs to
+    #[command(name = "groupis", arg_required_else_help = true)]
+    GroupIs { files: Vec<String> },
 }
 
 fn main() -> ExitCode {
@@ -142,6 +150,7 @@ fn main() -> ExitCode {
         Cli::LsSecrets => fileops::ls_secrets_cmd(),
         Cli::Push { group, files } => fileops::push_cmd(group, &files),
         Cli::Pop { groups } => fileops::pop_cmd(&groups),
+        Cli::GroupIs { files } => fileops::groupis_cmd(&files),
     };
 
     match exit_code {

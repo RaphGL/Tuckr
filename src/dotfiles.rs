@@ -5,6 +5,7 @@ use owo_colors::OwoColorize;
 use crate::dotfiles;
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::{
     path::{self, Component},
     process,
@@ -175,6 +176,11 @@ pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
             config_dotfiles.display(),
         ))
     }
+}
+
+pub fn get_target_basepath(target: PathBuf) -> PathBuf {
+    let home_dir = dirs::home_dir().unwrap();
+    target.strip_prefix(home_dir).unwrap().into()
 }
 
 #[derive(Copy, Clone)]

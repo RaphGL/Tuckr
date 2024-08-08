@@ -111,14 +111,6 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
 
     let home_dir = dirs::home_dir().unwrap();
 
-    if files.is_empty() {
-        eprintln!(
-            "{}",
-            format!("No files were provided to push to `{}`.", group).red()
-        );
-        return Err(ExitCode::FAILURE);
-    }
-
     let mut any_file_failed = false;
     for file in files {
         let file = PathBuf::from(file);
@@ -244,5 +236,66 @@ pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
 
 pub fn ls_secrets_cmd() -> Result<(), ExitCode> {
     list_tuckr_dir("Secrets")?;
+    Ok(())
+}
+
+pub fn groupis_cmd(files: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("{e}");
+            return Err(ReturnCode::NoSetupFolder.into());
+        }
+    }
+    .join("Configs");
+
+    let groups: Vec<_> = dotfiles_dir
+        .read_dir()
+        .unwrap()
+        .filter_map(|f| {
+            let f = f.unwrap();
+            if f.file_type().unwrap().is_dir() {
+                Some(f.file_name().into_string().unwrap())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    'next_file: for file in files {
+        let mut file_path = PathBuf::from(file);
+        if !file_path.exists() {
+            eprintln!("{}", format!("`{file} does not exist.`").red());
+            continue;
+        }
+
+        while !file_path.is_symlink() {
+            if !file_path.pop() {
+                eprintln!("{}", format!("`{file}` is not a tuckr dotfile.").red());
+                break 'next_file;
+            }
+        }
+
+        let basepath = dotfiles::get_target_basepath(file_path);
+
+        for group in &groups {
+            let dotfile_path = dotfiles_dir.join(group).join(&basepath);
+
+            if !dotfile_path.exists() {
+                continue;
+            }
+
+            let dotfile = match dotfiles::Dotfile::try_from(dotfile_path) {
+                Ok(dotfile) => dotfile,
+                Err(err) => {
+                    eprintln!("{err}");
+                    continue;
+                }
+            };
+
+            println!("{}", dotfile.group_name);
+        }
+    }
+
     Ok(())
 }
