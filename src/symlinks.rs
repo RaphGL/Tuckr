@@ -691,26 +691,89 @@ pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs::{self, File},
+        io::Write,
+    };
+
+    use owo_colors::OwoColorize;
+
     use crate::dotfiles;
-    use dotfiles::Dotfile;
-    use std::fs::{self, File};
-    use std::path;
 
-    fn start_symlink_cache() -> (super::SymlinkHandler, Dotfile) {
-        todo!()
+    use super::SymlinkHandler;
+
+    struct Test;
+
+    impl Test {
+        fn start() -> Self {
+            crate::fileops::init_cmd().unwrap();
+            let dotfiles_dir = dotfiles::get_dotfiles_path().unwrap();
+            let group_dir = dotfiles_dir.join("Configs").join("Group1");
+
+            let new_config_dir = group_dir.join(".config");
+            fs::create_dir_all(&new_config_dir).unwrap();
+
+            let mut file = File::create(new_config_dir.join("group_file")).unwrap();
+            file.write("Some random content on file".as_bytes())
+                .unwrap();
+
+            let mut file2 = File::create(group_dir.join("group_file_0")).unwrap();
+            file2
+                .write("Some random content on file".as_bytes())
+                .unwrap();
+            Self
+        }
     }
 
-    fn cleanup_symlink_cache() {
-        todo!()
+    impl Drop for Test {
+        fn drop(&mut self) {
+            _ = super::remove_cmd(&["*".to_string()], &[]);
+            let Ok(dotfiles_dir) = dotfiles::get_dotfiles_path() else {
+                eprintln!("{}", "Failed to clean up test.".red());
+                return;
+            };
+
+            if dotfiles_dir.exists() {
+                fs::remove_dir_all(dotfiles_dir).unwrap();
+            }
+        }
+    }
+
+    fn test_adding_symlink() {
+        let _test = Test::start();
+
+        let sym = SymlinkHandler::try_new().unwrap();
+        assert!(
+            !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
+        );
+
+        assert!(!sym.symlinked.contains_key("Group1"));
+        super::add_cmd(&["Group1".to_string()], &[], false, false).unwrap();
+
+        let sym = SymlinkHandler::try_new().unwrap();
+        assert!(sym.symlinked.contains_key("Group1"));
+    }
+
+    fn test_removing_symlink() {
+        let _test = Test::start();
+
+        super::add_cmd(&["Group1".to_string()], &[], false, false).unwrap();
+
+        let sym = SymlinkHandler::try_new().unwrap();
+        assert!(
+            !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
+        );
+
+        assert!(!sym.not_symlinked.contains_key("Group1"));
+
+        super::remove_cmd(&["Group1".to_string()], &[]).unwrap();
+        let sym = SymlinkHandler::try_new().unwrap();
+        assert!(sym.not_symlinked.contains_key("Group1"));
     }
 
     #[test]
-    fn add_symlink() {
-        todo!()
-    }
-
-    #[test]
-    fn remove_symlink() {
-        todo!()
+    fn add_and_remove_symlink() {
+        test_adding_symlink();
+        test_removing_symlink();
     }
 }

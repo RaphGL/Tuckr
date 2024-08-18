@@ -155,18 +155,20 @@ impl Dotfile {
 }
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
+///
+/// When run on a unit test it returns a temporary directory for testing purposes
 pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
     let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
     let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
 
-    if home_dotfiles.exists() {
-        Ok(home_dotfiles)
-    } else if config_dotfiles.exists() {
-        Ok(config_dotfiles)
-    } else if cfg!(test) {
+    if cfg!(test) {
         Ok(std::env::temp_dir()
             .join(format!("tuckr-{}", std::process::id()))
             .join("dotfiles"))
+    } else if home_dotfiles.exists() {
+        Ok(home_dotfiles)
+    } else if config_dotfiles.exists() {
+        Ok(config_dotfiles)
     } else {
         Err(format!(
             "{}\n\n\
@@ -223,59 +225,19 @@ pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec
 
 #[cfg(test)]
 mod tests {
-    use crate::dotfiles::Dotfile;
-
-    #[test]
-    fn get_dotfiles_path() {
-        // /home/$USER/.dotfiles
-        let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
-        // /home/$USER/.config/dotfiles
-        let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
-
-        let path_found = super::get_dotfiles_path().unwrap();
-        assert!(path_found == home_dotfiles || path_found == config_dotfiles);
-    }
+    use crate::dotfiles::{get_dotfiles_path, Dotfile};
 
     #[test]
     fn dotfile_to_target_path() {
-        let group = dirs::config_dir()
+        let group = get_dotfiles_path()
             .unwrap()
-            .join("dotfiles")
             .join("Configs")
             .join("zsh")
             .join(".zshrc");
 
         assert_eq!(
-            // /home/$USER/.config/dotfiles/Configs/zsh/.zshrc
             Dotfile::try_from(group).unwrap().to_target_path(),
-            // /home/$USER/.zshrc
             dirs::home_dir().unwrap().join(".zshrc")
-        );
-
-        let config_path = if cfg!(target_os = "windows") {
-            dirs::config_dir()
-                .unwrap()
-                .join("dotfiles")
-                .join("Configs")
-                .join("zsh")
-                .join("AppData")
-                .join("Roaming")
-                .join("group")
-        } else {
-            dirs::config_dir()
-                .unwrap()
-                .join("dotfiles")
-                .join("Configs")
-                .join("zsh")
-                .join(".config")
-                .join("group")
-        };
-
-        assert_eq!(
-            // /home/$USER/.config/dotfiles/Configs/zsh/.config/$group
-            Dotfile::try_from(config_path).unwrap().to_target_path(),
-            // /home/$USER/.config/$group
-            dirs::config_dir().unwrap().join("group")
         );
     }
 

@@ -7,7 +7,9 @@ use owo_colors::OwoColorize;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
+use tabled::object::Segment;
+use tabled::{Alignment, Modify, Table, Tabled};
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
@@ -80,7 +82,11 @@ pub fn init_cmd() -> Result<(), ExitCode> {
         };
     }
 
-    let dotfiles_dir = dirs::config_dir().unwrap().join("dotfiles");
+    let dotfiles_dir = if cfg!(test) {
+        dotfiles::get_dotfiles_path().unwrap()
+    } else {
+        dirs::config_dir().unwrap().join("dotfiles")
+    };
 
     create_dirs!(
         dotfiles_dir.join("Configs"),
@@ -216,17 +222,72 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
         }
     };
 
-    match Command::new(if cfg!(target_family = "unix") {
-        "ls"
-    } else {
-        "dir"
-    })
-    .arg(dir)
-    .status()
-    {
-        Ok(_) => Ok(()),
-        Err(_) => Err(ExitCode::FAILURE),
+    if !dir.exists() {
+        eprintln!(
+            "{}",
+            format!("There's no directory setup for {dirname}").red()
+        );
+        return Err(ReturnCode::NoSetupFolder.into());
     }
+
+    #[derive(Tabled)]
+    struct ListRow<'a> {
+        #[tabled(rename = "Group")]
+        group: String,
+        #[tabled(rename = "Prehook")]
+        prehook: &'a str,
+        #[tabled(rename = "Posthook")]
+        posthook: &'a str,
+    }
+
+    let dir = fs::read_dir(dir).unwrap();
+    let mut rows = Vec::new();
+
+    let true_symbol = "✓".green().to_string();
+    let false_symbol = "✗".red().to_string();
+
+    for hook in dir {
+        let hook_dir = hook.unwrap();
+        let hook_name = hook_dir.file_name();
+        let group = hook_name.to_str().unwrap().to_string();
+
+        let mut hook_entry = ListRow {
+            group,
+            prehook: &false_symbol,
+            posthook: &false_symbol,
+        };
+
+        for hook in fs::read_dir(hook_dir.path()).unwrap() {
+            let hook = hook.unwrap().file_name();
+            let hook = hook.to_str().unwrap();
+            if hook.starts_with("pre") {
+                hook_entry.prehook = &true_symbol;
+            } else if hook.starts_with("post") {
+                hook_entry.posthook = &true_symbol;
+            }
+        }
+
+        rows.push(hook_entry);
+    }
+
+    if rows.is_empty() {
+        println!(
+            "{}",
+            format!("No {} have been set up yet.", dirname.to_lowercase(),).yellow()
+        );
+        return Ok(());
+    }
+
+    use tabled::{Margin, Style};
+
+    let mut hooks_list = Table::new(rows);
+    hooks_list
+        .with(Style::rounded())
+        .with(Margin::new(4, 4, 1, 1))
+        .with(Modify::new(Segment::new(1.., 1..)).with(Alignment::center()));
+    println!("{hooks_list}");
+
+    Ok(())
 }
 
 pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
