@@ -67,17 +67,18 @@ To achieve that goal Tuckr tries to only cover what is directly needed to manage
 
 ## Getting Started
 
-The following paths should be used for your dotfiles:
+Tuckr uses a `dotfiles` directory to store all your configs. Please check the table below to know where
+to put it according to your operating system.
 
-Dotfile Path in each OS:
+You can choose either the config or the home path.
 
 | Platform       | Config Path                                | Home Path            |
 | -------------- | ------------------------------------------ | -------------------- |
 | Linux/BSDs/etc | $HOME/.config/dotfiles                     | $HOME/.dotfiles      |
 | MacOS          | $HOME/Library/Application Support/dotfiles | $HOME/.dotfiles      |
-| Windows        | %HomePath%\AppData\Roaming/dotfiles        | %HomePath%/.dotfiles |
+| Windows        | %HomePath%\AppData\Roaming\dotfiles        | %HomePath%\.dotfiles |
 
-To learn how to set it up for your dotfiles, check the `How it works` sections.
+To learn how to set up your dotfiles, check the `How it works` sections.
 
 #### Stow users
 
