@@ -24,15 +24,36 @@ fn symlink_file(f: PathBuf) {
     match Dotfile::try_from(src_path.clone()) {
         Ok(group) => {
             let target_path = group.to_target_path();
+            if target_path.exists() {
+                return;
+            }
 
             #[cfg(target_family = "unix")]
             {
-                _ = std::os::unix::fs::symlink(src_path, target_path);
+                if let Err(err) = std::os::unix::fs::symlink(src_path, target_path) {
+                    eprintln!(
+                        "failed to symlink group `{}`: {}",
+                        group.group_name,
+                        err.red()
+                    );
+                }
             }
 
             #[cfg(target_family = "windows")]
             {
-                _ = std::os::windows::fs::symlink_file(src_path, target_path);
+                let result = if f.is_dir() {
+                    std::os::windows::fs::symlink_dir(src_path, target_path)
+                } else {
+                    std::os::windows::fs::symlink_file(src_path, target_path)
+                };
+
+                if let Err(err) = result {
+                    eprintln!(
+                        "failed to symlink group `{}`: {}",
+                        group.group_name,
+                        err.red()
+                    );
+                }
             }
         }
 
