@@ -68,15 +68,6 @@ impl Iterator for DeployStages {
 
 /// Runs hooks of type PreHook or PostHook
 fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
-    print_info_box(
-        match hook_type {
-            DeployStep::PreHook => "Running Prehook",
-            DeployStep::PostHook => "Running Posthook",
-            _ => panic!("{:?} is not a valid step.", hook_type),
-        },
-        group.yellow().to_string().as_str(),
-    );
-
     let dotfiles_dir = match dotfiles::get_dotfiles_path() {
         Ok(dir) => dir,
         Err(e) => {
@@ -101,11 +92,14 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
                 if !filename.starts_with("pre") {
                     continue;
                 }
+                print_info_box("Running Prehook", group.yellow().to_string().as_str());
             }
+
             DeployStep::PostHook => {
                 if !filename.starts_with("post") {
                     continue;
                 }
+                print_info_box("Running Posthook", group.yellow().to_string().as_str());
             }
             _ => (),
         }

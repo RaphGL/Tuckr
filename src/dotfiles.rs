@@ -167,7 +167,7 @@ pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
     }
 }
 
-pub fn get_target_basepath(target: PathBuf) -> PathBuf {
+pub fn get_target_basepath(target: &path::Path) -> PathBuf {
     let home_dir = dirs::home_dir().unwrap();
     target.strip_prefix(home_dir).unwrap().into()
 }

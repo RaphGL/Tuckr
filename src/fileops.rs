@@ -139,8 +139,6 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
         }
     };
 
-    let home_dir = dirs::home_dir().unwrap();
-
     let mut any_file_failed = false;
     for file in files {
         let file = PathBuf::from(file);
@@ -151,7 +149,7 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
         }
 
         let file = path::absolute(file).unwrap();
-        let target_file = dotfiles_dir.join(file.strip_prefix(&home_dir).unwrap());
+        let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file));
         let target_dir = target_file.parent().unwrap();
 
         if !target_file.exists() {
@@ -162,7 +160,7 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
             } else {
                 dir_map(file, |f| {
                     let file = path::absolute(f).unwrap();
-                    let target_file = dotfiles_dir.join(file.strip_prefix(&home_dir).unwrap());
+                    let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file));
                     fs::create_dir_all(target_file.parent().unwrap()).unwrap();
                     fs::copy(file, target_file).unwrap();
                 });
@@ -364,6 +362,11 @@ pub fn groupis_cmd(files: &[String]) -> Result<(), ExitCode> {
             continue;
         }
 
+        if let Ok(dotfile) = dotfiles::Dotfile::try_from(file_path.clone()) {
+            println!("{}", dotfile.group_name);
+            continue;
+        }
+
         while !file_path.is_symlink() {
             if !file_path.pop() {
                 eprintln!("{}", format!("`{file}` is not a tuckr dotfile.").red());
@@ -371,7 +374,7 @@ pub fn groupis_cmd(files: &[String]) -> Result<(), ExitCode> {
             }
         }
 
-        let basepath = dotfiles::get_target_basepath(file_path);
+        let basepath = dotfiles::get_target_basepath(&file_path);
 
         for group in &groups {
             let dotfile_path = dotfiles_dir.join(group).join(&basepath);
