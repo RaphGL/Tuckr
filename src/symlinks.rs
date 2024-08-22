@@ -20,8 +20,7 @@ use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
 fn symlink_file(f: PathBuf) {
-    let src_path = f;
-    match Dotfile::try_from(src_path.clone()) {
+    match Dotfile::try_from(f.clone()) {
         Ok(group) => {
             let target_path = group.to_target_path();
             if target_path.exists() {
@@ -30,7 +29,7 @@ fn symlink_file(f: PathBuf) {
 
             #[cfg(target_family = "unix")]
             {
-                if let Err(err) = std::os::unix::fs::symlink(src_path, target_path) {
+                if let Err(err) = std::os::unix::fs::symlink(f, target_path) {
                     eprintln!(
                         "failed to symlink group `{}`: {}",
                         group.group_name,
@@ -42,9 +41,9 @@ fn symlink_file(f: PathBuf) {
             #[cfg(target_family = "windows")]
             {
                 let result = if f.is_dir() {
-                    std::os::windows::fs::symlink_dir(src_path, target_path)
+                    std::os::windows::fs::symlink_dir(f, target_path)
                 } else {
-                    std::os::windows::fs::symlink_file(src_path, target_path)
+                    std::os::windows::fs::symlink_file(f, target_path)
                 };
 
                 if let Err(err) = result {
@@ -59,7 +58,7 @@ fn symlink_file(f: PathBuf) {
 
         Err(err) => {
             eprintln!("{}", err);
-            eprintln!("Failed to link {}.", src_path.to_str().unwrap());
+            eprintln!("Failed to link {}.", f.to_str().unwrap());
         }
     }
 }
@@ -252,13 +251,22 @@ impl SymlinkHandler {
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
     fn remove(&self, group: &str) {
         fn remove_symlink(file: PathBuf) {
-            let dotfile = Dotfile::try_from(file).unwrap().to_target_path();
-            if let Ok(linked) = fs::read_link(&dotfile) {
-                let dotfiles_configs_path = PathBuf::from("dotfiles").join("Configs");
-                let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
-                if linked.to_str().unwrap().contains(dotfiles_configs_path) {
-                    fs::remove_file(dotfile).unwrap();
-                }
+            let dotfile = Dotfile::try_from(file).unwrap();
+            let target_dotfile = dotfile.to_target_path();
+            let Ok(linked) = fs::read_link(&target_dotfile) else {
+                return;
+            };
+
+            if dotfile.path != linked {
+                return;
+            }
+
+            if target_dotfile.is_dir() {
+                fs::remove_dir_all(&target_dotfile).unwrap();
+            } else {
+                fs::remove_file(&target_dotfile)
+                    .map_err(|err| format!("error with path `{}`: {err}", target_dotfile.display()))
+                    .unwrap();
             }
         }
 

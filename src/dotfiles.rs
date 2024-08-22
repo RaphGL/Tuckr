@@ -3,8 +3,8 @@
 use owo_colors::OwoColorize;
 
 use crate::dotfiles;
+use crate::fileops;
 use std::env;
-use std::fs;
 use std::path::PathBuf;
 use std::{
     path::{self, Component},
@@ -134,23 +134,10 @@ impl Dotfile {
     where
         F: FnMut(Dotfile),
     {
-        let dir = match fs::read_dir(&self.path) {
-            Ok(f) => f,
-            Err(_) => panic!("{} does not exist", self.path.to_str().unwrap()),
-        };
-
-        let mut queue: Vec<path::PathBuf> = dir.map(|f| f.unwrap().path()).collect();
-
-        while let Some(curr_file) = queue.pop() {
-            func(Dotfile::try_from(curr_file.clone()).unwrap());
-
-            if curr_file.is_dir() {
-                for dir in fs::read_dir(curr_file).unwrap() {
-                    let dir = dir.unwrap();
-                    queue.push(dir.path());
-                }
-            }
-        }
+        fileops::dir_map(self.path.clone(), |p| {
+            let dotfile = Self::try_from(p.to_path_buf()).unwrap();
+            func(dotfile);
+        })
     }
 }
 

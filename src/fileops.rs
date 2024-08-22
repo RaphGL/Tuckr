@@ -4,12 +4,36 @@
 
 use crate::dotfiles::{self, ReturnCode};
 use owo_colors::OwoColorize;
-use std::fs;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::{fs, path};
 use tabled::object::Segment;
 use tabled::{Alignment, Modify, Table, Tabled};
+
+pub fn dir_map<F>(dir_path: impl AsRef<Path>, mut func: F)
+where
+    F: FnMut(&Path),
+{
+    let dir_path = dir_path.as_ref();
+    let dir = match fs::read_dir(dir_path) {
+        Ok(f) => f,
+        Err(_) => panic!("{} does not exist", dir_path.to_str().unwrap()),
+    };
+
+    let mut queue: Vec<path::PathBuf> = dir.map(|f| f.unwrap().path()).collect();
+
+    while let Some(curr_file) = queue.pop() {
+        func(&curr_file);
+
+        if curr_file.is_dir() {
+            for dir in fs::read_dir(curr_file).unwrap() {
+                let dir = dir.unwrap();
+                queue.push(dir.path());
+            }
+        }
+    }
+}
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
@@ -126,13 +150,23 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
             continue;
         }
 
-        let file = file.canonicalize().unwrap();
+        let file = path::absolute(file).unwrap();
         let target_file = dotfiles_dir.join(file.strip_prefix(&home_dir).unwrap());
         let target_dir = target_file.parent().unwrap();
 
         if !target_file.exists() {
             fs::create_dir_all(target_dir).unwrap();
-            fs::copy(file, target_file).unwrap();
+
+            if cfg!(target_family = "unix") || file.is_file() {
+                fs::copy(file, target_file).unwrap();
+            } else {
+                dir_map(file, |f| {
+                    let file = path::absolute(f).unwrap();
+                    let target_file = dotfiles_dir.join(file.strip_prefix(&home_dir).unwrap());
+                    fs::create_dir_all(target_file.parent().unwrap()).unwrap();
+                    fs::copy(file, target_file).unwrap();
+                });
+            }
         } else {
             print!(
                 "{} already exists. Do you want to override it? (y/N) ",
@@ -185,7 +219,7 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
 
     if !invalid_groups.is_empty() {
         for group in invalid_groups {
-            eprintln!("{} does not exist.", group);
+            eprintln!("{}", format!("{} does not exist.", group).yellow());
         }
 
         return Err(ReturnCode::NoSuchFileOrDir.into());
