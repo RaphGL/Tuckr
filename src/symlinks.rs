@@ -743,11 +743,11 @@ mod tests {
             fs::create_dir_all(&new_config_dir).unwrap();
 
             let mut file = File::create(new_config_dir.join("group_file")).unwrap();
-            file.write("Some random content on file".as_bytes())
+            let _ =file.write("Some random content on file".as_bytes())
                 .unwrap();
 
             let mut file2 = File::create(group_dir.join("group_file_0")).unwrap();
-            file2
+            let _ = file2
                 .write("Some random content on file".as_bytes())
                 .unwrap();
             Self

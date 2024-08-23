@@ -132,7 +132,7 @@ pub fn init_cmd() -> Result<(), ExitCode> {
 
 pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path() {
-        Ok(dir) => dir.join("Configs").join(&group),
+        Ok(dir) => dir.join("Configs").join(group),
         Err(e) => {
             eprintln!("{e}");
             return Err(ReturnCode::CouldntFindDotfiles.into());
