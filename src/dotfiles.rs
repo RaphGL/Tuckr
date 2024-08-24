@@ -11,6 +11,23 @@ use std::{
     process,
 };
 
+pub const VALID_TARGETS: &[&str] = &[
+    // default target_os values
+    "_windows",
+    "_macos",
+    "_ios",
+    "_linux",
+    "_android",
+    "_freebsd",
+    "_dragonfly",
+    "_openbsd",
+    "_netbsd",
+    "_none",
+    // default target_family values
+    "_unix",
+    "_windows",
+];
+
 // Exit codes
 /// Couldn't find the dotfiles directory
 pub enum ReturnCode {
@@ -88,16 +105,25 @@ impl TryFrom<path::PathBuf> for Dotfile {
     }
 }
 
+pub fn group_ends_with_target_name(group: &str) -> bool {
+    VALID_TARGETS.iter().any(|target| group.ends_with(target))
+}
+
 impl Dotfile {
     /// Returns true if the target can be used by the current platform
     pub fn is_valid_target(&self) -> bool {
         // Gets the current OS and OS family
-        let target_os = format!("_{}", env::consts::OS);
-        let target_family = format!("_{}", env::consts::FAMILY);
+        let current_target_os = format!("_{}", env::consts::OS);
+        let current_target_family = format!("_{}", env::consts::FAMILY);
 
         // returns true if a group has no suffix or its suffix matches the current OS
         let group = self.group_name.as_str();
-        group.ends_with(&target_os) || group.ends_with(&target_family) || !group.contains('_')
+
+        if group_ends_with_target_name(group) {
+            group.ends_with(&current_target_os) || group.ends_with(&current_target_family)
+        } else {
+            true
+        }
     }
 
     /// Checks whether the current groups is targetting the root path aka `/`
@@ -237,5 +263,31 @@ mod tests {
 
         let nonroot_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Zsh")).unwrap();
         assert!(!nonroot_dotfile.targets_root());
+    }
+
+    #[test]
+    fn detect_valid_targets() {
+        fn new_group(name: &str) -> Dotfile {
+            Dotfile {
+                group_name: name.to_string(),
+                path: Default::default(),
+                group_path: Default::default(),
+            }
+        }
+
+        let target_tests = [
+            (
+                new_group("group_windows"),
+                std::env::consts::FAMILY == "windows",
+            ),
+            (new_group("group_linux"), std::env::consts::OS == "linux"),
+            (new_group("group_unix"), std::env::consts::FAMILY == "unix"),
+            (new_group("group_something"), true),
+            (new_group("some_random_group"), true),
+        ];
+
+        for (dotfile, expected) in target_tests {
+            assert_eq!(dotfile.is_valid_target(), expected);
+        }
     }
 }

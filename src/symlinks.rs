@@ -210,28 +210,47 @@ impl SymlinkHandler {
         self.symlinked.is_empty() && self.not_symlinked.is_empty() && self.not_owned.is_empty()
     }
 
-    /// Returns all conditional groups with the same name that satify the current user's platform
+    /// Returns target_group and all of its conditional groups that are valid in the current platform
     ///
-    /// symlinked: gets symlinked conditional groupsif true, otherwise gets not symlinked ones
-    fn get_related_conditional_groups(&self, target_group: &str, symlinked: bool) -> Vec<String> {
-        if symlinked {
+    /// symlinked: gets symlinked conditional groups if true, otherwise gets not symlinked ones
+    fn get_related_conditional_groups(
+        &self,
+        target_group: &str,
+        symlinked: bool,
+    ) -> Option<Vec<String>> {
+        let cache = if symlinked {
             &self.symlinked
         } else {
             &self.not_symlinked
+        };
+
+        if !cache.contains_key(target_group) {
+            return None;
         }
-        .iter()
-        .filter(|(group, files)| {
-            group.starts_with(target_group) &&
+
+        let mut cond_groups: Vec<String> = cache
+            .iter()
+            .filter(|(group, files)| {
                 // any file in this group is in the same target so just pick any file to check
-                 files.iter().next().unwrap().is_valid_target()
-        })
-        .map(|(group, _)| group.clone())
-        .collect()
+                let file = files.iter().next().unwrap();
+
+                group.starts_with(target_group)
+                    && dotfiles::group_ends_with_target_name(&file.group_name)
+                    && file.is_valid_target()
+            })
+            .map(|(group, _)| group.clone())
+            .collect();
+
+        cond_groups.push(target_group.into());
+
+        Some(cond_groups)
     }
 
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
-        let groups = self.get_related_conditional_groups(group, false);
+        let Some(groups) = self.get_related_conditional_groups(group, false) else {
+            return;
+        };
 
         for group in groups {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
@@ -270,7 +289,9 @@ impl SymlinkHandler {
             }
         }
 
-        let groups = self.get_related_conditional_groups(group, true);
+        let Some(groups) = self.get_related_conditional_groups(group, true) else {
+            return;
+        };
 
         for group in groups {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
@@ -445,7 +466,7 @@ fn get_conflicts_in_cache(cache: &HashCache) -> HashCache {
     // mark group as conflicting if at least one value already exists in $HOME
     for files in cache.values() {
         for file in files {
-            if !file.to_target_path().exists() {
+            if !file.to_target_path().exists() || !file.is_valid_target() {
                 continue;
             }
 
@@ -479,9 +500,9 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
             .symlinked
             .keys()
             .filter(|group| {
-                if sym.get_related_conditional_groups(group, false).is_empty()
+                if sym.get_related_conditional_groups(group, false).is_none()
                     // ignore conditional groups
-                    && !group.contains('_')
+                    && !dotfiles::group_ends_with_target_name(group)
                 {
                     true
                 } else {
@@ -495,7 +516,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
         let mut not_symlinked: Vec<_> = not_symlinked
             .into_iter()
-            .filter(|group| !group.contains('_'))
+            .filter(|group| !dotfiles::group_ends_with_target_name(group))
             .collect();
         not_symlinked.sort();
         (symlinked, not_symlinked)
@@ -587,7 +608,11 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
             // merges conditional groups into their base group
             // eg: `dotfile_unix` gets merged into the `dotfile` group
             for base_group in &groups {
-                let related_cond_groups = sym.get_related_conditional_groups(base_group, symlinked);
+                let Some(related_cond_groups) =
+                    sym.get_related_conditional_groups(base_group, symlinked)
+                else {
+                    continue;
+                };
 
                 for group in related_cond_groups {
                     match not_symlinked_groups {
@@ -743,7 +768,8 @@ mod tests {
             fs::create_dir_all(&new_config_dir).unwrap();
 
             let mut file = File::create(new_config_dir.join("group_file")).unwrap();
-            let _ =file.write("Some random content on file".as_bytes())
+            let _ = file
+                .write("Some random content on file".as_bytes())
                 .unwrap();
 
             let mut file2 = File::create(group_dir.join("group_file_0")).unwrap();
