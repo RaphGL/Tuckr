@@ -245,9 +245,9 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
     Ok(())
 }
 
-fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
+pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
     let dir = match dotfiles::get_dotfiles_path() {
-        Ok(dir) => dir.join(dirname),
+        Ok(dir) => dir.join("Hooks"),
         Err(err) => {
             eprintln!("{err}");
             return Err(ReturnCode::CouldntFindDotfiles.into());
@@ -255,10 +255,7 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     };
 
     if !dir.exists() {
-        eprintln!(
-            "{}",
-            format!("There's no directory setup for {dirname}").red()
-        );
+        eprintln!("{}", format!("There's no directory setup for Hooks").red());
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
@@ -303,10 +300,7 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     }
 
     if rows.is_empty() {
-        println!(
-            "{}",
-            format!("No {} have been set up yet.", dirname.to_lowercase(),).yellow()
-        );
+        println!("{}", format!("No hooks have been set up yet.").yellow());
         return Ok(());
     }
 
@@ -322,13 +316,18 @@ fn list_tuckr_dir(dirname: &str) -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
-    list_tuckr_dir("Hooks")?;
-    Ok(())
-}
-
+// todo: make ls-secrets command prettier
 pub fn ls_secrets_cmd() -> Result<(), ExitCode> {
-    list_tuckr_dir("Secrets")?;
+    let secrets_dir = dotfiles::get_dotfiles_path().unwrap().join("Secrets");
+
+    let Ok(secrets) = secrets_dir.read_dir() else {
+        return Err(ReturnCode::NoSetupFolder.into());
+    };
+
+    for secret in secrets {
+        let secret = secret.unwrap();
+        println!("{}", secret.file_name().to_str().unwrap());
+    }
     Ok(())
 }
 
