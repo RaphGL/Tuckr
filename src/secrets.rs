@@ -131,7 +131,7 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
     let dest_dir = std::env::current_dir().unwrap();
 
     let decrypt_group = |group: Dotfile| -> Result<(), ExitCode> {
-        if exclude.contains(&group.group_name) || group.is_valid_target() {
+        if exclude.contains(&group.group_name) || !group.is_valid_target() {
             return Ok(());
         }
 
