@@ -109,10 +109,10 @@ impl SymlinkHandler {
         let mut not_owned = HashCache::new();
 
         // iterates over every file inside dotfiles/Config and determines their symlink status
-        configs_dir.map(|f| {
+        for f in configs_dir.try_iter().unwrap() {
             // skip group directories otherwise it would try to link dotfiles/Configs/Groups to the users home
             if f.path == f.group_path {
-                return;
+                continue;
             }
 
             let target = f.to_target_path();
@@ -122,7 +122,7 @@ impl SymlinkHandler {
                     Ok(link) => link,
                     Err(err) => {
                         eprintln!("{err}");
-                        return;
+                        continue;
                     }
                 };
 
@@ -139,7 +139,7 @@ impl SymlinkHandler {
                 }
             } else {
                 if target.is_dir() {
-                    return;
+                    continue;
                 }
 
                 not_symlinked.entry(f.group_name.clone()).or_default();
@@ -147,7 +147,7 @@ impl SymlinkHandler {
                 let group = not_symlinked.get_mut(&f.group_name).unwrap();
                 group.insert(f);
             }
-        });
+        }
 
         fn remove_empty_groups(group_type: HashCache) -> HashCache {
             group_type
@@ -256,7 +256,7 @@ impl SymlinkHandler {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
             if group.path.exists() {
                 // iterate through all the files in group_dir
-                group.map(|f| symlink_file(f.path));
+                group.try_iter().unwrap().for_each(|f| symlink_file(f.path));
             } else {
                 eprintln!(
                     "{} {}",
@@ -305,7 +305,10 @@ impl SymlinkHandler {
                 continue;
             }
 
-            group.map(|f| remove_symlink(f.path));
+            group
+                .try_iter()
+                .unwrap()
+                .for_each(|f| remove_symlink(f.path));
         }
     }
 }

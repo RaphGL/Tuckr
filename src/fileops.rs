@@ -3,6 +3,7 @@
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
 use crate::dotfiles::{self, ReturnCode};
+use crate::fileops;
 use owo_colors::OwoColorize;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -11,27 +12,38 @@ use std::{fs, path};
 use tabled::object::Segment;
 use tabled::{Alignment, Modify, Table, Tabled};
 
-pub fn dir_map<F>(dir_path: impl AsRef<Path>, mut func: F)
-where
-    F: FnMut(&Path),
-{
-    let dir_path = dir_path.as_ref();
-    let dir = match fs::read_dir(dir_path) {
-        Ok(f) => f,
-        Err(_) => panic!("{} does not exist", dir_path.to_str().unwrap()),
-    };
+pub struct DirWalk {
+    queue: Vec<path::PathBuf>,
+}
 
-    let mut queue: Vec<path::PathBuf> = dir.map(|f| f.unwrap().path()).collect();
+impl DirWalk {
+    pub fn new(dir_path: impl AsRef<Path>) -> Self {
+        let dir_path = dir_path.as_ref();
+        let dir = match fs::read_dir(dir_path) {
+            Ok(f) => f,
+            Err(_) => panic!("{} does not exist", dir_path.to_str().unwrap()),
+        };
 
-    while let Some(curr_file) = queue.pop() {
-        func(&curr_file);
+        Self {
+            queue: dir.map(|f| f.unwrap().path()).collect(),
+        }
+    }
+}
+
+impl Iterator for DirWalk {
+    type Item = path::PathBuf;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr_file = self.queue.pop()?;
 
         if curr_file.is_dir() {
-            for dir in fs::read_dir(curr_file).unwrap() {
-                let dir = dir.unwrap();
-                queue.push(dir.path());
+            for file in fs::read_dir(&curr_file).unwrap() {
+                let file = file.unwrap();
+                self.queue.push(file.path());
             }
         }
+
+        Some(curr_file)
     }
 }
 
@@ -158,12 +170,12 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
             if cfg!(target_family = "unix") || file.is_file() {
                 fs::copy(file, target_file).unwrap();
             } else {
-                dir_map(file, |f| {
+                for f in fileops::DirWalk::new(file) {
                     let file = path::absolute(f).unwrap();
                     let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file));
                     fs::create_dir_all(target_file.parent().unwrap()).unwrap();
                     fs::copy(file, target_file).unwrap();
-                });
+                }
             }
         } else {
             print!(

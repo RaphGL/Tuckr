@@ -41,7 +41,6 @@ pub enum ReturnCode {
     /// Failed to decrypt referenced file
     DecryptionFailed = 6,
 }
-
 impl From<ReturnCode> for process::ExitCode {
     fn from(value: ReturnCode) -> Self {
         Self::from(value as u8)
@@ -155,15 +154,26 @@ impl Dotfile {
         }
     }
 
-    /// Goes through every file in Configs/<group_dir> and applies the function
-    pub fn map<F>(&self, mut func: F)
-    where
-        F: FnMut(Dotfile),
-    {
-        fileops::dir_map(self.path.clone(), |p| {
-            let dotfile = Self::try_from(p.to_path_buf()).unwrap();
-            func(dotfile);
-        })
+    /// Creates an iterator that walks the directory
+    /// Returns none if the Dotfile is not a directory, since it would not be walkable
+    pub fn try_iter(&self) -> Result<DotfileIter, String> {
+        if !self.path.is_dir() {
+            Err(format!("{} is not a directory", self.path.display()))
+        } else {
+            Ok(DotfileIter(fileops::DirWalk::new(self.path.clone())))
+        }
+    }
+}
+
+pub struct DotfileIter(fileops::DirWalk);
+
+impl Iterator for DotfileIter {
+    type Item = Dotfile;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr_file = self.0.next()?;
+        let dotfile = Dotfile::try_from(curr_file).unwrap();
+        Some(dotfile)
     }
 }
 
