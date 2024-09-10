@@ -41,6 +41,7 @@ pub enum ReturnCode {
     /// Failed to decrypt referenced file
     DecryptionFailed = 6,
 }
+
 impl From<ReturnCode> for process::ExitCode {
     fn from(value: ReturnCode) -> Self {
         Self::from(value as u8)

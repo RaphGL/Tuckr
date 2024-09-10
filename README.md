@@ -76,7 +76,7 @@ You can choose either the config or the home path.
 | -------------- | ------------------------------------------ | -------------------- |
 | Linux/BSDs/etc | $HOME/.config/dotfiles                     | $HOME/.dotfiles      |
 | MacOS          | $HOME/Library/Application Support/dotfiles | $HOME/.dotfiles      |
-| Windows        | %HomePath%\AppData\Roaming\dotfiles        | %HomePath%\.dotfiles |
+| Windows        | %HomePath%\AppData\Roaming\dotfiles        | %HomePath%\\.dotfiles |
 
 To learn how to set up your dotfiles, check the `How it works` sections.
 
@@ -90,20 +90,19 @@ Tuckr is interchangeable with Stow. To migrate:
 stow -t $HOME --delete *
 ```
 
-2. Convert your repo:
+2. Move your dotfiles directory to one of the valid paths and convert your repo:
 
 ```
 tuckr from-stow
 ```
 
-3. Move your repo to `$HOME/.dotfiles` or `$HOME/.config/dotfiles`
-4. Resymlink your dotfiles with:
+3. Resymlink your dotfiles with:
 
 ```
 tuckr add \*
 ```
 
-5. Confirm that there were no conflicts with:
+4. Confirm that your dotfiles have been deployed:
 
 ```
 tuckr status
@@ -142,6 +141,8 @@ $ tuckr rm \* # removes all dotfiles from your system
 ```
 
 ```
+Super powered GNU Stow replacement
+
 Usage: tuckr <COMMAND>
 
 Commands:
@@ -151,10 +152,13 @@ Commands:
   set         Setup groups and run their hooks
   encrypt     Encrypt files and move them to dotfiles/Secrets (alias: e)
   decrypt     Decrypt files (alias: d)
+  push        Copy files into groups
+  pop         Remove groups from dotfiles/Configs
   ls-hooks    List available hooks
   ls-secrets  List stored secrets
   init        Initialize dotfile directory
   from-stow   Convert a GNU Stow repo into Tuckr
+  groupis     Returns the group the files belongs to
   help        Print this message or the help of the given subcommand(s)
 
 Options:
@@ -268,7 +272,7 @@ For scripting purposes Tuckr has the following exit codes:
 - `5` Encryption failed
 - `6` Decryption failed
 
-On success Tuckr returns whatever is he default success return code for the platform (0 on unix systems).
+On success Tuckr returns whatever is the default success return code for the platform (0 on unix systems).
 
 <!-- LICENSE -->
 
