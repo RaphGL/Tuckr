@@ -49,7 +49,8 @@ impl Iterator for DirWalk {
 
 /// Converts a stow directory into a tuckr directory
 pub fn from_stow_cmd() -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+    // assume that from_stow is always run from a no profile dotfiles dir
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(None) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");
@@ -119,7 +120,7 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     }
 
     let dotfiles_dir = if cfg!(test) {
-        dotfiles::get_dotfiles_path().unwrap()
+        dotfiles::get_dotfiles_path(None).unwrap()
     } else {
         dirs::config_dir().unwrap().join("dotfiles")
     };
@@ -142,8 +143,8 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+pub fn push_cmd(profile: Option<String>, group: String, files: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir.join("Configs").join(group),
         Err(e) => {
             eprintln!("{e}");
@@ -202,8 +203,8 @@ pub fn push_cmd(group: String, files: &[String]) -> Result<(), ExitCode> {
     }
 }
 
-pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+pub fn pop_cmd(profile: Option<String>, groups: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir.join("Configs"),
         Err(e) => {
             eprintln!("{e}");
@@ -257,8 +258,8 @@ pub fn pop_cmd(groups: &[String]) -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
-    let dir = match dotfiles::get_dotfiles_path() {
+pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
+    let dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir.join("Hooks"),
         Err(err) => {
             eprintln!("{err}");
@@ -329,8 +330,10 @@ pub fn ls_hooks_cmd() -> Result<(), ExitCode> {
 }
 
 // todo: make ls-secrets command prettier
-pub fn ls_secrets_cmd() -> Result<(), ExitCode> {
-    let secrets_dir = dotfiles::get_dotfiles_path().unwrap().join("Secrets");
+pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
+    let secrets_dir = dotfiles::get_dotfiles_path(profile)
+        .unwrap()
+        .join("Secrets");
 
     let Ok(secrets) = secrets_dir.read_dir() else {
         return Err(ReturnCode::NoSetupFolder.into());
@@ -343,8 +346,8 @@ pub fn ls_secrets_cmd() -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn groupis_cmd(files: &[String]) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");

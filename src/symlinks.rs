@@ -75,8 +75,8 @@ struct SymlinkHandler {
 
 impl SymlinkHandler {
     /// Initializes SymlinkHandler and fills it dotfiles' status information
-    fn try_new() -> Result<Self, ExitCode> {
-        let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+    fn try_new(profile: Option<String>) -> Result<Self, ExitCode> {
+        let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
             Ok(dir) => dir,
             Err(e) => {
                 eprintln!("{e}");
@@ -320,20 +320,20 @@ impl SymlinkHandler {
 /// symlinked: whether it should be applied to symlinked or non symlinked groups
 /// iterates over each group in the dotfiles and calls a function F giving it the SymlinkHandler
 /// instance and the name of the group that's being handled
-fn foreach_group<F>(
+fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
+    profile: Option<String>,
     groups: &[String],
     exclude: &[String],
     symlinked: bool,
     func: F,
-) -> Result<(), ExitCode>
-where
-    F: Fn(&SymlinkHandler, &String),
-{
+) -> Result<(), ExitCode> {
     // loads the runtime information needed to carry out actions
-    let sym = SymlinkHandler::try_new()?;
+    let sym = SymlinkHandler::try_new(profile.clone())?;
 
     // detect if user provided an invalid group
-    if let Some(invalid_groups) = dotfiles::check_invalid_groups(DotfileType::Configs, groups) {
+    if let Some(invalid_groups) =
+        dotfiles::check_invalid_groups(profile, DotfileType::Configs, groups)
+    {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} doesn't exist.").red());
         }
@@ -374,6 +374,7 @@ where
 
 /// Adds symlinks
 pub fn add_cmd(
+    profile: Option<String>,
     groups: &[String],
     exclude: &[String],
     force: bool,
@@ -401,7 +402,7 @@ pub fn add_cmd(
         }
     }
 
-    foreach_group(groups, exclude, true, |sym, group| {
+    foreach_group(profile, groups, exclude, true, |sym, group| {
         // Symlink dotfile by force
         if force {
             let remove_overlapping_files = |status_group: &HashCache| {
@@ -457,8 +458,12 @@ pub fn add_cmd(
 }
 
 /// Removes symlinks
-pub fn remove_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    foreach_group(groups, exclude, false, |sym, p| sym.remove(p))?;
+pub fn remove_cmd(
+    profile: Option<String>,
+    groups: &[String],
+    exclude: &[String],
+) -> Result<(), ExitCode> {
+    foreach_group(profile, groups, exclude, false, |sym, p| sym.remove(p))?;
     Ok(())
 }
 
@@ -601,7 +606,11 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     }
 }
 
-fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), ExitCode> {
+fn print_groups_status(
+    profile: Option<String>,
+    sym: &SymlinkHandler,
+    groups: Vec<String>,
+) -> Result<(), ExitCode> {
     let get_related_groups =
         |sym: &SymlinkHandler, not_symlinked_groups: Option<&Vec<String>>| -> Vec<String> {
             let mut related_groups = Vec::new();
@@ -708,7 +717,7 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
         println!();
     }
 
-    let invalid_groups = dotfiles::check_invalid_groups(DotfileType::Configs, &groups);
+    let invalid_groups = dotfiles::check_invalid_groups(profile, DotfileType::Configs, &groups);
     if let Some(invalid_groups) = &invalid_groups {
         eprintln!("Following groups do not exist:");
         for group in invalid_groups {
@@ -729,8 +738,8 @@ fn print_groups_status(sym: &SymlinkHandler, groups: Vec<String>) -> Result<(), 
 }
 
 /// Prints symlinking status
-pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
-    let sym = SymlinkHandler::try_new()?;
+pub fn status_cmd(profile: Option<String>, groups: Option<Vec<String>>) -> Result<(), ExitCode> {
+    let sym = SymlinkHandler::try_new(profile.clone())?;
 
     if sym.is_empty() {
         println!("{}", "No dotfiles have been setup yet".yellow());
@@ -739,7 +748,7 @@ pub fn status_cmd(groups: Option<Vec<String>>) -> Result<(), ExitCode> {
     }
 
     match groups {
-        Some(groups) => print_groups_status(&sym, groups)?,
+        Some(groups) => print_groups_status(profile, &sym, groups)?,
         None => print_global_status(&sym)?,
     }
 
@@ -764,7 +773,7 @@ mod tests {
     impl Test {
         fn start() -> Self {
             crate::fileops::init_cmd().unwrap();
-            let dotfiles_dir = dotfiles::get_dotfiles_path().unwrap();
+            let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
 
             let new_config_dir = group_dir.join(".config");
@@ -785,8 +794,8 @@ mod tests {
 
     impl Drop for Test {
         fn drop(&mut self) {
-            _ = super::remove_cmd(&["*".to_string()], &[]);
-            let Ok(dotfiles_dir) = dotfiles::get_dotfiles_path() else {
+            _ = super::remove_cmd(None, &["*".to_string()], &[]);
+            let Ok(dotfiles_dir) = dotfiles::get_dotfiles_path(None) else {
                 eprintln!("{}", "Failed to clean up test.".red());
                 return;
             };
@@ -800,32 +809,32 @@ mod tests {
     fn test_adding_symlink() {
         let _test = Test::start();
 
-        let sym = SymlinkHandler::try_new().unwrap();
+        let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
 
         assert!(!sym.symlinked.contains_key("Group1"));
-        super::add_cmd(&["Group1".to_string()], &[], false, false).unwrap();
+        super::add_cmd(None, &["Group1".to_string()], &[], false, false).unwrap();
 
-        let sym = SymlinkHandler::try_new().unwrap();
+        let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(sym.symlinked.contains_key("Group1"));
     }
 
     fn test_removing_symlink() {
         let _test = Test::start();
 
-        super::add_cmd(&["Group1".to_string()], &[], false, false).unwrap();
+        super::add_cmd(None, &["Group1".to_string()], &[], false, false).unwrap();
 
-        let sym = SymlinkHandler::try_new().unwrap();
+        let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
 
         assert!(!sym.not_symlinked.contains_key("Group1"));
 
-        super::remove_cmd(&["Group1".to_string()], &[]).unwrap();
-        let sym = SymlinkHandler::try_new().unwrap();
+        super::remove_cmd(None, &["Group1".to_string()], &[]).unwrap();
+        let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(sym.not_symlinked.contains_key("Group1"));
     }
 

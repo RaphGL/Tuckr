@@ -3,6 +3,7 @@
 //! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
 
 use crate::dotfiles::{self, Dotfile, ReturnCode};
+use crate::fileops::DirWalk;
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
 use rand::rngs;
@@ -10,7 +11,6 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use walkdir::WalkDir;
 
 struct SecretsHandler {
     dotfiles_dir: PathBuf,
@@ -19,8 +19,8 @@ struct SecretsHandler {
 }
 
 impl SecretsHandler {
-    fn try_new() -> Result<Self, ExitCode> {
-        let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+    fn try_new(profile: Option<String>) -> Result<Self, ExitCode> {
+        let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
             Ok(path) => path,
             Err(e) => {
                 eprintln!("{e}");
@@ -79,8 +79,12 @@ impl SecretsHandler {
 }
 
 /// Encrypts secrets
-pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
-    let handler = SecretsHandler::try_new()?;
+pub fn encrypt_cmd(
+    profile: Option<String>,
+    group: &str,
+    dotfiles: &[String],
+) -> Result<(), ExitCode> {
+    let handler = SecretsHandler::try_new(profile)?;
 
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
     if !dest_dir.exists() {
@@ -116,11 +120,15 @@ pub fn encrypt_cmd(group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
 }
 
 /// Decrypts secrets
-pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    let handler = SecretsHandler::try_new()?;
+pub fn decrypt_cmd(
+    profile: Option<String>,
+    groups: &[String],
+    exclude: &[String],
+) -> Result<(), ExitCode> {
+    let handler = SecretsHandler::try_new(profile.clone())?;
 
     if let Some(invalid_groups) =
-        dotfiles::check_invalid_groups(dotfiles::DotfileType::Secrets, groups)
+        dotfiles::check_invalid_groups(profile, dotfiles::DotfileType::Secrets, groups)
     {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} does not exist.").red());
@@ -136,19 +144,14 @@ pub fn decrypt_cmd(groups: &[String], exclude: &[String]) -> Result<(), ExitCode
         }
 
         let group_dir = handler.dotfiles_dir.join("Secrets").join(&group.group_path);
-        for secret in WalkDir::new(group_dir) {
-            let Ok(secret) = secret else {
-                eprintln!("{}", (group.group_name + " does not exist.").red());
-                return Err(ReturnCode::NoSetupFolder.into());
-            };
-
-            if secret.file_type().is_dir() {
+        for secret in DirWalk::new(group_dir) {
+            if secret.is_dir() {
                 continue;
             }
 
-            let decrypted = handler.decrypt(secret.path().to_str().unwrap())?;
+            let decrypted = handler.decrypt(secret.to_str().unwrap())?;
 
-            fs::write(dest_dir.join(secret.file_name()), decrypted).unwrap();
+            fs::write(dest_dir.join(secret.file_name().unwrap()), decrypted).unwrap();
         }
 
         Ok(())

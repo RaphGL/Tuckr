@@ -48,6 +48,40 @@ impl From<ReturnCode> for process::ExitCode {
     }
 }
 
+fn get_dotfile_profile_from_path<T: AsRef<path::Path>>(file: T) -> Option<String> {
+    let file = file.as_ref();
+
+    let dotfiles_path = {
+        let home_path = dirs::home_dir().unwrap();
+        let configs_path = dirs::config_dir().unwrap();
+
+        if file.starts_with(&configs_path) {
+            configs_path
+        } else if file.starts_with(&home_path) {
+            home_path
+        } else {
+            return None;
+        }
+    };
+
+    let dotfiles_path = file.strip_prefix(dotfiles_path).unwrap();
+
+    let dotfiles_dirname = dotfiles_path
+        .components()
+        .next()?
+        .as_os_str()
+        .to_str()
+        .unwrap();
+
+    let (dirname, profile_name) = dotfiles_dirname.split_once('_')?;
+
+    if dirname != "dotfiles" {
+        return None;
+    }
+
+    Some(profile_name.into())
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Dotfile {
     pub path: path::PathBuf,
@@ -59,27 +93,28 @@ impl TryFrom<path::PathBuf> for Dotfile {
     type Error = String;
 
     fn try_from(value: path::PathBuf) -> Result<Self, Self::Error> {
-        /// Extracts group name from tuckr directories
-        pub fn to_group_path(group_path: &path::PathBuf) -> Result<path::PathBuf, String> {
-            let dotfiles_dir = get_dotfiles_path()?;
+        /// returns the path for the group the file belongs to.
+        /// an error is returns if the file does not belong to dotfiles
+        pub fn to_group_path(file_path: &path::PathBuf) -> Result<path::PathBuf, String> {
+            let dotfiles_dir = get_dotfiles_path(get_dotfile_profile_from_path(file_path))?;
             let configs_dir = dotfiles_dir.join("Configs");
             let hooks_dir = dotfiles_dir.join("Hooks");
             let secrets_dir = dotfiles_dir.join("Secrets");
 
-            let dotfile_root_dir = if group_path.starts_with(&configs_dir) {
+            let dotfile_root_dir = if file_path.starts_with(&configs_dir) {
                 configs_dir
-            } else if group_path.starts_with(&hooks_dir) {
+            } else if file_path.starts_with(&hooks_dir) {
                 hooks_dir
-            } else if group_path.starts_with(&secrets_dir) {
+            } else if file_path.starts_with(&secrets_dir) {
                 secrets_dir
             } else {
                 return Err("path does not belong to dotfiles.".into());
             };
 
-            let group = if *group_path == dotfile_root_dir {
+            let group = if *file_path == dotfile_root_dir {
                 Ok(dotfile_root_dir)
             } else {
-                let Component::Normal(group_relpath) = group_path
+                let Component::Normal(group_relpath) = file_path
                     .strip_prefix(&dotfile_root_dir)
                     .unwrap()
                     .components()
@@ -128,7 +163,10 @@ impl Dotfile {
 
     /// Checks whether the current groups is targetting the root path aka `/`
     pub fn targets_root(&self) -> bool {
-        let root_dir = get_dotfiles_path().unwrap().join("Configs").join("Root");
+        let root_dir = get_dotfiles_path(get_dotfile_profile_from_path(&self.group_path))
+            .unwrap()
+            .join("Configs")
+            .join("Root");
         self.group_path.starts_with(root_dir)
     }
 
@@ -136,7 +174,10 @@ impl Dotfile {
     /// deployed on $HOME
     pub fn to_target_path(&self) -> path::PathBuf {
         // uses join("") so that the path appends / or \ depending on platform
-        let dotfiles_configs_path = get_dotfiles_path().unwrap().join("Configs").join("");
+        let dotfiles_configs_path = get_dotfiles_path(get_dotfile_profile_from_path(&self.path))
+            .unwrap()
+            .join("Configs")
+            .join("");
         let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
         let group_path = self.path.clone();
         let group_path = {
@@ -181,9 +222,21 @@ impl Iterator for DotfileIter {
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
 ///
 /// When run on a unit test it returns a temporary directory for testing purposes
-pub fn get_dotfiles_path() -> Result<path::PathBuf, String> {
-    let home_dotfiles = dirs::home_dir().unwrap().join(".dotfiles");
-    let config_dotfiles = dirs::config_dir().unwrap().join("dotfiles");
+pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+    let (home_dotfiles, config_dotfiles) = {
+        let dotfiles_dir = match profile {
+            Some(profile) => format!("dotfiles_{profile}"),
+            None => "dotfiles".into(),
+        };
+
+        let home_dotfiles = dirs::home_dir().unwrap();
+        let config_dotfiles = dirs::config_dir().unwrap();
+
+        (
+            home_dotfiles.join(format!(".{dotfiles_dir}")),
+            config_dotfiles.join(dotfiles_dir),
+        )
+    };
 
     if cfg!(test) {
         Ok(std::env::temp_dir()
@@ -217,14 +270,14 @@ pub enum DotfileType {
 }
 
 /// Returns if a config has been setup for <group> on <dtype>
-pub fn dotfile_contains(dtype: DotfileType, group: &str) -> bool {
+pub fn dotfile_contains(profile: Option<String>, dtype: DotfileType, group: &str) -> bool {
     let target_dir = match dtype {
         DotfileType::Configs => "Configs",
         DotfileType::Secrets => "Secrets",
         DotfileType::Hooks => "Hooks",
     };
 
-    let Ok(dotfiles_dir) = get_dotfiles_path() else {
+    let Ok(dotfiles_dir) = get_dotfiles_path(profile) else {
         return false;
     };
     let group_src = dotfiles_dir.join(target_dir).join(group);
@@ -232,10 +285,14 @@ pub fn dotfile_contains(dtype: DotfileType, group: &str) -> bool {
 }
 
 /// Returns all groups in the slice that don't have a corresponding directory in dotfiles/{Configs,Hooks,Secrets}
-pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec<String>> {
+pub fn check_invalid_groups(
+    profile: Option<String>,
+    dtype: DotfileType,
+    groups: &[String],
+) -> Option<Vec<String>> {
     let mut invalid_groups = Vec::new();
     for group in groups {
-        if !dotfiles::dotfile_contains(dtype, group) && group != "*" {
+        if !dotfiles::dotfile_contains(profile.clone(), dtype, group) && group != "*" {
             invalid_groups.push(group.clone());
         }
     }
@@ -249,11 +306,13 @@ pub fn check_invalid_groups(dtype: DotfileType, groups: &[String]) -> Option<Vec
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use crate::dotfiles::{get_dotfiles_path, Dotfile};
 
     #[test]
     fn dotfile_to_target_path() {
-        let group = get_dotfiles_path()
+        let group = get_dotfiles_path(None)
             .unwrap()
             .join("Configs")
             .join("zsh")
@@ -267,7 +326,7 @@ mod tests {
 
     #[test]
     fn dotfile_targets_root() {
-        let dotfiles_dir = super::get_dotfiles_path().unwrap().join("Configs");
+        let dotfiles_dir = super::get_dotfiles_path(None).unwrap().join("Configs");
 
         let root_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Root")).unwrap();
         assert!(root_dotfile.targets_root());
@@ -300,5 +359,37 @@ mod tests {
         for (dotfile, expected) in target_tests {
             assert_eq!(dotfile.is_valid_target(), expected);
         }
+    }
+
+    #[test]
+    fn get_profile_name_from_dotfile_path() {
+        let no_profile_dir = dirs::config_dir().unwrap();
+        let invalid_dir = dirs::config_dir()
+            .unwrap()
+            .join("somethingelse_work")
+            .join("Configs")
+            .join("Vim");
+        let work_profile_dir = dirs::config_dir()
+            .unwrap()
+            .join("dotfiles_work")
+            .join("Configs")
+            .join("Vim");
+        let home_profile_dir = dirs::config_dir()
+            .unwrap()
+            .join("dotfiles_my_home")
+            .join("Configs")
+            .join("Somethign")
+            .join("test.cfg");
+
+        assert_eq!(
+            super::get_dotfile_profile_from_path(work_profile_dir),
+            Some("work".into())
+        );
+        assert_eq!(
+            super::get_dotfile_profile_from_path(home_profile_dir),
+            Some("my_home".into())
+        );
+        assert_eq!(super::get_dotfile_profile_from_path(no_profile_dir), None,);
+        assert_eq!(super::get_dotfile_profile_from_path(invalid_dir), None,);
     }
 }

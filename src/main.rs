@@ -18,9 +18,19 @@ mod symlinks;
 use clap::Parser;
 use std::process::ExitCode;
 
-#[derive(Debug, Parser)]
+#[derive(Parser)]
 #[command(about, author, version, propagate_version = true)]
-enum Cli {
+struct Cli {
+    #[arg(short, long)]
+    /// Choose which dotfile profile to use
+    profile: Option<String>,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Clone, Parser)]
+enum Command {
     #[command(alias = "s")]
     /// Get dotfiles' symlinking status (alias: s)
     Status {
@@ -125,32 +135,36 @@ enum Cli {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    let exit_code = match cli {
-        Cli::Set {
+    let exit_code = match cli.command {
+        Command::Set {
             groups,
             exclude,
             force,
             adopt,
-        } => hooks::set_cmd(&groups, &exclude, force, adopt),
+        } => hooks::set_cmd(cli.profile, &groups, &exclude, force, adopt),
 
-        Cli::Add {
+        Command::Add {
             groups,
             exclude,
             force,
             adopt,
-        } => symlinks::add_cmd(&groups, &exclude, force, adopt),
+        } => symlinks::add_cmd(cli.profile, &groups, &exclude, force, adopt),
 
-        Cli::Rm { groups, exclude } => symlinks::remove_cmd(&groups, &exclude),
-        Cli::Status { groups } => symlinks::status_cmd(groups),
-        Cli::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&group, &dotfiles),
-        Cli::Decrypt { groups, exclude } => secrets::decrypt_cmd(&groups, &exclude),
-        Cli::FromStow => fileops::from_stow_cmd(),
-        Cli::Init => fileops::init_cmd(),
-        Cli::LsHooks => fileops::ls_hooks_cmd(),
-        Cli::LsSecrets => fileops::ls_secrets_cmd(),
-        Cli::Push { group, files } => fileops::push_cmd(group, &files),
-        Cli::Pop { groups } => fileops::pop_cmd(&groups),
-        Cli::GroupIs { files } => fileops::groupis_cmd(&files),
+        Command::Rm { groups, exclude } => symlinks::remove_cmd(cli.profile, &groups, &exclude),
+        Command::Status { groups } => symlinks::status_cmd(cli.profile, groups),
+        Command::Encrypt { group, dotfiles } => {
+            secrets::encrypt_cmd(cli.profile, &group, &dotfiles)
+        }
+        Command::Decrypt { groups, exclude } => {
+            secrets::decrypt_cmd(cli.profile, &groups, &exclude)
+        }
+        Command::FromStow => fileops::from_stow_cmd(),
+        Command::Init => fileops::init_cmd(),
+        Command::LsHooks => fileops::ls_hooks_cmd(cli.profile),
+        Command::LsSecrets => fileops::ls_secrets_cmd(cli.profile),
+        Command::Push { group, files } => fileops::push_cmd(cli.profile, group, &files),
+        Command::Pop { groups } => fileops::pop_cmd(cli.profile, &groups),
+        Command::GroupIs { files } => fileops::groupis_cmd(cli.profile, &files),
     };
 
     match exit_code {

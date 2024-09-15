@@ -67,8 +67,8 @@ impl Iterator for DeployStages {
 }
 
 /// Runs hooks of type PreHook or PostHook
-fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path() {
+fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("{e}");
@@ -126,13 +126,14 @@ fn run_hook(group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
 
 /// Runs hooks for specified groups
 pub fn set_cmd(
+    profile: Option<String>,
     groups: &[String],
     exclude: &[String],
     force: bool,
     adopt: bool,
 ) -> Result<(), ExitCode> {
     if let Some(invalid_groups) =
-        dotfiles::check_invalid_groups(dotfiles::DotfileType::Hooks, groups)
+        dotfiles::check_invalid_groups(profile.clone(), dotfiles::DotfileType::Hooks, groups)
     {
         for group in invalid_groups {
             eprintln!("{}", format!("{group} does not exist.").red());
@@ -151,7 +152,7 @@ pub fn set_cmd(
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_hook(&group.group_name, DeployStep::PreHook)?;
+                    run_hook(profile.clone(), &group.group_name, DeployStep::PreHook)?;
                 }
 
                 DeployStep::Symlink => {
@@ -159,17 +160,19 @@ pub fn set_cmd(
                         "Symlinking group",
                         group.group_name.yellow().to_string().as_str(),
                     );
-                    symlinks::add_cmd(groups, exclude, force, adopt)?;
+                    symlinks::add_cmd(profile.clone(), groups, exclude, force, adopt)?;
                 }
 
-                DeployStep::PostHook => run_hook(&group.group_name, DeployStep::PostHook)?,
+                DeployStep::PostHook => {
+                    run_hook(profile.clone(), &group.group_name, DeployStep::PostHook)?
+                }
             }
         }
 
         Ok(())
     };
 
-    let hooks_dir = match dotfiles::get_dotfiles_path() {
+    let hooks_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
         Ok(dir) => dir.join("Hooks"),
         Err(e) => {
             eprintln!("{e}",);
