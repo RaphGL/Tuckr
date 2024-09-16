@@ -15,7 +15,7 @@ mod hooks;
 mod secrets;
 mod symlinks;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
 #[derive(Parser)]
@@ -29,7 +29,7 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Debug, Clone, Parser)]
+#[derive(Debug, Subcommand)]
 enum Command {
     #[command(alias = "s")]
     /// Get dotfiles' symlinking status (alias: s)
@@ -113,11 +113,9 @@ enum Command {
     #[command(arg_required_else_help = true)]
     Pop { groups: Vec<String> },
 
-    /// List available hooks
-    LsHooks,
-
-    /// List stored secrets
-    LsSecrets,
+    /// List dotfiles hooks, secrets, profiles
+    #[command(subcommand, arg_required_else_help = true)]
+    Ls(ListType),
 
     /// Initialize dotfile directory
     ///
@@ -130,6 +128,16 @@ enum Command {
     /// Returns the group the files belongs to
     #[command(name = "groupis", arg_required_else_help = true)]
     GroupIs { files: Vec<String> },
+}
+
+#[derive(Debug, Clone, Subcommand)]
+enum ListType {
+    #[command(alias = "p")]
+    Profiles,
+    #[command(alias = "s")]
+    Secrets,
+    #[command(alias = "h")]
+    Hooks,
 }
 
 fn main() -> ExitCode {
@@ -160,8 +168,13 @@ fn main() -> ExitCode {
         }
         Command::FromStow => fileops::from_stow_cmd(),
         Command::Init => fileops::init_cmd(),
-        Command::LsHooks => fileops::ls_hooks_cmd(cli.profile),
-        Command::LsSecrets => fileops::ls_secrets_cmd(cli.profile),
+
+        Command::Ls(ls_type) => match ls_type {
+            ListType::Profiles => fileops::ls_profiles_cmd(),
+            ListType::Secrets => fileops::ls_secrets_cmd(cli.profile),
+            ListType::Hooks => fileops::ls_hooks_cmd(cli.profile),
+        },
+
         Command::Push { group, files } => fileops::push_cmd(cli.profile, group, &files),
         Command::Pop { groups } => fileops::pop_cmd(cli.profile, &groups),
         Command::GroupIs { files } => fileops::groupis_cmd(cli.profile, &files),

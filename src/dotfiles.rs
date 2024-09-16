@@ -48,7 +48,7 @@ impl From<ReturnCode> for process::ExitCode {
     }
 }
 
-fn get_dotfile_profile_from_path<T: AsRef<path::Path>>(file: T) -> Option<String> {
+pub fn get_dotfile_profile_from_path<T: AsRef<path::Path>>(file: T) -> Option<String> {
     let file = file.as_ref();
 
     let dotfiles_path = {
@@ -306,8 +306,6 @@ pub fn check_invalid_groups(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use crate::dotfiles::{get_dotfiles_path, Dotfile};
 
     #[test]

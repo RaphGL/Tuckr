@@ -5,6 +5,7 @@
 use crate::dotfiles::{self, ReturnCode};
 use crate::fileops;
 use owo_colors::OwoColorize;
+use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -343,6 +344,43 @@ pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         let secret = secret.unwrap();
         println!("{}", secret.file_name().to_str().unwrap());
     }
+    Ok(())
+}
+
+pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
+    let home_dir = dirs::home_dir().unwrap();
+    let config_dir = dirs::config_dir().unwrap();
+
+    fn get_profiles_from_dir(dir: PathBuf) -> HashSet<String> {
+        let mut available_profiles = HashSet::new();
+
+        for file in dir.read_dir().unwrap() {
+            let file = file.unwrap();
+
+            let Some(profile) = dotfiles::get_dotfile_profile_from_path(file.path()) else {
+                continue;
+            };
+
+            available_profiles.insert(profile);
+        }
+
+        available_profiles
+    }
+
+    let home_profiles = get_profiles_from_dir(home_dir);
+    let config_profiles = get_profiles_from_dir(config_dir);
+
+    let profiles: HashSet<_> = home_profiles.union(&config_profiles).collect();
+    if profiles.is_empty() {
+        println!("{}", "No profiles have been set up yet.".yellow());
+        return Ok(());
+    }
+
+    println!("Profiles available:");
+    for profile in profiles {
+        println!("\t{profile}");
+    }
+
     Ok(())
 }
 
