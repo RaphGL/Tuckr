@@ -29,31 +29,31 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Subcommand)]
 enum Command {
-    #[command(alias = "s")]
     /// Get dotfiles' symlinking status (alias: s)
+    #[command(alias = "s")]
     Status {
         #[arg(value_name = "group")]
         groups: Option<Vec<String>>,
     },
 
-    #[command(alias = "a")]
     /// Deploy dotfiles for the supplied groups (alias: a)
+    #[command(alias = "a")]
     Add {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         /// Exclude certain groups from being added
+        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
 
-        #[arg(short, long)]
         /// Override conflicting dotfiles
+        #[arg(short, long)]
         force: bool,
 
-        #[arg(short, long)]
         /// Adopt conflicting dotfiles
+        #[arg(short, long)]
         adopt: bool,
     },
 
@@ -62,8 +62,8 @@ enum Command {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         /// Exclude certain groups from being removed
+        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
     },
 
@@ -72,29 +72,29 @@ enum Command {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         /// Exclude certain groups from being added and hooked
+        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
 
-        #[arg(short, long)]
         /// Override conflicting dotfiles
+        #[arg(short, long)]
         force: bool,
 
-        #[arg(short, long)]
         /// Adopt conflicting dotfiles
+        #[arg(short, long)]
         adopt: bool,
     },
 
-    #[command(alias = "e")]
     /// Encrypt files and move them to dotfiles/Secrets (alias: e)
+    #[command(alias = "e")]
     Encrypt {
         group: String,
         #[arg(required = true, value_name = "FILE")]
         dotfiles: Vec<String>,
     },
 
-    #[command(alias = "d")]
     /// Decrypt files (alias: d)
+    #[command(alias = "d")]
     Decrypt {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
@@ -119,18 +119,18 @@ enum Command {
 
     /// Initialize dotfile directory
     ///
-    /// Creates files necessary to use Tuckr
+    /// Creates the files that are necessary to use Tuckr
     Init,
 
     /// Convert a GNU Stow repo into Tuckr
     FromStow,
 
-    /// Returns the group the files belongs to
+    /// Return the group files belongs to
     #[command(name = "groupis", arg_required_else_help = true)]
     GroupIs { files: Vec<String> },
 }
 
-#[derive(Debug, Clone, Subcommand)]
+#[derive(Debug, Subcommand)]
 enum ListType {
     #[command(alias = "p")]
     Profiles,
@@ -166,8 +166,8 @@ fn main() -> ExitCode {
         Command::Decrypt { groups, exclude } => {
             secrets::decrypt_cmd(cli.profile, &groups, &exclude)
         }
-        Command::FromStow => fileops::from_stow_cmd(),
-        Command::Init => fileops::init_cmd(),
+        Command::FromStow => fileops::from_stow_cmd(cli.profile),
+        Command::Init => fileops::init_cmd(cli.profile),
 
         Command::Ls(ls_type) => match ls_type {
             ListType::Profiles => fileops::ls_profiles_cmd(),

@@ -225,7 +225,7 @@ impl Iterator for DotfileIter {
 pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
     let (home_dotfiles, config_dotfiles) = {
         let dotfiles_dir = match profile {
-            Some(profile) => format!("dotfiles_{profile}"),
+            Some(ref profile) => format!("dotfiles_{profile}"),
             None => "dotfiles".into(),
         };
 
@@ -247,10 +247,14 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
     } else if home_dotfiles.exists() {
         Ok(home_dotfiles)
     } else {
+        let init_cmd = match profile {
+            Some(profile) => format!("tuckr -p {profile} init"),
+            None => "tuckr init".into(),
+        };
         Err(format!(
             "{}\n\n\
             Make sure a `{}` directory exists.\n\
-            Or use `tuckr init`.",
+            Or use `{init_cmd}`.",
             "Couldn't find dotfiles directory.".yellow(),
             config_dotfiles.display(),
         ))

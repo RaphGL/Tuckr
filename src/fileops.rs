@@ -49,9 +49,9 @@ impl Iterator for DirWalk {
 }
 
 /// Converts a stow directory into a tuckr directory
-pub fn from_stow_cmd() -> Result<(), ExitCode> {
+pub fn from_stow_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     // assume that from_stow is always run from a no profile dotfiles dir
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(None) {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");
@@ -109,7 +109,7 @@ pub fn from_stow_cmd() -> Result<(), ExitCode> {
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
-pub fn init_cmd() -> Result<(), ExitCode> {
+pub fn init_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     macro_rules! create_dirs {
         ($($dirname: expr),+) => {
             $(
@@ -123,7 +123,11 @@ pub fn init_cmd() -> Result<(), ExitCode> {
     let dotfiles_dir = if cfg!(test) {
         dotfiles::get_dotfiles_path(None).unwrap()
     } else {
-        dirs::config_dir().unwrap().join("dotfiles")
+        let dotfiles_dir_name = match profile {
+            Some(profile) => "dotfiles_".to_string() + profile.as_str(),
+            None => "dotfiles".to_string(),
+        };
+        dirs::config_dir().unwrap().join(dotfiles_dir_name)
     };
 
     create_dirs!(

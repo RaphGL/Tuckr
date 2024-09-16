@@ -743,7 +743,10 @@ pub fn status_cmd(profile: Option<String>, groups: Option<Vec<String>>) -> Resul
 
     if sym.is_empty() {
         println!("{}", "No dotfiles have been setup yet".yellow());
-        println!("To get started: add dotfiles using `tuckr push` or add them manually to dotfiles/Configs.");
+        println!(
+            "To get started: add dotfiles using `tuckr push` or add them manually to `{}`",
+            sym.dotfiles_dir.join("Configs").display()
+        );
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
@@ -772,7 +775,7 @@ mod tests {
 
     impl Test {
         fn start() -> Self {
-            crate::fileops::init_cmd().unwrap();
+            crate::fileops::init_cmd(None).unwrap();
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
 
