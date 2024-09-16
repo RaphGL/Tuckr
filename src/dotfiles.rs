@@ -242,10 +242,10 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
         Ok(std::env::temp_dir()
             .join(format!("tuckr-{}", std::process::id()))
             .join("dotfiles"))
-    } else if home_dotfiles.exists() {
-        Ok(home_dotfiles)
     } else if config_dotfiles.exists() {
         Ok(config_dotfiles)
+    } else if home_dotfiles.exists() {
+        Ok(home_dotfiles)
     } else {
         Err(format!(
             "{}\n\n\
