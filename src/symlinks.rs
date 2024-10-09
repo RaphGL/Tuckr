@@ -354,6 +354,14 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
             if exclude.contains(group) {
                 continue;
             }
+
+            // Ignore conditional groups for other platforms.
+            // To force linking a group of other target_os/target_family, use
+            // explict argument passing instead of wildcard.
+            if !dotfiles::group_is_valid_target(&group) {
+                continue;
+            }
+
             // do something with the group name
             // passing the sym context
             func(&sym, group);
