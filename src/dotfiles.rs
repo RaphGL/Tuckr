@@ -144,28 +144,28 @@ pub fn group_ends_with_target_name(group: &str) -> bool {
     VALID_TARGETS.iter().any(|target| group.ends_with(target))
 }
 
-impl Dotfile {
-    /// Returns true if a group with specified name can be used by current platform.
-    /// Checks if a group should be linked on current platform. For unconditional
-    /// groups, this function returns true; for conditional groups, this function
-    /// returns true when group suffix matches current target_os or target_family.
-    pub fn group_is_valid_target(group: &str) -> bool {
-        // Gets the current OS and OS family
-        let current_target_os = format!("_{}", env::consts::OS);
-        let current_target_family = format!("_{}", env::consts::FAMILY);
+/// Returns true if a group with specified name can be used by current platform.
+/// Checks if a group should be linked on current platform. For unconditional
+/// groups, this function returns true; for conditional groups, this function
+/// returns true when group suffix matches current target_os or target_family.
+pub fn group_is_valid_target(group: &str) -> bool {
+    // Gets the current OS and OS family
+    let current_target_os = format!("_{}", env::consts::OS);
+    let current_target_family = format!("_{}", env::consts::FAMILY);
 
-        // returns true if a group has no suffix or its suffix matches the current OS
-        if group_ends_with_target_name(group) {
-            group.ends_with(&current_target_os) || group.ends_with(&current_target_family)
-        } else {
-            true
-        }
+    // returns true if a group has no suffix or its suffix matches the current OS
+    if group_ends_with_target_name(group) {
+        group.ends_with(&current_target_os) || group.ends_with(&current_target_family)
+    } else {
+        true
     }
+}
 
+impl Dotfile {
     /// Returns true if the target can be used by the current platform
     pub fn is_valid_target(&self) -> bool {
         let group = self.group_name.as_str();
-        Self::group_is_valid_target(group)
+        group_is_valid_target(group)
     }
 
     /// Checks whether the current groups is targetting the root path aka `/`
