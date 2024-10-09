@@ -273,7 +273,10 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     };
 
     if !dir.exists() {
-        eprintln!("{}", format!("There's no directory setup for Hooks").red());
+        eprintln!(
+            "{}",
+            "There's no directory setup for Hooks".to_string().red()
+        );
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
@@ -318,7 +321,7 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     }
 
     if rows.is_empty() {
-        println!("{}", format!("No hooks have been set up yet.").yellow());
+        println!("{}", "No hooks have been set up yet.".to_string().yellow());
         return Ok(());
     }
 
