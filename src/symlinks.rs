@@ -355,10 +355,10 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
                 continue;
             }
 
-            // Ignore conditional groups in wildcard matching.
-            // To force linking group of other target_os/target_family, use
-            // explict argument passing.
-            if dotfiles::group_ends_with_target_name(&group) {
+            // Ignore conditional groups for other platforms.
+            // To force linking a group of other target_os/target_family, use
+            // explict argument passing instead of wildcard.
+            if !Dotfile::group_is_valid_target(&group) {
                 continue;
             }
 
