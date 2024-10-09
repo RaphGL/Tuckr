@@ -143,28 +143,30 @@ $ tuckr rm \* # removes all dotfiles from your system
 ```
 Super powered GNU Stow replacement
 
-Usage: tuckr <COMMAND>
+Usage: tuckr [OPTIONS] <COMMAND>
 
 Commands:
-  status      Get dotfiles' symlinking status (alias: s)
-  add         Deploy dotfiles for the supplied groups (alias: a)
-  rm          Remove dotfiles for the supplied groups
-  set         Setup groups and run their hooks
-  encrypt     Encrypt files and move them to dotfiles/Secrets (alias: e)
-  decrypt     Decrypt files (alias: d)
-  push        Copy files into groups
-  pop         Remove groups from dotfiles/Configs
-  ls-hooks    List available hooks
-  ls-secrets  List stored secrets
-  init        Initialize dotfile directory
-  from-stow   Convert a GNU Stow repo into Tuckr
-  groupis     Returns the group the files belongs to
-  help        Print this message or the help of the given subcommand(s)
+  status     Get dotfiles' symlinking status (alias: s)
+  add        Deploy dotfiles for the supplied groups (alias: a)
+  rm         Remove dotfiles for the supplied groups
+  set        Setup groups and run their hooks
+  encrypt    Encrypt files and move them to dotfiles/Secrets (alias: e)
+  decrypt    Decrypt files (alias: d)
+  push       Copy files into groups
+  pop        Remove groups from dotfiles/Configs
+  ls         List dotfiles hooks, secrets, profiles
+  init       Initialize dotfile directory
+  from-stow  Convert a GNU Stow repo into Tuckr
+  groupis    Return the group files belongs to
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -p, --profile <PROFILE>  Choose which dotfile profile to use
+  -h, --help               Print help
+  -V, --version            Print version
 ```
+
+Note: for additional information also check [the wiki](https://github.com/RaphGL/Tuckr/wiki)
 
 ### How it works
 
@@ -243,7 +245,7 @@ tuckr decrypt <group_name...>
 ```
 
 ### Conditional deployment
-Conditional deployment is used when a dotfile should only be deployment on a specific platform. This is done by creating a separate group with the same name suffixed with the desired platform.
+Conditional deployment is used when a dotfile should only be deployed on a specific platform. This is done by creating a separate group with the same name suffixed with the desired platform.
 
 This group is entirely ignored on unsupported systems.
 
