@@ -105,13 +105,19 @@ enum Command {
     /// Copy files into groups
     Push {
         group: String,
+        #[arg(short = 'y', long)]
+        assume_yes: bool,
         #[arg(required = true)]
         files: Vec<String>,
     },
 
     /// Remove groups from dotfiles/Configs
     #[command(arg_required_else_help = true)]
-    Pop { groups: Vec<String> },
+    Pop {
+        groups: Vec<String>,
+        #[arg(short = 'y', long)]
+        assume_yes: bool,
+    },
 
     /// List dotfiles hooks, secrets, profiles
     #[command(subcommand, arg_required_else_help = true)]
@@ -123,7 +129,10 @@ enum Command {
     Init,
 
     /// Convert a GNU Stow repo into Tuckr
-    FromStow,
+    FromStow {
+        #[arg(short = 'y', long)]
+        assume_yes: bool,
+    },
 
     /// Return the group files belongs to
     #[command(name = "groupis", arg_required_else_help = true)]
@@ -166,7 +175,7 @@ fn main() -> ExitCode {
         Command::Decrypt { groups, exclude } => {
             secrets::decrypt_cmd(cli.profile, &groups, &exclude)
         }
-        Command::FromStow => fileops::from_stow_cmd(cli.profile),
+        Command::FromStow { assume_yes } => fileops::from_stow_cmd(cli.profile, assume_yes),
         Command::Init => fileops::init_cmd(cli.profile),
 
         Command::Ls(ls_type) => match ls_type {
@@ -175,8 +184,12 @@ fn main() -> ExitCode {
             ListType::Hooks => fileops::ls_hooks_cmd(cli.profile),
         },
 
-        Command::Push { group, files } => fileops::push_cmd(cli.profile, group, &files),
-        Command::Pop { groups } => fileops::pop_cmd(cli.profile, &groups),
+        Command::Push {
+            group,
+            files,
+            assume_yes,
+        } => fileops::push_cmd(cli.profile, group, &files, assume_yes),
+        Command::Pop { groups, assume_yes } => fileops::pop_cmd(cli.profile, &groups, assume_yes),
         Command::GroupIs { files } => fileops::groupis_cmd(cli.profile, &files),
     };
 

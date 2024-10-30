@@ -49,7 +49,7 @@ impl Iterator for DirWalk {
 }
 
 /// Converts a stow directory into a tuckr directory
-pub fn from_stow_cmd(profile: Option<String>) -> Result<(), ExitCode> {
+pub fn from_stow_cmd(profile: Option<String>, assume_yes: bool) -> Result<(), ExitCode> {
     // assume that from_stow is always run from a no profile dotfiles dir
     let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(path) => path,
@@ -71,10 +71,12 @@ pub fn from_stow_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     print!("Are you sure you want to convert your dotfiles to tuckr? (y/N)");
     io::stdout().flush().unwrap();
 
-    let mut answer = String::new();
-    io::stdin().read_line(&mut answer).unwrap();
-    if !matches!(answer.trim().to_lowercase().as_str(), "yes" | "y") {
-        return Ok(());
+    if !assume_yes {
+        let mut answer = String::new();
+        io::stdin().read_line(&mut answer).unwrap();
+        if !matches!(answer.trim().to_lowercase().as_str(), "yes" | "y") {
+            return Ok(());
+        }
     }
 
     // --- initializing required directory ---
@@ -148,7 +150,12 @@ pub fn init_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn push_cmd(profile: Option<String>, group: String, files: &[String]) -> Result<(), ExitCode> {
+pub fn push_cmd(
+    profile: Option<String>,
+    group: String,
+    files: &[String],
+    assume_yes: bool,
+) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir.join("Configs").join(group),
         Err(e) => {
@@ -167,23 +174,9 @@ pub fn push_cmd(profile: Option<String>, group: String, files: &[String]) -> Res
         }
 
         let file = path::absolute(file).unwrap();
-        let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file));
-        let target_dir = target_file.parent().unwrap();
+        let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
 
-        if !target_file.exists() {
-            fs::create_dir_all(target_dir).unwrap();
-
-            if cfg!(target_family = "unix") || file.is_file() {
-                fs::copy(file, target_file).unwrap();
-            } else {
-                for f in fileops::DirWalk::new(file) {
-                    let file = path::absolute(f).unwrap();
-                    let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file));
-                    fs::create_dir_all(target_file.parent().unwrap()).unwrap();
-                    fs::copy(file, target_file).unwrap();
-                }
-            }
-        } else {
+        if target_file.exists() && !assume_yes {
             print!(
                 "{} already exists. Do you want to override it? (y/N) ",
                 target_file.to_str().unwrap()
@@ -193,11 +186,27 @@ pub fn push_cmd(profile: Option<String>, group: String, files: &[String]) -> Res
             std::io::stdin().read_line(&mut confirmation).unwrap();
 
             let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
-
-            if confirmed {
-                fs::create_dir_all(target_dir).unwrap();
-                fs::copy(file, target_file).unwrap();
+            if !confirmed {
+                continue;
             }
+        }
+
+        let target_dir = target_file.parent().unwrap();
+        fs::create_dir_all(target_dir).unwrap();
+
+        if file.is_file() {
+            fs::copy(file, target_file).unwrap();
+            continue;
+        }
+
+        for f in fileops::DirWalk::new(file) {
+            if f.is_dir() {
+                continue;
+            }
+            let file = path::absolute(f).unwrap();
+            let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
+            fs::create_dir_all(target_file.parent().unwrap()).unwrap();
+            fs::copy(file, target_file).unwrap();
         }
     }
 
@@ -208,7 +217,11 @@ pub fn push_cmd(profile: Option<String>, group: String, files: &[String]) -> Res
     }
 }
 
-pub fn pop_cmd(profile: Option<String>, groups: &[String]) -> Result<(), ExitCode> {
+pub fn pop_cmd(
+    profile: Option<String>,
+    groups: &[String],
+    assume_yes: bool,
+) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir.join("Configs"),
         Err(e) => {
@@ -241,19 +254,22 @@ pub fn pop_cmd(profile: Option<String>, groups: &[String]) -> Result<(), ExitCod
         return Err(ReturnCode::NoSuchFileOrDir.into());
     }
 
-    println!("The following groups will be removed:");
-    for group in groups {
-        println!("\t{}", group.yellow());
-    }
-    print!("\nDo you want to proceed? (y/N) ");
-    std::io::stdout().flush().unwrap();
-    let mut confirmation = String::new();
-    std::io::stdin().read_line(&mut confirmation).unwrap();
 
-    let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
+    if !assume_yes {
 
-    if !confirmed {
-        return Ok(());
+        println!("The following groups will be removed:");
+        for group in groups {
+            println!("\t{}", group.yellow());
+        }
+        print!("\nDo you want to proceed? (y/N) ");
+        std::io::stdout().flush().unwrap();
+        let mut confirmation = String::new();
+        std::io::stdin().read_line(&mut confirmation).unwrap();
+        let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
+
+        if !confirmed {
+            return Ok(());
+        }
     }
 
     for group_path in valid_groups {
@@ -433,7 +449,7 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
             }
         }
 
-        let basepath = dotfiles::get_target_basepath(&file_path);
+        let basepath = dotfiles::get_target_basepath(&file_path).unwrap();
 
         for group in &groups {
             let dotfile_path = dotfiles_dir.join(group).join(&basepath);
@@ -455,4 +471,151 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FileopsTest {
+        dotfiles_dir: PathBuf,
+        target_dir: PathBuf,
+    }
+
+    impl FileopsTest {
+        fn start() -> Self {
+            let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
+            fs::create_dir_all(dotfiles_dir.join("Configs")).unwrap();
+
+            let target_dir = dirs::home_dir().unwrap().join(format!("tuckr_test-{}", std::thread::current().name().unwrap()));
+            fs::create_dir_all(&target_dir).unwrap();
+
+            Self {
+                dotfiles_dir,
+                target_dir,
+            }
+        }
+    }
+
+    impl Drop for FileopsTest {
+        fn drop(&mut self) {
+            if self.dotfiles_dir.exists() {
+                fs::remove_dir_all(&self.dotfiles_dir).unwrap();
+            }
+
+            if self.target_dir.exists() {
+                fs::remove_dir_all(&self.target_dir).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn push_files() {
+        let ft = FileopsTest::start();
+
+        let file_path = ft.target_dir.join("test");
+        let mut file = fs::File::create(&file_path).unwrap();
+        file.write("this is a test".as_bytes()).unwrap();
+
+        let pushed_file = ft
+            .dotfiles_dir
+            .join("Configs")
+            .join("test")
+            .join(dotfiles::get_target_basepath(&file_path).unwrap());
+
+        assert!(!pushed_file.exists());
+
+        super::push_cmd(
+            None,
+            "test".into(),
+            &[file_path.to_str().unwrap().to_string()],
+            true,
+        )
+        .unwrap();
+
+        let first_pushed_content = fs::read_to_string(&pushed_file).unwrap();
+        assert!(
+            pushed_file.exists() && first_pushed_content == fs::read_to_string(&file_path).unwrap()
+        );
+
+        file.write("something something".as_bytes()).unwrap();
+        super::push_cmd(
+            None,
+            "test".into(),
+            &[file_path.to_str().unwrap().to_string()],
+            true,
+        )
+        .unwrap();
+
+        assert!(
+            pushed_file.exists()
+                && first_pushed_content != fs::read_to_string(pushed_file).unwrap()
+        );
+    }
+
+    #[test]
+    fn push_directories() {
+        let ft = FileopsTest::start();
+
+        let dir1 = ft.target_dir.join("dir1");
+        fs::create_dir_all(&dir1).unwrap();
+        let mut file1 = fs::File::create(dir1.join("file")).unwrap();
+        file1.write("test".as_bytes()).unwrap();
+
+        let dir2 = ft.target_dir.join("dir2");
+        fs::create_dir_all(&dir2).unwrap();
+        let mut file2 = fs::File::create(dir2.join("file")).unwrap();
+        file2.write("test".as_bytes()).unwrap();
+
+        // never used because it is empty
+        fs::create_dir_all(ft.target_dir.join("dir3")).unwrap();
+
+
+        let group_dir = ft
+            .dotfiles_dir
+            .join("Configs")
+            .join("test")
+            .join(dotfiles::get_target_basepath(&ft.target_dir).unwrap());
+
+        assert!(!group_dir.exists());
+
+        super::push_cmd(
+            None,
+            "test".into(),
+            &[ft.target_dir.to_str().unwrap().to_owned()],
+            true,
+        )
+        .unwrap();
+
+        assert!(group_dir.exists() && 
+            // pushing ignores empty directories so the count = 2 and not 3
+            fs::read_dir(group_dir).unwrap().count() == 2);
+    }
+
+    #[test]
+    fn pop_groups() {
+        let ft = FileopsTest::start();
+
+        fs::create_dir_all(&ft.target_dir).unwrap();
+        let mut file = fs::File::create(ft.target_dir.join("file")).unwrap();
+        file.write("test".as_bytes()).unwrap();
+
+        let group_dir = ft
+            .dotfiles_dir
+            .join("Configs")
+            .join("test")
+            .join(dotfiles::get_target_basepath(&ft.target_dir).unwrap());
+
+        super::push_cmd(
+            None,
+            "test".into(),
+            &[ft.target_dir.to_str().unwrap().to_owned()],
+            true,
+        )
+        .unwrap();
+
+        assert!(group_dir.exists());
+        super::pop_cmd(None, &["test".into()], true).unwrap();
+        assert!(!group_dir.exists());
+    }
 }

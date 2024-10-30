@@ -771,47 +771,66 @@ mod tests {
     use std::{
         fs::{self, File},
         io::Write,
+        path,
     };
 
     use owo_colors::OwoColorize;
 
-    use crate::dotfiles;
+    use crate::dotfiles::{self, Dotfile};
 
     use super::SymlinkHandler;
 
-    struct Test;
+    /// note: every new file or group that is added to the test ought to be added to the filepaths array in Self::start().
+    /// this ensures that the tests never fail with weird random panics
+    #[must_use = "must be initialized before every test"]
+    struct Test {
+        files_used: Vec<path::PathBuf>,
+    }
 
     impl Test {
         fn start() -> Self {
             crate::fileops::init_cmd(None).unwrap();
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
-
             let new_config_dir = group_dir.join(".config");
+
             fs::create_dir_all(&new_config_dir).unwrap();
 
-            let mut file = File::create(new_config_dir.join("group_file")).unwrap();
-            let _ = file
-                .write("Some random content on file".as_bytes())
-                .unwrap();
+            let filepaths = [
+                new_config_dir.join("group_file"),
+                group_dir.join("group_file_0"),
+            ];
 
-            let mut file2 = File::create(group_dir.join("group_file_0")).unwrap();
-            let _ = file2
-                .write("Some random content on file".as_bytes())
-                .unwrap();
-            Self
+            for filepath in &filepaths {
+                let mut file = File::create(filepath).unwrap();
+                _ = file
+                    .write("Some random content on file".as_bytes())
+                    .unwrap();
+            }
+
+            Self {
+                files_used: filepaths.to_vec(),
+            }
         }
     }
 
     impl Drop for Test {
         fn drop(&mut self) {
-            _ = super::remove_cmd(None, &["*".to_string()], &[]);
             let Ok(dotfiles_dir) = dotfiles::get_dotfiles_path(None) else {
                 eprintln!("{}", "Failed to clean up test.".red());
                 return;
             };
 
+            for file in &self.files_used {
+                // delete everything to ensure everything starts from a blank slate
+                if file.exists() {
+                    let dotfile_path = Dotfile::try_from(file.clone()).unwrap();
+                    _ = fs::remove_file(dotfile_path.to_target_path());
+                }
+            }
+
             if dotfiles_dir.exists() {
+                _ = super::remove_cmd(None, &["*".to_string()], &[]);
                 fs::remove_dir_all(dotfiles_dir).unwrap();
             }
         }

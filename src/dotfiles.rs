@@ -228,7 +228,9 @@ impl Iterator for DotfileIter {
 
 /// Returns an Option<String> with the path to of the tuckr dotfiles directory
 ///
-/// When run on a unit test it returns a temporary directory for testing purposes
+/// When run on a unit test it returns a temporary directory for testing purposes.
+/// this testing directory is unique to the thread it's running on,
+/// so different unit tests cannot interact with the other's dotfiles directory
 pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
     let (home_dotfiles, config_dotfiles) = {
         let dotfiles_dir = match profile {
@@ -246,8 +248,11 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
     };
 
     if cfg!(test) {
+        // using the thread's name is necessary for tests
+        // since unit tests run in parallel, each test needs a uniquely identifying name.
+        // cargo-test names each threads with the name of the unit test that is running on it.
         Ok(std::env::temp_dir()
-            .join(format!("tuckr-{}", std::process::id()))
+            .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
             .join("dotfiles"))
     } else if config_dotfiles.exists() {
         Ok(config_dotfiles)
@@ -268,9 +273,13 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
     }
 }
 
-pub fn get_target_basepath(target: &path::Path) -> PathBuf {
+/// removes the $HOME from path
+pub fn get_target_basepath(target: &path::Path) -> Option<PathBuf> {
     let home_dir = dirs::home_dir().unwrap();
-    target.strip_prefix(home_dir).unwrap().into()
+    match target.strip_prefix(home_dir) {
+        Ok(basepath) => Some(basepath.into()),
+        Err(_) => None,
+    }
 }
 
 #[derive(Copy, Clone)]
