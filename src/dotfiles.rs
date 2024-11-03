@@ -144,6 +144,16 @@ pub fn group_ends_with_target_name(group: &str) -> bool {
     VALID_TARGETS.iter().any(|target| group.ends_with(target))
 }
 
+pub fn group_without_target(group: &str) -> &str {
+    for target in VALID_TARGETS {
+        if let Some(base_group) = group.strip_suffix(target) {
+            return base_group;
+        }
+    }
+
+    group
+}
+
 /// Returns true if a group with specified name can be used by current platform.
 /// Checks if a group should be linked on current platform. For unconditional
 /// groups, this function returns true; for conditional groups, this function

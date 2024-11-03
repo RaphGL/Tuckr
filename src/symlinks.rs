@@ -11,6 +11,7 @@
 //! $HOME equivalents are pointing to them and categorizing them accordingly.
 
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
+use enumflags2::{make_bitflags, BitFlags};
 use owo_colors::OwoColorize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -27,32 +28,28 @@ fn symlink_file(f: PathBuf) {
                 return;
             }
 
-            #[cfg(target_family = "unix")]
-            {
-                if let Err(err) = std::os::unix::fs::symlink(f, target_path) {
-                    eprintln!(
-                        "failed to symlink group `{}`: {}",
-                        group.group_name,
-                        err.red()
-                    );
+            let result = {
+                #[cfg(target_family = "unix")]
+                {
+                    std::os::unix::fs::symlink(f, target_path)
                 }
-            }
 
-            #[cfg(target_family = "windows")]
-            {
-                let result = if f.is_dir() {
-                    std::os::windows::fs::symlink_dir(f, target_path)
-                } else {
-                    std::os::windows::fs::symlink_file(f, target_path)
-                };
-
-                if let Err(err) = result {
-                    eprintln!(
-                        "failed to symlink group `{}`: {}",
-                        group.group_name,
-                        err.red()
-                    );
+                #[cfg(target_family = "windows")]
+                {
+                    if f.is_dir() {
+                        std::os::windows::fs::symlink_dir(f, target_path)
+                    } else {
+                        std::os::windows::fs::symlink_file(f, target_path)
+                    }
                 }
+            };
+
+            if let Err(err) = result {
+                eprintln!(
+                    "failed to symlink group `{}`: {}",
+                    group.group_name,
+                    err.red()
+                );
             }
         }
 
@@ -61,6 +58,15 @@ fn symlink_file(f: PathBuf) {
             eprintln!("Failed to link {}.", f.to_str().unwrap());
         }
     }
+}
+
+#[enumflags2::bitflags]
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Debug)]
+enum SymlinkType {
+    Symlinked = 0b001,
+    NotSymlinked = 0b010,
+    NotOwned = 0b100,
 }
 
 type HashCache = HashMap<String, HashSet<Dotfile>>;
@@ -210,45 +216,78 @@ impl SymlinkHandler {
         self.symlinked.is_empty() && self.not_symlinked.is_empty() && self.not_owned.is_empty()
     }
 
+    fn __get_related_cond_groups(
+        &self,
+        target_group: &str,
+        cache: &HashCache,
+    ) -> Option<Vec<String>> {
+        if dotfiles::group_ends_with_target_name(target_group) && !cache.contains_key(target_group)
+        {
+            return None;
+        }
+
+        let cond_groups: Vec<String> = cache
+            .iter()
+            .filter(|(group, files)| {
+                // any file in this group is in the same target so just pick any file to check
+                let file = files.iter().next().unwrap();
+
+                group.starts_with(target_group) && file.is_valid_target()
+            })
+            .map(|(group, _)| group.clone())
+            .collect();
+
+        if cond_groups.is_empty() {
+            return None;
+        }
+
+        Some(cond_groups)
+    }
     /// Returns target_group and all of its conditional groups that are valid in the current platform
     ///
     /// symlinked: gets symlinked conditional groups if true, otherwise gets not symlinked ones
     fn get_related_conditional_groups(
         &self,
         target_group: &str,
-        symlinked: bool,
+        symtype: BitFlags<SymlinkType>,
     ) -> Option<Vec<String>> {
-        let cache = if symlinked {
-            &self.symlinked
+        let symlinked = if symtype.contains(SymlinkType::Symlinked) {
+            self.__get_related_cond_groups(target_group, &self.symlinked)
         } else {
-            &self.not_symlinked
+            None
         };
 
-        if !cache.contains_key(target_group) {
-            return None;
-        }
+        let not_symlinked = if symtype.contains(SymlinkType::NotSymlinked) {
+            self.__get_related_cond_groups(target_group, &self.not_symlinked)
+        } else {
+            None
+        };
 
-        let mut cond_groups: Vec<String> = cache
-            .iter()
-            .filter(|(group, files)| {
-                // any file in this group is in the same target so just pick any file to check
-                let file = files.iter().next().unwrap();
+        let not_owned = if symtype.contains(SymlinkType::NotOwned) {
+            self.__get_related_cond_groups(target_group, &self.not_owned)
+        } else {
+            None
+        };
 
-                group.starts_with(target_group)
-                    && dotfiles::group_ends_with_target_name(&file.group_name)
-                    && file.is_valid_target()
-            })
-            .map(|(group, _)| group.clone())
+        let cond_groups: Vec<_> = symlinked
+            .into_iter()
+            .chain(not_symlinked.into_iter())
+            .chain(not_owned.into_iter())
+            .flatten()
             .collect();
 
-        cond_groups.push(target_group.into());
-
-        Some(cond_groups)
+        if cond_groups.is_empty() {
+            None
+        } else {
+            Some(cond_groups)
+        }
     }
 
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
-        let Some(groups) = self.get_related_conditional_groups(group, false) else {
+        let Some(groups) =
+            self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
+        else {
             return;
         };
 
@@ -289,7 +328,9 @@ impl SymlinkHandler {
             }
         }
 
-        let Some(groups) = self.get_related_conditional_groups(group, true) else {
+        let Some(groups) =
+            self.get_related_conditional_groups(group, SymlinkType::Symlinked.into())
+        else {
             return;
         };
 
@@ -330,15 +371,49 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
     // loads the runtime information needed to carry out actions
     let sym = SymlinkHandler::try_new(profile.clone())?;
 
-    // detect if user provided an invalid group
-    if let Some(invalid_groups) =
-        dotfiles::check_invalid_groups(profile, DotfileType::Configs, groups)
-    {
-        for group in invalid_groups {
-            eprintln!("{}", format!("{group} doesn't exist.").red());
+    let groups = {
+        // detect if user provided an invalid group
+        // note: a group only is invalid only if the group itself or one of its related conditional groups don't exist
+        let valid_groups =
+            match dotfiles::check_invalid_groups(profile.clone(), DotfileType::Configs, &groups) {
+                Some(invalid_groups) => {
+                    let mut valid_groups = Vec::new();
+                    let mut groups_checked_as_invalid = Vec::new();
+
+                    for group in invalid_groups {
+                        let valid_related_groups = sym.get_related_conditional_groups(
+                            &group,
+                            enumflags2::make_bitflags!(SymlinkType::{
+                                Symlinked|
+                                NotSymlinked|
+                                NotOwned
+                            }),
+                        );
+
+                        match valid_related_groups {
+                            Some(mut valid_related_groups) => {
+                                valid_groups.append(&mut valid_related_groups)
+                            }
+                            None => groups_checked_as_invalid.push(group.clone()),
+                        }
+                    }
+
+                    for group in groups_checked_as_invalid {
+                        eprintln!("{}", format!("{group} doesn't exist.").red())
+                    }
+
+                    valid_groups
+                }
+
+                None => groups.to_vec(),
+            };
+
+        if valid_groups.is_empty() {
+            return Err(ReturnCode::NoSetupFolder.into());
         }
-        return Err(ReturnCode::NoSetupFolder.into());
-    }
+
+        valid_groups
+    };
 
     // handles wildcard
     if groups.contains(&"*".to_string()) {
@@ -371,10 +446,10 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
     }
 
     for group in groups {
-        if exclude.contains(group) {
+        if exclude.contains(&group) {
             continue;
         }
-        func(&sym, group);
+        func(&sym, &group);
     }
 
     Ok(())
@@ -414,11 +489,8 @@ pub fn add_cmd(
         // Symlink dotfile by force
         if force {
             let remove_overlapping_files = |status_group: &HashCache| {
-                for (group, group_files) in status_group {
-                    if !groups.contains(group) {
-                        continue;
-                    }
-
+                let group = status_group.get(group);
+                if let Some(group_files) = group {
                     for file in group_files {
                         let target_file = file.to_target_path();
                         if target_file.is_dir() {
@@ -437,11 +509,8 @@ pub fn add_cmd(
         // Discard dotfile and adopt the conflicting dotfile
         if adopt {
             let adopt_overlapping_files = |status_group: &HashCache| {
-                for (group, group_files) in status_group {
-                    if !groups.contains(group) {
-                        continue;
-                    }
-
+                let group = status_group.get(group);
+                if let Some(group_files) = group {
                     for file in group_files {
                         let target_file = file.to_target_path();
                         if target_file.is_dir() {
@@ -510,35 +579,42 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     // will be marked as not_symlinked only
 
     let (symlinked, not_symlinked) = {
-        let mut not_symlinked: Vec<_> = sym.not_symlinked.keys().collect();
+        let mut not_symlinked: Vec<_> = sym
+            .not_symlinked
+            .keys()
+            .map(|group| group.as_str())
+            .collect();
 
         let mut symlinked: Vec<_> = sym
             .symlinked
             .keys()
-            .filter(|group| {
-                if sym.get_related_conditional_groups(group, false).is_none()
-                    // ignore conditional groups
-                    && !dotfiles::group_ends_with_target_name(group)
+            .filter_map(|group| {
+                if sym
+                    .get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
+                    .is_none()
                 {
-                    true
+                    Some(dotfiles::group_without_target(group))
                 } else {
                     not_symlinked.push(group);
-                    false
+                    None
                 }
             })
             .collect();
 
-        symlinked.sort();
-
         let mut not_symlinked: Vec<_> = not_symlinked
-            .into_iter()
-            .filter(|group| !dotfiles::group_ends_with_target_name(group))
+            .iter()
+            .map(|group| dotfiles::group_without_target(group))
             .collect();
+
+        symlinked.sort();
+        symlinked.dedup();
+
         not_symlinked.sort();
+        not_symlinked.dedup();
+
         (symlinked, not_symlinked)
     };
 
-    let empty_str = String::from("");
     let status_rows: Vec<SymlinkRow> = {
         let (longest, shortest, symlinked_is_longest) = if symlinked.len() >= not_symlinked.len() {
             (&symlinked, &not_symlinked, true)
@@ -548,7 +624,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
         longest
             .iter()
-            .zip(shortest.iter().chain(std::iter::repeat(&&empty_str)))
+            .zip(shortest.iter().chain(std::iter::repeat(&"")))
             .map(|(longest, shortest)| SymlinkRow {
                 symlinked: if symlinked_is_longest {
                     longest
@@ -628,9 +704,14 @@ fn print_groups_status(
             // merges conditional groups into their base group
             // eg: `dotfile_unix` gets merged into the `dotfile` group
             for base_group in &groups {
-                let Some(related_cond_groups) =
-                    sym.get_related_conditional_groups(base_group, symlinked)
-                else {
+                let Some(related_cond_groups) = sym.get_related_conditional_groups(
+                    base_group,
+                    if symlinked {
+                        SymlinkType::Symlinked.into()
+                    } else {
+                        make_bitflags!(SymlinkType::{NotSymlinked | NotOwned})
+                    },
+                ) else {
                     continue;
                 };
 
