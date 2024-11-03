@@ -254,9 +254,7 @@ pub fn pop_cmd(
         return Err(ReturnCode::NoSuchFileOrDir.into());
     }
 
-
     if !assume_yes {
-
         println!("The following groups will be removed:");
         for group in groups {
             println!("\t{}", group.yellow());
@@ -431,7 +429,14 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
         .collect();
 
     'next_file: for file in files {
-        let mut file_path = PathBuf::from(file);
+        let mut file_path = match PathBuf::from(file).canonicalize() {
+            Ok(fp) => fp,
+            Err(err) => {
+                eprintln!("{err}");
+                continue;
+            }
+        };
+
         if !file_path.exists() {
             eprintln!("{}", format!("`{file} does not exist.`").red());
             continue;
@@ -443,6 +448,7 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
         }
 
         while !file_path.is_symlink() {
+            // continuosly go up a directory trying to find where the symlink is
             if !file_path.pop() {
                 eprintln!("{}", format!("`{file}` is not a tuckr dotfile.").red());
                 break 'next_file;
@@ -487,7 +493,10 @@ mod tests {
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             fs::create_dir_all(dotfiles_dir.join("Configs")).unwrap();
 
-            let target_dir = dirs::home_dir().unwrap().join(format!("tuckr_test-{}", std::thread::current().name().unwrap()));
+            let target_dir = dirs::home_dir().unwrap().join(format!(
+                "tuckr_test-{}",
+                std::thread::current().name().unwrap()
+            ));
             fs::create_dir_all(&target_dir).unwrap();
 
             Self {
@@ -570,7 +579,6 @@ mod tests {
         // never used because it is empty
         fs::create_dir_all(ft.target_dir.join("dir3")).unwrap();
 
-
         let group_dir = ft
             .dotfiles_dir
             .join("Configs")
@@ -587,9 +595,8 @@ mod tests {
         )
         .unwrap();
 
-        assert!(group_dir.exists() && 
-            // pushing ignores empty directories so the count = 2 and not 3
-            fs::read_dir(group_dir).unwrap().count() == 2);
+        // pushing ignores empty directories so the count = 2 and not 3
+        assert!(group_dir.exists() && fs::read_dir(group_dir).unwrap().count() == 2);
     }
 
     #[test]

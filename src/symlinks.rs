@@ -270,10 +270,11 @@ impl SymlinkHandler {
         };
 
         let cond_groups: Vec<_> = symlinked
-            .into_iter()
-            .chain(not_symlinked.into_iter())
-            .chain(not_owned.into_iter())
+            .iter()
+            .chain(not_symlinked.iter())
+            .chain(not_owned.iter())
             .flatten()
+            .map(|group| group.to_owned())
             .collect();
 
         if cond_groups.is_empty() {
@@ -375,7 +376,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
         // detect if user provided an invalid group
         // note: a group only is invalid only if the group itself or one of its related conditional groups don't exist
         let valid_groups =
-            match dotfiles::check_invalid_groups(profile.clone(), DotfileType::Configs, &groups) {
+            match dotfiles::check_invalid_groups(profile.clone(), DotfileType::Configs, groups) {
                 Some(invalid_groups) => {
                     let mut valid_groups = Vec::new();
                     let mut groups_checked_as_invalid = Vec::new();
