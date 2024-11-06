@@ -358,13 +358,30 @@ pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         .join("Secrets");
 
     let Ok(secrets) = secrets_dir.read_dir() else {
+        eprintln!(
+            "{}",
+            format!(
+                "The secrets directory `{}` does not exist.",
+                secrets_dir.display()
+            )
+            .red()
+        );
         return Err(ReturnCode::NoSetupFolder.into());
     };
 
+    let secrets: Vec<_> = secrets.collect();
+
+    if secrets.is_empty() {
+        eprintln!("{}", "No secrets have been setup yet.".yellow());
+        return Err(ExitCode::FAILURE);
+    }
+
+    println!("Secrets available:");
     for secret in secrets {
         let secret = secret.unwrap();
-        println!("{}", secret.file_name().to_str().unwrap());
+        println!("\t{}", secret.file_name().to_str().unwrap());
     }
+
     Ok(())
 }
 
