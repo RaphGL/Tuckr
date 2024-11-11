@@ -7,6 +7,7 @@ use crate::fileops::DirWalk;
 use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
 use owo_colors::OwoColorize;
 use rand::rngs;
+use rust_i18n::t;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,7 +31,7 @@ impl SecretsHandler {
 
         // makes a hash of the password so that it can fit on the 256 bit buffer used by the
         // algorithm
-        let input_key = rpassword::prompt_password("Password: ").unwrap();
+        let input_key = rpassword::prompt_password(format!("{}: ", t!("info.password"))).unwrap();
         let input_hash = Sha256::digest(input_key);
 
         Ok(SecretsHandler {
@@ -44,10 +45,7 @@ impl SecretsHandler {
     fn encrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let Ok(dotfile) = fs::read(dotfile) else {
-            eprintln!(
-                "{}",
-                format!("{} {}", "No such file or directory: ", dotfile).red()
-            );
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = dotfile).red());
             return Err(ReturnCode::NoSuchFileOrDir.into());
         };
 
@@ -71,7 +69,7 @@ impl SecretsHandler {
         match cipher.decrypt(nonce.into(), contents) {
             Ok(f) => Ok(f),
             Err(_) => {
-                eprintln!("{}", "Wrong password.".red());
+                eprintln!("{}", t!("errors.wrong_password").red());
                 Err(ReturnCode::DecryptionFailed.into())
             }
         }
@@ -131,7 +129,7 @@ pub fn decrypt_cmd(
         dotfiles::check_invalid_groups(profile, dotfiles::DotfileType::Secrets, groups)
     {
         for group in invalid_groups {
-            eprintln!("{}", format!("{group} does not exist.").red());
+            eprintln!("{}", t!("errors.no_group", group = group).red());
         }
         return Err(ReturnCode::DecryptionFailed.into());
     }
@@ -161,7 +159,7 @@ pub fn decrypt_cmd(
         let groups_dir = handler.dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
             let Ok(group) = Dotfile::try_from(group.unwrap().path()) else {
-                eprintln!("Received an invalid group path.");
+                eprintln!("{}", t!("errors.got_invalid_group").red());
                 return Err(ExitCode::FAILURE);
             };
             decrypt_group(group)?;
@@ -173,7 +171,7 @@ pub fn decrypt_cmd(
     for group in groups {
         let group = handler.dotfiles_dir.join("Secrets").join(group);
         let Ok(group) = Dotfile::try_from(group) else {
-            eprintln!("Received an invalid group path.");
+            eprintln!("{}", t!("errors.got_invalid_group").red());
             return Err(ExitCode::FAILURE);
         };
         decrypt_group(group)?;

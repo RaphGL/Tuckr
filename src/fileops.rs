@@ -5,6 +5,7 @@
 use crate::dotfiles::{self, ReturnCode};
 use crate::fileops;
 use owo_colors::OwoColorize;
+use rust_i18n::t;
 use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -22,7 +23,10 @@ impl DirWalk {
         let dir_path = dir_path.as_ref();
         let dir = match fs::read_dir(dir_path) {
             Ok(f) => f,
-            Err(_) => panic!("{} does not exist", dir_path.to_str().unwrap()),
+            Err(_) => panic!(
+                "{}",
+                t!("errors.x_doesnt_exist", x = dir_path.to_str().unwrap())
+            ),
         };
 
         Self {
@@ -62,13 +66,13 @@ pub fn from_stow_cmd(profile: Option<String>, assume_yes: bool) -> Result<(), Ex
     // --- Getting user confirmation ---
     println!(
         "{}",
-        format!(
-            "The dotfiles at `{}` will be converted into Tuckr.",
-            dotfiles_dir.display()
+        t!(
+            "info.dotfiles_will_be_converted",
+            location = dotfiles_dir.display()
         )
         .yellow()
     );
-    print!("Are you sure you want to convert your dotfiles to tuckr? (y/N)");
+    print!("{}", t!("warn.want_to_convert_dotfiles"));
     io::stdout().flush().unwrap();
 
     if !assume_yes {
@@ -81,10 +85,10 @@ pub fn from_stow_cmd(profile: Option<String>, assume_yes: bool) -> Result<(), Ex
 
     // --- initializing required directory ---
     let configs_path = dotfiles_dir.join("Configs");
-    fs::create_dir_all(&configs_path).expect("Could not create required directory.");
+    fs::create_dir_all(&configs_path).expect(&t!("errors.couldnt_create_required_dir"));
 
     // --- Moving dotfiles to Configs/ ---
-    let cwd = fs::read_dir(&dotfiles_dir).expect("Could not open current directory");
+    let cwd = fs::read_dir(&dotfiles_dir).expect(&t!("errors.couldnt_open_curr_dir"));
 
     for file in cwd {
         let dir = file.unwrap();
@@ -103,7 +107,7 @@ pub fn from_stow_cmd(profile: Option<String>, assume_yes: bool) -> Result<(), Ex
             && !dirname.ends_with("Hooks")
             && !dirname.ends_with("Secrets")
         {
-            fs::rename(dir.path(), path).expect("Could not move files");
+            fs::rename(dir.path(), path).expect(&t!("errors.couldnt_move_files"));
         }
     }
 
@@ -140,9 +144,9 @@ pub fn init_cmd(profile: Option<String>) -> Result<(), ExitCode> {
 
     println!(
         "{}",
-        format!(
-            "A dotfiles directory has been created on `{}`.",
-            dotfiles_dir.to_str().unwrap()
+        t!(
+            "info.dotfiles_created_at",
+            location = dotfiles_dir.to_str().unwrap()
         )
         .green()
     );
@@ -168,7 +172,10 @@ pub fn push_cmd(
     for file in files {
         let file = PathBuf::from(file);
         if !file.exists() {
-            eprintln!("{}", format!("{} does not exist.", file.display()).yellow());
+            eprintln!(
+                "{}",
+                t!("errors.x_doesnt_exist", x = file.display()).yellow()
+            );
             any_file_failed = true;
             continue;
         }
@@ -178,8 +185,10 @@ pub fn push_cmd(
 
         if target_file.exists() && !assume_yes {
             print!(
-                "{} already exists. Do you want to override it? (y/N) ",
-                target_file.to_str().unwrap()
+                "{} {}. {} ",
+                target_file.to_str().unwrap(),
+                t!("errors.already_exists"),
+                t!("warn.want_to_override")
             );
             std::io::stdout().flush().unwrap();
             let mut confirmation = String::new();
@@ -248,18 +257,18 @@ pub fn pop_cmd(
 
     if !invalid_groups.is_empty() {
         for group in invalid_groups {
-            eprintln!("{}", format!("{} does not exist.", group).yellow());
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).yellow());
         }
 
         return Err(ReturnCode::NoSuchFileOrDir.into());
     }
 
     if !assume_yes {
-        println!("The following groups will be removed:");
+        println!("{}:", t!("info.groups_will_be_removed"));
         for group in groups {
             println!("\t{}", group.yellow());
         }
-        print!("\nDo you want to proceed? (y/N) ");
+        print!("\n{} ", t!("warn.want_to_proceed"));
         std::io::stdout().flush().unwrap();
         let mut confirmation = String::new();
         std::io::stdin().read_line(&mut confirmation).unwrap();
@@ -287,10 +296,7 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     };
 
     if !dir.exists() {
-        eprintln!(
-            "{}",
-            "There's no directory setup for Hooks".to_string().red()
-        );
+        eprintln!("{}", t!("errors.no_dir_setup_for_x", x = "Hooks").red());
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
@@ -358,25 +364,18 @@ pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         .join("Secrets");
 
     let Ok(secrets) = secrets_dir.read_dir() else {
-        eprintln!(
-            "{}",
-            format!(
-                "The secrets directory `{}` does not exist.",
-                secrets_dir.display()
-            )
-            .red()
-        );
+        eprintln!("{}", t!("errors.no_dir_setup_for_x", x = "Secrets").red());
         return Err(ReturnCode::NoSetupFolder.into());
     };
 
     let secrets: Vec<_> = secrets.collect();
 
     if secrets.is_empty() {
-        eprintln!("{}", "No secrets have been setup yet.".yellow());
+        eprintln!("{}", t!("errors.no_x_setup_yet", x = "secrets").yellow());
         return Err(ExitCode::FAILURE);
     }
 
-    println!("Secrets available:");
+    println!("{}:", t!("info.x_available", x = "Secrets"));
     for secret in secrets {
         let secret = secret.unwrap();
         println!("\t{}", secret.file_name().to_str().unwrap());
@@ -410,11 +409,11 @@ pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
 
     let profiles: HashSet<_> = home_profiles.union(&config_profiles).collect();
     if profiles.is_empty() {
-        println!("{}", "No profiles have been set up yet.".yellow());
+        println!("{}", t!("errors.no_x_setup_yet", x = "profiles").yellow());
         return Ok(());
     }
 
-    println!("Profiles available:");
+    println!("{}:", t!("info.x_available", x = "Profiles"));
     for profile in profiles {
         println!("\t{profile}");
     }
@@ -455,7 +454,7 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
         };
 
         if !file_path.exists() {
-            eprintln!("{}", format!("`{file} does not exist.`").red());
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = file).red());
             continue;
         }
 
@@ -467,7 +466,7 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
         while !file_path.is_symlink() {
             // continuosly go up a directory trying to find where the symlink is
             if !file_path.pop() {
-                eprintln!("{}", format!("`{file}` is not a tuckr dotfile.").red());
+                eprintln!("{}", t!("errors.not_a_tuckr_dotfile", file = file).red());
                 break 'next_file;
             }
         }

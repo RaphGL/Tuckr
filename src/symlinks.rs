@@ -13,6 +13,7 @@
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
 use enumflags2::{make_bitflags, BitFlags};
 use owo_colors::OwoColorize;
+use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
@@ -46,16 +47,22 @@ fn symlink_file(f: PathBuf) {
 
             if let Err(err) = result {
                 eprintln!(
-                    "failed to symlink group `{}`: {}",
-                    group.group_name,
-                    err.red()
+                    "{}",
+                    t!(
+                        "errors.failed_to_symlink_x",
+                        groupname = group.group_name,
+                        err_msg = err.red()
+                    )
                 );
             }
         }
 
         Err(err) => {
             eprintln!("{}", err);
-            eprintln!("Failed to link {}.", f.to_str().unwrap());
+            eprintln!(
+                "{}",
+                t!("errors.failed_to_link_file", file = f.to_str().unwrap())
+            );
         }
     }
 }
@@ -299,9 +306,8 @@ impl SymlinkHandler {
                 group.try_iter().unwrap().for_each(|f| symlink_file(f.path));
             } else {
                 eprintln!(
-                    "{} {}",
-                    "There's no dotfiles for".red(),
-                    group.group_name.red()
+                    "{}",
+                    t!("errors.no_dotfiles_for_group", group = group.group_name).red()
                 );
             }
         }
@@ -339,11 +345,7 @@ impl SymlinkHandler {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
 
             if !group.path.exists() {
-                eprintln!(
-                    "{} {}",
-                    "There's no group called".red(),
-                    group.group_name.red()
-                );
+                eprintln!("{}", t!("errors.no_group", group = group.group_name).red());
                 continue;
             }
 
@@ -400,7 +402,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
                     }
 
                     for group in groups_checked_as_invalid {
-                        eprintln!("{}", format!("{group} doesn't exist.").red())
+                        eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
                     }
 
                     valid_groups
@@ -680,7 +682,13 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     println!("{final_table}");
 
     if !conflicts.is_empty() {
-        println!("\nTo learn more about conflicting dotfiles run: `tuckr status <group...>`")
+        println!(
+            "\n{}",
+            t!(
+                "info.learn_more_about_conflicts",
+                cmd = "tuckr status <group...>"
+            )
+        );
     }
 
     // Determines exit code for the command based on the dotfiles' status
@@ -781,18 +789,18 @@ fn print_groups_status(
 
         let file_conflicts = get_conflicts_in_cache(&sym.not_symlinked);
 
-        println!("Not Symlinked:");
+        println!("{}:", t!("table-column.not_symlinked"));
         for group in &not_symlinked {
             println!("\t{}", group.red());
-            print_conflicts(&file_conflicts, group, "already exists");
-            print_conflicts(&sym.not_owned, group, "symlinks elsewhere");
+            print_conflicts(&file_conflicts, group, &t!("errors.already_exists"));
+            print_conflicts(&sym.not_owned, group, &t!("errors.symlinks_elsewhere"));
         }
 
         println!();
     }
 
     if !symlinked.is_empty() {
-        println!("Symlinked:");
+        println!("{}:", t!("table-column.symlinked"));
         for group in symlinked {
             println!("\t{}", group.green());
         }
@@ -800,7 +808,7 @@ fn print_groups_status(
     }
 
     if !unsupported.is_empty() {
-        println!("Not supported on this platform:");
+        println!("{}:", t!("errors.not_supported_on_this_platform"));
         for group in unsupported {
             println!("\t{}", group.yellow());
         }
@@ -809,7 +817,7 @@ fn print_groups_status(
 
     let invalid_groups = dotfiles::check_invalid_groups(profile, DotfileType::Configs, &groups);
     if let Some(invalid_groups) = &invalid_groups {
-        eprintln!("Following groups do not exist:");
+        eprintln!("{}:", t!("errors.following_groups_dont_exist"));
         for group in invalid_groups {
             eprintln!("\t{}", group.red());
         }
@@ -817,7 +825,10 @@ fn print_groups_status(
     }
 
     if !not_symlinked.is_empty() {
-        println!("Check `tuckr help add` to learn how to fix symlinks.");
+        println!(
+            "{}",
+            t!("info.learn_how_to_fix_symlinks", cmd = "tuckr help add")
+        );
     }
 
     if invalid_groups.is_none() {
@@ -832,10 +843,13 @@ pub fn status_cmd(profile: Option<String>, groups: Option<Vec<String>>) -> Resul
     let sym = SymlinkHandler::try_new(profile.clone())?;
 
     if sym.is_empty() {
-        println!("{}", "No dotfiles have been setup yet".yellow());
+        println!("{}", t!("errors.no_x_setup_yet", x = "dotfiles").yellow());
         println!(
-            "To get started: add dotfiles using `tuckr push` or add them manually to `{}`",
-            sym.dotfiles_dir.join("Configs").display()
+            "{}",
+            t!(
+                "info.how_to_get_started",
+                dotfiles_config_dir = sym.dotfiles_dir.join("Configs").display()
+            )
         );
         return Err(ReturnCode::NoSetupFolder.into());
     }

@@ -4,6 +4,7 @@ use owo_colors::OwoColorize;
 
 use crate::dotfiles;
 use crate::fileops;
+use rust_i18n::t;
 use std::env;
 use std::path::PathBuf;
 use std::{
@@ -121,7 +122,9 @@ impl TryFrom<path::PathBuf> for Dotfile {
                     .next()
                     .unwrap()
                 else {
-                    return Err("failed to get group path relative to dotfile dir.".into());
+                    return Err(
+                        t!("errors.failed_to_get_group_relative_to_dotfiles_dir").into_owned()
+                    );
                 };
 
                 Ok(dotfile_root_dir.join(group_relpath))
@@ -217,7 +220,7 @@ impl Dotfile {
     /// Returns none if the Dotfile is not a directory, since it would not be walkable
     pub fn try_iter(&self) -> Result<DotfileIter, String> {
         if !self.path.is_dir() {
-            Err(format!("{} is not a directory", self.path.display()))
+            Err(t!("errors.not_a_dir", directory = self.path.display()).into_owned())
         } else {
             Ok(DotfileIter(fileops::DirWalk::new(self.path.clone())))
         }
@@ -274,11 +277,13 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
             None => "tuckr init".into(),
         };
         Err(format!(
-            "{}\n\n\
-            Make sure a `{}` directory exists.\n\
-            Or use `{init_cmd}`.",
-            "Couldn't find dotfiles directory.".yellow(),
-            config_dotfiles.display(),
+            "{}\n{}",
+            t!("errors.couldnt_find_dotfiles_dir").yellow(),
+            t!(
+                "erros.make_sure_dir_exists_or_run",
+                dir = config_dotfiles.display(),
+                cmd = init_cmd
+            )
         ))
     }
 }

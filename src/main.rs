@@ -18,6 +18,8 @@ mod symlinks;
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
+rust_i18n::i18n!("locales", minify_key = true, fallback = "en");
+
 #[derive(Parser)]
 #[command(about, author, version, propagate_version = true)]
 struct Cli {

@@ -9,6 +9,7 @@
 use crate::dotfiles::{self, Dotfile, ReturnCode};
 use crate::symlinks;
 use owo_colors::OwoColorize;
+use rust_i18n::t;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
@@ -78,7 +79,7 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
 
     let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
     let Ok(group_dir) = fs::read_dir(group_dir) else {
-        eprintln!("{}", "Could not read Hooks, folder may not exist or does not have the appropriate permissions".red());
+        eprintln!("{}", t!("errors.could_not_read_hooks").red());
         return Err(ReturnCode::NoSetupFolder.into());
     };
 
@@ -92,14 +93,20 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
                 if !filename.starts_with("pre") {
                     continue;
                 }
-                print_info_box("Running Prehook", group.yellow().to_string().as_str());
+                print_info_box(
+                    &t!("info.running_prehook"),
+                    group.yellow().to_string().as_str(),
+                );
             }
 
             DeployStep::PostHook => {
                 if !filename.starts_with("post") {
                     continue;
                 }
-                print_info_box("Running Posthook", group.yellow().to_string().as_str());
+                print_info_box(
+                    &t!("info.running_posthook"),
+                    group.yellow().to_string().as_str(),
+                );
             }
             _ => (),
         }
@@ -114,7 +121,7 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
 
         if !output.wait().unwrap().success() {
             print_info_box(
-                "Failed to hook".red().to_string().as_str(),
+                t!("errors.failed_to_hook").red().to_string().as_str(),
                 format!("{group} {filename}").as_str(),
             );
             return Err(ExitCode::FAILURE);
@@ -136,7 +143,7 @@ pub fn set_cmd(
         dotfiles::check_invalid_groups(profile.clone(), dotfiles::DotfileType::Hooks, groups)
     {
         for group in invalid_groups {
-            eprintln!("{}", format!("{group} does not exist.").red());
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
         }
 
         return Err(ReturnCode::NoSuchFileOrDir.into());
@@ -157,7 +164,7 @@ pub fn set_cmd(
 
                 DeployStep::Symlink => {
                     print_info_box(
-                        "Symlinking group",
+                        &t!("errors.symlinking_group"),
                         group.group_name.yellow().to_string().as_str(),
                     );
                     symlinks::add_cmd(profile.clone(), groups, exclude, force, adopt)?;
@@ -201,7 +208,7 @@ pub fn set_cmd(
         let Ok(group) = Dotfile::try_from(hook_path.clone()) else {
             eprintln!(
                 "{}",
-                format!("Got an invalid group: {}", hook_path.display()).red()
+                t!("errors.got_invalid_group", group = hook_path.display()).red()
             );
             return Err(ExitCode::FAILURE);
         };
