@@ -17,5 +17,6 @@ rand = "0.8"
 rpassword = "7.2"
 rust-i18n = "3.1.2"
 sha2 = "0.10"
+sys-locale = "0.3.2"
 tabled = {version = "0.10", features = ["color"]}
 zeroize = "1.5"

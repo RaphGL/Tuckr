@@ -154,6 +154,8 @@ enum ListType {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    rust_i18n::set_locale(sys_locale::get_locale().unwrap_or_default().as_str());
+
     let exit_code = match cli.command {
         Command::Set {
             groups,

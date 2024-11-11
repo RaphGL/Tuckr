@@ -42,6 +42,6 @@ couldnt_create_required_dir = "No ha sido posíble crear el directório obligato
 couldnt_open_curr_dir = "No ha sido posíble abrir el directório actual"
 couldnt_move_files = "No ha sido posíble mover los ficheros"
 no_dir_setup_for_x = "No existe un directório creado para %{x}"
-no_x_setup_yet = "Ningun dotfile ha sido configurado hasta ahora"
+no_x_setup_yet = "Ningun %{x} ha sido configurado hasta ahora"
 not_a_tuckr_dotfile = "`%{file}` no es un fichero que pertenece a tuckr."
 wrong_password = "Contraseña incorrecta."
