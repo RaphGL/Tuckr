@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct FileNode<'a> {
     group: &'a str,
     parent_node_idx: usize,
@@ -24,7 +24,7 @@ impl<'a> FileTree<'a> {
     }
 
     pub fn contains_file(&self, value: &Path) -> bool {
-        todo!()
+        self.find_node_idx(value).is_some()
     }
 
     pub fn contains_group(&self, groupname: &str) -> bool {
@@ -41,8 +41,9 @@ impl<'a> FileTree<'a> {
                 );
             };
 
-            let Some(ref curr_node) = self.nodes.get(curr_node_idx)? else {
-                todo!("handle invariant, none should not be linked to tree nodes")
+            let curr_node = match self.nodes.get(curr_node_idx)? {
+                Some(ref node) => node,
+                None => continue,
             };
 
             if let Some(ref path_node) = self.paths[curr_node.path_idx] {
@@ -70,15 +71,25 @@ impl<'a> FileTree<'a> {
             parent
         };
 
+        if self.nodes.is_empty() {
+            self.nodes.push(Some(FileNode {
+                group,
+                parent_node_idx: 0,
+                path_idx,
+                children: None,
+            }));
+
+            return;
+        }
+
         match self.find_node_idx(&value_parent) {
             Some(parent) => {
                 let new_node_idx = self.nodes.len();
 
                 if let Some(ref mut node) = self.nodes[parent] {
-                    if let Some(ref mut children) = node.children {
-                        children.push(new_node_idx);
-                    } else {
-                        node.children = Some(vec![new_node_idx]);
+                    match node.children {
+                        Some(ref mut children) => children.push(new_node_idx),
+                        None => node.children = Some(vec![new_node_idx]),
                     }
                 }
 
@@ -90,39 +101,35 @@ impl<'a> FileTree<'a> {
                 }));
             }
 
-            None => self.nodes.push(Some(FileNode {
-                group,
-                parent_node_idx: 0,
-                path_idx,
-                children: None,
-            })),
+            None => unreachable!(),
         }
     }
 
     pub fn remove(&mut self, value: &Path) {
-        let value_parent = {
-            let mut parent = value.to_path_buf();
-            parent.pop();
-            parent
-        };
-
         let Some(value_idx) = self.find_node_idx(value) else {
             return;
         };
 
-        match self.find_node_idx(&value_parent) {
-            Some(parent) => {
-                let Some(ref mut parent_node) = self.nodes[parent] else {
-                    todo!();
-                };
+        let node = self.nodes.get(value_idx).unwrap().clone().unwrap();
 
-                if let Some(children) = parent_node.children {}
+        if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx] {
+            if let Some(ref children) = parent_node.children {
+                parent_node.children = Some(
+                    children
+                        .iter()
+                        .filter(|v| **v != value_idx)
+                        .map(|v| *v)
+                        .collect(),
+                );
             }
-
-            None => {}
         }
 
-        todo!("implement removal from self.nodes")
+        self.nodes[value_idx] = None;
+        self.paths[node.path_idx] = None;
+
+        if !self.contains_group(node.group) {
+            self.groups.remove(node.group);
+        }
     }
 
     // note: instead of PathBuf should use T or just plain dotfiles::Dotfile
@@ -150,5 +157,12 @@ impl<'a> FileTree<'a> {
 //     ft.insert(Path::new("test"), "test");
 //     ft.insert(Path::new("test/file"), "test2");
 //     ft.insert(Path::new("test/file2"), "test2");
-//     ft.insert(Path::new("test/file2/file3"), "test2");
+//     ft.insert(Path::new("test/file2/file3"), "test1");
+
+//     ft.remove(Path::new("test/file"));
+
+//     println!(
+//         "contains test/file2/file3: {}",
+//         ft.contains_file(Path::new("test/file2"))
+//     );
 // }
