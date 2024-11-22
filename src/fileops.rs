@@ -499,6 +499,7 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
 mod tests {
     use super::*;
 
+    #[must_use = "must be used before every test is conducted"]
     struct FileopsTest {
         dotfiles_dir: PathBuf,
         target_dir: PathBuf,

@@ -42,10 +42,13 @@ impl SecretsHandler {
     }
 
     /// takes a path to a file and returns its encrypted content
-    fn encrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
+    fn encrypt(&self, dotfile: &Path) -> Result<Vec<u8>, ExitCode> {
         let cipher = XChaCha20Poly1305::new(&self.key);
         let Ok(dotfile) = fs::read(dotfile) else {
-            eprintln!("{}", t!("errors.x_doesnt_exist", x = dotfile).red());
+            eprintln!(
+                "{}",
+                t!("errors.x_doesnt_exist", x = dotfile.display()).red()
+            );
             return Err(ReturnCode::NoSuchFileOrDir.into());
         };
 
@@ -82,6 +85,20 @@ pub fn encrypt_cmd(
     group: &str,
     dotfiles: &[String],
 ) -> Result<(), ExitCode> {
+    {
+        let mut invalid_dotfiles = false;
+        for dotfile in dotfiles {
+            if !Path::new(dotfile).exists() {
+                eprintln!("{}", t!("errors.x_doesnt_exist", x = dotfile).red());
+                invalid_dotfiles = true;
+            }
+        }
+
+        if invalid_dotfiles {
+            return Err(ExitCode::FAILURE);
+        }
+    }
+
     let handler = SecretsHandler::try_new(profile)?;
 
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
@@ -93,9 +110,8 @@ pub fn encrypt_cmd(
     // windows' NT UNC paths (the paths used by fs::canonicalize on windows)
     let home_dir = dirs::home_dir().unwrap().canonicalize().unwrap();
 
-    for dotfile in dotfiles {
-        let target_file = Path::new(dotfile).canonicalize().unwrap();
-        let target_file = target_file.strip_prefix(&home_dir).unwrap();
+    let encrypt_file = |dotfile: &Path| -> Result<(), ExitCode> {
+        let target_file = dotfile.strip_prefix(&home_dir).unwrap();
 
         let dir_path = {
             let mut tf = target_file.to_path_buf();
@@ -105,13 +121,32 @@ pub fn encrypt_cmd(
 
         let mut encrypted = handler.encrypt(dotfile)?;
         let mut encrypted_file = handler.nonce.to_vec();
+        // appends a 24 byte nonce to the beginning of the file
+        encrypted_file.append(&mut encrypted);
 
         // makes sure all parent directories of the dotfile are created
         fs::create_dir_all(dest_dir.join(dir_path)).unwrap();
-
-        // appends a 24 byte nonce to the beginning of the file
-        encrypted_file.append(&mut encrypted);
         fs::write(dest_dir.join(target_file), encrypted_file).unwrap();
+
+        Ok(())
+    };
+
+    for dotfile in dotfiles {
+        let dotfile = Path::new(dotfile).canonicalize().unwrap();
+
+        if dotfile.is_dir() {
+            let Ok(dir) = dotfile.read_dir() else {
+                eprintln!("{}", t!("errors.x_doesnt_exist", x = dotfile.display()));
+                return Err(ExitCode::FAILURE);
+            };
+
+            for file in dir {
+                let file = file.unwrap().path();
+                encrypt_file(&file)?;
+            }
+        } else if dotfile.is_file() {
+            encrypt_file(&dotfile)?;
+        }
     }
 
     Ok(())
