@@ -17,10 +17,39 @@ struct FileTree<'a> {
     groups: HashSet<String>,
 }
 
+struct FileTreeIterator<'a> {
+    tree: &'a FileTree<'a>,
+    stack: Vec<usize>,
+}
+
+impl<'a> Iterator for FileTreeIterator<'a> {
+    type Item = (usize, &'a Option<FileNode<'a>>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node_idx = self.stack.pop()?;
+        let node = &self.tree.nodes[node_idx];
+
+        if let Some(node) = node {
+            if let Some(ref children) = node.children {
+                self.stack.extend_from_slice(&children);
+            }
+        }
+
+        Some((node_idx, node))
+    }
+}
+
 // todo: change to tree to store generic values
 impl<'a> FileTree<'a> {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn iter(&'a self) -> FileTreeIterator<'a> {
+        FileTreeIterator {
+            tree: &self,
+            stack: vec![0],
+        }
     }
 
     pub fn contains_file(&self, value: &Path) -> bool {
@@ -32,34 +61,23 @@ impl<'a> FileTree<'a> {
     }
 
     fn find_node_idx(&self, value: &Path) -> Option<usize> {
-        let mut children_stack = vec![0];
-
-        while !children_stack.is_empty() {
-            let Some(curr_node_idx) = children_stack.pop() else {
-                unreachable!(
-                    "loop stops when stack is empty, therefore this should never be reachable"
-                );
-            };
-
-            let curr_node = match self.nodes.get(curr_node_idx)? {
-                Some(ref node) => node,
+        for (idx, node) in self.iter() {
+            let node = match node {
+                Some(node) => node,
                 None => continue,
             };
 
-            if let Some(ref path_node) = self.paths[curr_node.path_idx] {
+            if let Some(ref path_node) = self.paths[node.path_idx] {
                 if path_node == value {
-                    return Some(curr_node_idx);
+                    return Some(idx);
                 }
-            }
-
-            if let Some(ref children) = curr_node.children {
-                children_stack.extend_from_slice(children);
             }
         }
 
         None
     }
 
+    // todo: separate values into components and then insert each component's contructed path at a time
     pub fn insert(&mut self, value: &Path, group: &'a str) {
         self.groups.insert(group.into());
         self.paths.push(Some(value.into()));
@@ -118,7 +136,7 @@ impl<'a> FileTree<'a> {
                     children
                         .iter()
                         .filter(|v| **v != value_idx)
-                        .map(|v| *v)
+                        .copied()
                         .collect(),
                 );
             }
@@ -133,8 +151,25 @@ impl<'a> FileTree<'a> {
     }
 
     // note: instead of PathBuf should use T or just plain dotfiles::Dotfile
-    pub fn get(&self, group: &str) -> HashSet<PathBuf> {
-        todo!()
+    pub fn get(&self, group: &str) -> Option<HashSet<PathBuf>> {
+        let mut group_paths = HashSet::new();
+
+        for (_, node) in self.iter() {
+            let node = match node {
+                Some(node) => node,
+                None => unreachable!("there should not be any valid node that is none"),
+            };
+
+            if node.group == group {
+                let Some(ref node_path) = self.paths[node.path_idx] else {
+                    return None;
+                };
+
+                group_paths.insert(node_path.clone());
+            }
+        }
+
+        Some(group_paths)
     }
 
     pub fn canonicalize(&mut self) {}
@@ -151,6 +186,9 @@ impl<'a> FileTree<'a> {
     }
 }
 
+#[cfg(test)]
+mod tests {}
+
 // fn main() {
 //     let mut ft = FileTree::new();
 
@@ -159,10 +197,16 @@ impl<'a> FileTree<'a> {
 //     ft.insert(Path::new("test/file2"), "test2");
 //     ft.insert(Path::new("test/file2/file3"), "test1");
 
+//     println!(
+//         "contains test/file2/file3: {}",
+//         ft.contains_file(Path::new("test/file"))
+//     );
+
+//     println!("groupfiles: {:?}", ft.get("test2"));
 //     ft.remove(Path::new("test/file"));
 
 //     println!(
 //         "contains test/file2/file3: {}",
-//         ft.contains_file(Path::new("test/file2"))
+//         ft.contains_file(Path::new("test/file"))
 //     );
 // }
