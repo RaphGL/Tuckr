@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 struct FileNode<'a> {
-    group: &'a str,
+    group: Option<&'a str>,
     parent_node_idx: usize,
     // points to a path in FileTree::paths
     path_idx: usize,
@@ -19,19 +19,23 @@ struct FileTree<'a> {
 
 struct FileTreeIterator<'a> {
     tree: &'a FileTree<'a>,
-    stack: Vec<usize>,
+    stack: Option<Vec<usize>>,
 }
 
 impl<'a> Iterator for FileTreeIterator<'a> {
     type Item = (usize, &'a Option<FileNode<'a>>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let node_idx = self.stack.pop()?;
+        let Some(ref mut stack) = self.stack else {
+            return None;
+        };
+
+        let node_idx = stack.pop()?;
         let node = &self.tree.nodes[node_idx];
 
         if let Some(node) = node {
             if let Some(ref children) = node.children {
-                self.stack.extend_from_slice(&children);
+                stack.extend_from_slice(&children);
             }
         }
 
@@ -39,20 +43,42 @@ impl<'a> Iterator for FileTreeIterator<'a> {
     }
 }
 
-// todo: change to tree to store generic values
 impl<'a> FileTree<'a> {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(root: &Path) -> Self {
+        let mut tree: Self = Default::default();
+        tree.insert(None, root);
+        tree
     }
 
-    pub fn iter(&'a self) -> FileTreeIterator<'a> {
+    fn iter(&'a self) -> FileTreeIterator<'a> {
         FileTreeIterator {
             tree: &self,
-            stack: vec![0],
+            stack: match self.nodes.is_empty() {
+                true => None,
+                false => Some(vec![0]),
+            },
         }
     }
 
-    pub fn contains_file(&self, value: &Path) -> bool {
+    pub fn path_is_in_root(&self, value: &Path) -> bool {
+        let root_node = self
+            .nodes
+            .first()
+            .unwrap()
+            .as_ref()
+            .expect("root node should never be marked as None");
+
+        let root_path = self
+            .paths
+            .get(root_node.path_idx)
+            .unwrap()
+            .as_ref()
+            .expect("root's should never be None");
+
+        value.starts_with(root_path)
+    }
+
+    pub fn contains_path(&self, value: &Path) -> bool {
         self.find_node_idx(value).is_some()
     }
 
@@ -78,8 +104,16 @@ impl<'a> FileTree<'a> {
     }
 
     // todo: separate values into components and then insert each component's contructed path at a time
-    pub fn insert(&mut self, value: &Path, group: &'a str) {
-        self.groups.insert(group.into());
+    // todo: make all paths absolute before insertion
+    pub fn insert(&mut self, group: Option<&'a str>, value: &Path) -> bool {
+        if self.contains_path(value) {
+            return false;
+        }
+
+        if let Some(group) = group {
+            self.groups.insert(group.into());
+        }
+
         self.paths.push(Some(value.into()));
         let path_idx = self.paths.len() - 1;
 
@@ -97,7 +131,7 @@ impl<'a> FileTree<'a> {
                 children: None,
             }));
 
-            return;
+            return true;
         }
 
         match self.find_node_idx(&value_parent) {
@@ -117,37 +151,41 @@ impl<'a> FileTree<'a> {
                     path_idx,
                     children: None,
                 }));
+
+                true
             }
 
-            None => unreachable!(),
+            None => false,
         }
     }
 
-    pub fn remove(&mut self, value: &Path) {
-        let Some(value_idx) = self.find_node_idx(value) else {
-            return;
-        };
-
-        let node = self.nodes.get(value_idx).unwrap().clone().unwrap();
+    pub fn remove(&mut self, idx: usize) -> Option<PathBuf> {
+        let node = self.nodes.get(idx)?.clone()?;
 
         if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx] {
             if let Some(ref children) = parent_node.children {
-                parent_node.children = Some(
-                    children
-                        .iter()
-                        .filter(|v| **v != value_idx)
-                        .copied()
-                        .collect(),
-                );
+                parent_node.children =
+                    Some(children.iter().filter(|v| **v != idx).copied().collect());
             }
         }
 
-        self.nodes[value_idx] = None;
+        if let Some(group) = node.group {
+            self.groups.remove(group);
+        }
+
+        self.nodes[idx] = None;
+        let discarded_path = self.paths[node.path_idx].clone();
         self.paths[node.path_idx] = None;
 
-        if !self.contains_group(node.group) {
-            self.groups.remove(node.group);
-        }
+        Some(discarded_path?)
+    }
+
+    pub fn remove_path(&mut self, value: &Path) -> Option<PathBuf> {
+        let Some(value_idx) = self.find_node_idx(value) else {
+            return None;
+        };
+
+        self.remove(value_idx)
     }
 
     // note: instead of PathBuf should use T or just plain dotfiles::Dotfile
@@ -160,7 +198,7 @@ impl<'a> FileTree<'a> {
                 None => unreachable!("there should not be any valid node that is none"),
             };
 
-            if node.group == group {
+            if node.group == Some(group) {
                 let Some(ref node_path) = self.paths[node.path_idx] else {
                     return None;
                 };
@@ -172,7 +210,9 @@ impl<'a> FileTree<'a> {
         Some(group_paths)
     }
 
-    pub fn canonicalize(&mut self) {}
+    pub fn canonicalize(&mut self) {
+        todo!()
+    }
 
     pub fn is_empty(&self) -> bool {
         if self.paths.is_empty() && self.nodes.is_empty() {
@@ -187,26 +227,64 @@ impl<'a> FileTree<'a> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
 
-// fn main() {
-//     let mut ft = FileTree::new();
+    #[test]
+    fn ftree_initialized_with_root_at_idx_0() {
+        let ft = FileTree::new(Path::new("/"));
+        assert_eq!(ft.paths.len(), 1);
+        assert_eq!(ft.nodes.len(), 1);
+        assert_eq!(ft.groups.len(), 0);
 
-//     ft.insert(Path::new("test"), "test");
-//     ft.insert(Path::new("test/file"), "test2");
-//     ft.insert(Path::new("test/file2"), "test2");
-//     ft.insert(Path::new("test/file2/file3"), "test1");
+        let root_node = ft.nodes.first().unwrap().as_ref().unwrap();
+        assert_eq!(root_node.path_idx, 0);
 
-//     println!(
-//         "contains test/file2/file3: {}",
-//         ft.contains_file(Path::new("test/file"))
-//     );
+        let root_path = ft.paths.get(root_node.path_idx).unwrap().as_ref().unwrap();
+        assert_eq!(root_path, Path::new("/"));
+    }
 
-//     println!("groupfiles: {:?}", ft.get("test2"));
-//     ft.remove(Path::new("test/file"));
+    #[test]
+    fn inserting_items() {
+        let mut ft = FileTree::new(Path::new("/"));
+        ft.insert(Some("test"), Path::new("/usr"));
+        ft.insert(Some("test"), Path::new("/usr/bin"));
 
-//     println!(
-//         "contains test/file2/file3: {}",
-//         ft.contains_file(Path::new("test/file"))
-//     );
-// }
+        assert!(ft.contains_group("test"));
+        assert!(ft.paths.len() == 3 && ft.nodes.len() == 3);
+
+        assert!(!ft.insert(Some("test"), Path::new("/usr/bin")));
+        assert!(ft.insert(Some("test"), Path::new("/usr/bin/tuckr")));
+    }
+
+    #[test]
+    fn removing_items() {
+        let mut ft = FileTree::new(Path::new("/"));
+        ft.insert(Some("test"), Path::new("/usr"));
+        ft.insert(Some("test2"), Path::new("/usr/bin"));
+
+        ft.remove_path(Path::new("/usr/bin"));
+        assert!(!ft.contains_group("test2"));
+
+        assert!(ft.nodes.iter().any(|p| p.is_none()));
+    }
+
+    #[test]
+    fn iterator_only_sees_valid_nodes() {
+        let mut ft = FileTree::new(Path::new("/"));
+        ft.insert(Some("test"), Path::new("/usr"));
+        ft.insert(Some("test"), Path::new("/usr/bin"));
+        ft.remove_path(Path::new("/usr/bin"));
+
+        assert!(!ft.iter().any(|(_, v)| v.is_none()));
+    }
+
+    #[test]
+    fn insert_rejects_paths_outside_of_root() {
+        let mut ft = FileTree::new(Path::new("/home/tuckr"));
+        assert_eq!(ft.insert(Some("test"), Path::new("/home/tuckr/test")), true);
+
+        assert_eq!(ft.insert(Some("test"), Path::new("/usr/bin")), false);
+        assert!(ft.remove_path(Path::new("/usr/bin")).is_none());
+    }
+}
