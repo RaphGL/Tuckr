@@ -26,8 +26,9 @@ impl<'a> Iterator for FileTreeIterator<'a> {
     type Item = (usize, &'a Option<FileNode<'a>>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(ref mut stack) = self.stack else {
-            return None;
+        let stack = match self.stack {
+            Some(ref mut stack) => stack,
+            None => return None,
         };
 
         let node_idx = stack.pop()?;
@@ -35,7 +36,7 @@ impl<'a> Iterator for FileTreeIterator<'a> {
 
         if let Some(node) = node {
             if let Some(ref children) = node.children {
-                stack.extend_from_slice(&children);
+                stack.extend_from_slice(children);
             }
         }
 
@@ -52,7 +53,7 @@ impl<'a> FileTree<'a> {
 
     fn iter(&'a self) -> FileTreeIterator<'a> {
         FileTreeIterator {
-            tree: &self,
+            tree: self,
             stack: match self.nodes.is_empty() {
                 true => None,
                 false => Some(vec![0]),
@@ -174,17 +175,14 @@ impl<'a> FileTree<'a> {
         }
 
         self.nodes[idx] = None;
-        let discarded_path = self.paths[node.path_idx].clone();
+        let discarded_path = self.paths[node.path_idx].clone()?;
         self.paths[node.path_idx] = None;
 
-        Some(discarded_path?)
+        Some(discarded_path)
     }
 
     pub fn remove_path(&mut self, value: &Path) -> Option<PathBuf> {
-        let Some(value_idx) = self.find_node_idx(value) else {
-            return None;
-        };
-
+        let value_idx = self.find_node_idx(value)?;
         self.remove(value_idx)
     }
 
@@ -199,10 +197,7 @@ impl<'a> FileTree<'a> {
             };
 
             if node.group == Some(group) {
-                let Some(ref node_path) = self.paths[node.path_idx] else {
-                    return None;
-                };
-
+                let node_path = self.paths[node.path_idx].as_ref()?;
                 group_paths.insert(node_path.clone());
             }
         }
