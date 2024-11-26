@@ -172,15 +172,13 @@ pub fn push_cmd(
     for file in files {
         let file = PathBuf::from(file);
         if !file.exists() {
-            eprintln!(
-                "{}",
-                t!("errors.x_doesnt_exist", x = file.display()).yellow()
-            );
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = file.display()).red());
             any_file_failed = true;
             continue;
         }
 
         let file = path::absolute(file).unwrap();
+        println!("{file:?}");
         let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
 
         if target_file.exists() && !assume_yes {
@@ -212,8 +210,17 @@ pub fn push_cmd(
             if f.is_dir() {
                 continue;
             }
+
+            if !f.exists() {
+                eprintln!("{}", t!("errors.x_doesnt_exist", x = f.display()).red());
+                any_file_failed = true;
+                continue;
+            }
+
             let file = path::absolute(f).unwrap();
+
             let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
+
             fs::create_dir_all(target_file.parent().unwrap()).unwrap();
             fs::copy(file, target_file).unwrap();
         }
