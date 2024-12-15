@@ -280,7 +280,7 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
             "{}\n{}",
             t!("errors.couldnt_find_dotfiles_dir").yellow(),
             t!(
-                "erros.make_sure_dir_exists_or_run",
+                "errors.make_sure_dir_exists_or_run",
                 dir = config_dotfiles.display(),
                 cmd = init_cmd
             )
