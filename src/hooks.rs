@@ -13,6 +13,7 @@ use rust_i18n::t;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
+use tabled::{Table, Tabled};
 
 /// Prints a single row info box with title on the left
 /// and content on the right
@@ -149,7 +150,15 @@ pub fn set_cmd(
         return Err(ReturnCode::NoSuchFileOrDir.into());
     }
 
-    let run_deploy_steps = |step: DeployStages, group: Dotfile| -> Result<(), ExitCode> {
+    let hooks_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
+        Ok(dir) => dir.join("Hooks"),
+        Err(e) => {
+            eprintln!("{e}",);
+            return Err(ReturnCode::NoSetupFolder.into());
+        }
+    };
+
+    let run_deploy_steps = |step: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
         if !group.is_valid_target() {
             return Ok(());
         }
@@ -164,7 +173,7 @@ pub fn set_cmd(
 
                 DeployStep::Symlink => {
                     print_info_box(
-                        &t!("errors.symlinking_group"),
+                        &t!("info.symlinking_group"),
                         group.group_name.yellow().to_string().as_str(),
                     );
                     symlinks::add_cmd(profile.clone(), groups, exclude, force, adopt)?;
@@ -179,13 +188,26 @@ pub fn set_cmd(
         Ok(())
     };
 
-    let hooks_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
-        Ok(dir) => dir.join("Hooks"),
-        Err(e) => {
-            eprintln!("{e}",);
-            return Err(ReturnCode::NoSetupFolder.into());
+    #[derive(Tabled)]
+    struct RunStatus<'a> {
+        #[tabled(rename = "Hook")]
+        group: String,
+        #[tabled(rename = "Success")]
+        succeeded: &'a str,
+    }
+
+    let true_symbol = "✓".green().to_string();
+    let false_symbol = "✗".red().to_string();
+
+    let get_symbol = |success: bool| -> &str {
+        if success {
+            &true_symbol
+        } else {
+            &false_symbol
         }
     };
+
+    let mut hooks_summary: Vec<RunStatus> = Vec::new();
 
     if groups.contains(&'*'.to_string()) {
         for folder in fs::read_dir(hooks_dir).unwrap() {
@@ -197,22 +219,41 @@ pub fn set_cmd(
                 );
                 return Err(ExitCode::FAILURE);
             };
-            run_deploy_steps(DeployStages::new(), group)?;
-        }
 
-        return Ok(());
+            hooks_summary.push(RunStatus {
+                succeeded: get_symbol(run_deploy_steps(DeployStages::new(), &group).is_ok()),
+                group: group.group_name,
+            })
+        }
+    } else {
+        for group in groups {
+            let hook_path = hooks_dir.join(group);
+            let Ok(group) = Dotfile::try_from(hook_path.clone()) else {
+                eprintln!(
+                    "{}",
+                    t!("errors.got_invalid_group", group = hook_path.display()).red()
+                );
+                return Err(ExitCode::FAILURE);
+            };
+
+            hooks_summary.push(RunStatus {
+                succeeded: get_symbol(run_deploy_steps(DeployStages::new(), &group).is_ok()),
+                group: group.group_name,
+            })
+        }
     }
 
-    for group in groups {
-        let hook_path = hooks_dir.join(group);
-        let Ok(group) = Dotfile::try_from(hook_path.clone()) else {
-            eprintln!(
-                "{}",
-                t!("errors.got_invalid_group", group = hook_path.display()).red()
-            );
-            return Err(ExitCode::FAILURE);
-        };
-        run_deploy_steps(DeployStages::new(), group)?;
+    if groups.len() > 1 {
+        use tabled::{object::Segment, Alignment, Margin, Modify, Style};
+
+        let mut hooks_list = Table::new(hooks_summary);
+        hooks_list
+            .with(Style::rounded())
+            .with(Margin::new(2, 4, 1, 1))
+            .with(Modify::new(Segment::new(1.., 1..)).with(Alignment::center()));
+
+        println!("\n\n  {}", "Hooks have finished running. Here's a summary:");
+        println!("{hooks_list}");
     }
 
     Ok(())
