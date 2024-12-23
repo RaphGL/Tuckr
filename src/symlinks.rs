@@ -250,6 +250,7 @@ impl SymlinkHandler {
 
         Some(cond_groups)
     }
+
     /// Returns target_group and all of its conditional groups that are valid in the current platform
     ///
     /// symlinked: gets symlinked conditional groups if true, otherwise gets not symlinked ones
@@ -489,46 +490,36 @@ pub fn add_cmd(
     }
 
     foreach_group(profile, groups, exclude, true, |sym, group| {
-        // Symlink dotfile by force
-        if force {
-            let remove_overlapping_files = |status_group: &HashCache| {
-                let group = status_group.get(group);
-                if let Some(group_files) = group {
-                    for file in group_files {
-                        let target_file = file.to_target_path();
-                        if target_file.is_dir() {
-                            fs::remove_dir_all(target_file).unwrap();
-                        } else if target_file.is_file() {
-                            fs::remove_file(target_file).unwrap();
-                        }
+        let remove_files_and_decide_if_adopt = |status_group: &HashCache, adopt: bool| {
+            let group = status_group.get(group);
+            if let Some(group_files) = group {
+                for file in group_files {
+                    let target_file = file.to_target_path();
+
+                    let deleted_file = if adopt { &file.path } else { &target_file };
+
+                    if target_file.is_dir() {
+                        fs::remove_dir_all(deleted_file).unwrap();
+                    } else if target_file.is_file() {
+                        fs::remove_file(deleted_file).unwrap();
+                    }
+
+                    if adopt {
+                        fs::rename(target_file, &file.path).unwrap();
                     }
                 }
-            };
-
-            remove_overlapping_files(&sym.not_owned);
-            remove_overlapping_files(&sym.not_symlinked);
+            }
+        };
+        // Symlink dotfile by force
+        if force {
+            remove_files_and_decide_if_adopt(&sym.not_owned, false);
+            remove_files_and_decide_if_adopt(&sym.not_symlinked, false);
         }
 
         // Discard dotfile and adopt the conflicting dotfile
         if adopt {
-            let adopt_overlapping_files = |status_group: &HashCache| {
-                let group = status_group.get(group);
-                if let Some(group_files) = group {
-                    for file in group_files {
-                        let target_file = file.to_target_path();
-                        if target_file.is_dir() {
-                            fs::remove_dir_all(&file.path).unwrap();
-                        } else if target_file.is_file() {
-                            fs::remove_file(&file.path).unwrap();
-                        }
-
-                        fs::rename(target_file, &file.path).unwrap();
-                    }
-                }
-            };
-
-            adopt_overlapping_files(&sym.not_owned);
-            adopt_overlapping_files(&sym.not_symlinked);
+            remove_files_and_decide_if_adopt(&sym.not_owned, true);
+            remove_files_and_decide_if_adopt(&sym.not_symlinked, true);
         }
 
         sym.add(group)

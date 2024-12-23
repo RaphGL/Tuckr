@@ -95,7 +95,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
     fn try_from(value: path::PathBuf) -> Result<Self, Self::Error> {
         /// returns the path for the group the file belongs to.
-        /// an error is returns if the file does not belong to dotfiles
+        /// an error is returned if the file does not belong to dotfiles
         pub fn to_group_path(file_path: &path::PathBuf) -> Result<path::PathBuf, String> {
             let dotfiles_dir = get_dotfiles_path(get_dotfile_profile_from_path(file_path))?;
             let configs_dir = dotfiles_dir.join("Configs");
@@ -113,7 +113,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
             };
 
             let group = if *file_path == dotfile_root_dir {
-                Ok(dotfile_root_dir)
+                dotfile_root_dir
             } else {
                 let Component::Normal(group_relpath) = file_path
                     .strip_prefix(&dotfile_root_dir)
@@ -127,10 +127,10 @@ impl TryFrom<path::PathBuf> for Dotfile {
                     );
                 };
 
-                Ok(dotfile_root_dir.join(group_relpath))
+                dotfile_root_dir.join(group_relpath)
             };
 
-            group
+            Ok(group)
         }
 
         let group_path = to_group_path(&value)?;
@@ -177,8 +177,7 @@ pub fn group_is_valid_target(group: &str) -> bool {
 impl Dotfile {
     /// Returns true if the target can be used by the current platform
     pub fn is_valid_target(&self) -> bool {
-        let group = self.group_name.as_str();
-        group_is_valid_target(group)
+        group_is_valid_target(self.group_name.as_str())
     }
 
     /// Checks whether the current groups is targetting the root path aka `/`
@@ -198,14 +197,16 @@ impl Dotfile {
             .unwrap()
             .join("Configs")
             .join("");
-        let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
-        let group_path = self.path.clone();
+
         let group_path = {
-            let group_path = group_path.to_str().unwrap();
-            let group_path = group_path.strip_prefix(dotfiles_configs_path).unwrap();
-            match group_path.split_once(path::MAIN_SEPARATOR) {
+            let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+
+            let dotfile_path = self.path.to_str().unwrap();
+            let dotfile_path = dotfile_path.strip_prefix(dotfiles_configs_path).unwrap();
+
+            match dotfile_path.split_once(path::MAIN_SEPARATOR) {
                 Some(path) => path.1,
-                None => group_path,
+                None => dotfile_path,
             }
         };
 
@@ -291,10 +292,7 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
 /// removes the $HOME from path
 pub fn get_target_basepath(target: &path::Path) -> Option<PathBuf> {
     let home_dir = dirs::home_dir().unwrap();
-    match target.strip_prefix(home_dir) {
-        Ok(basepath) => Some(basepath.into()),
-        Err(_) => None,
-    }
+    Some(target.strip_prefix(home_dir).ok()?.into())
 }
 
 #[derive(Copy, Clone)]
@@ -315,6 +313,7 @@ pub fn dotfile_contains(profile: Option<String>, dtype: DotfileType, group: &str
     let Ok(dotfiles_dir) = get_dotfiles_path(profile) else {
         return false;
     };
+
     let group_src = dotfiles_dir.join(target_dir).join(group);
     group_src.exists()
 }

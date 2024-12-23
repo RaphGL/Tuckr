@@ -178,7 +178,6 @@ pub fn push_cmd(
         }
 
         let file = path::absolute(file).unwrap();
-        println!("{file:?}");
         let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
 
         if target_file.exists() && !assume_yes {
@@ -188,6 +187,7 @@ pub fn push_cmd(
                 t!("errors.already_exists"),
                 t!("warn.want_to_override")
             );
+
             std::io::stdout().flush().unwrap();
             let mut confirmation = String::new();
             std::io::stdin().read_line(&mut confirmation).unwrap();
@@ -280,7 +280,6 @@ pub fn pop_cmd(
         let mut confirmation = String::new();
         std::io::stdin().read_line(&mut confirmation).unwrap();
         let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
-
         if !confirmed {
             return Ok(());
         }

@@ -26,11 +26,7 @@ impl<'a> Iterator for FileTreeIterator<'a> {
     type Item = (usize, &'a Option<FileNode<'a>>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let stack = match self.stack {
-            Some(ref mut stack) => stack,
-            None => return None,
-        };
-
+        let stack = self.stack.as_mut()?;
         let node_idx = stack.pop()?;
         let node = &self.tree.nodes[node_idx];
 
