@@ -252,7 +252,7 @@ pub fn set_cmd(
             .with(Margin::new(2, 4, 1, 1))
             .with(Modify::new(Segment::new(1.., 1..)).with(Alignment::center()));
 
-        println!("\n\n  {}", "Hooks have finished running. Here's a summary:");
+        println!("\n\n Hooks have finished running. Here's a summary:");
         println!("{hooks_list}");
     }
 
