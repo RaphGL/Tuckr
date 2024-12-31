@@ -473,7 +473,7 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
             // continuosly go up a directory trying to find where the symlink is
             if !file_path.pop() {
                 eprintln!("{}", t!("errors.not_a_tuckr_dotfile", file = file).red());
-                break 'next_file;
+                continue 'next_file;
             }
         }
 
