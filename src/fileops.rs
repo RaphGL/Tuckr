@@ -14,6 +14,93 @@ use std::{fs, path};
 use tabled::object::Segment;
 use tabled::{Alignment, Modify, Table, Tabled};
 
+fn is_ignored_file(file: impl AsRef<Path>) -> bool {
+    let file = file.as_ref().file_name().unwrap().to_str().unwrap();
+
+    fn is_ignored_file(ignored_files: &[&str], file: &str) -> bool {
+        ignored_files.contains(&file)
+    }
+
+    fn is_ignored_extension(ignored_extensions: &[&str], file: &str) -> bool {
+        ignored_extensions.iter().any(|e| file.ends_with(e))
+    }
+
+    fn is_ignored_prefix(ignored_prefixes: &[&str], file: &str) -> bool {
+        ignored_prefixes.iter().any(|e| file.starts_with(e))
+    }
+
+    if cfg!(target_os = "macos") {
+        static IGNORED_FILES_MACOS: &[&str] = &[
+            // General
+            ".DS_Store",
+            ".AppleDouble",
+            ".LSOverride",
+            // Custom icons
+            "Icon",
+            // Root volume
+            ".DocumentRevisions-V100",
+            ".fseventsd",
+            ".Spotlight-V100",
+            ".TemporaryItems",
+            ".Trashes",
+            ".VolumeIcon.icns",
+            ".com.apple.timemachine.donotpresent",
+            // Files potentially created on remote AFP share
+            ".AppleDB",
+            ".AppleDesktop",
+            "Network Trash Folder",
+            "Temporary Items",
+            ".apdisk",
+        ];
+
+        return is_ignored_file(IGNORED_FILES_MACOS, file);
+    }
+
+    if cfg!(target_family = "windows") {
+        static IGNORED_FILES_WINDOWS: &[&str] = &[
+            // Windows thumbnail cache files
+            "Thumbs.db",
+            "Thumbs.db:encryptable",
+            "ehthumbs.db",
+            "ehthumbs_vista.db",
+            // Recycle bin used on file shares
+            "$RECYCLE.BIN",
+        ];
+
+        static IGNORED_EXTENSIONS_WINDOWS: &[&str] = &[
+            // Dump file
+            ".stackdump",
+        ];
+
+        return is_ignored_file(IGNORED_FILES_WINDOWS, file)
+            || is_ignored_extension(IGNORED_EXTENSIONS_WINDOWS, file);
+    }
+
+    if cfg!(target_family = "unix") {
+        static IGNORED_FILES_UNIX: &[&str] = &[
+            // KDE directory preferences
+            ".directory",
+        ];
+
+        static IGNORED_PREFIXES_UNIX: &[&str] = &[
+            // Temporary files which can be created if a process still has a handle open of a deleted file
+            ".fuse_hidden",
+            // Linux trash folder which might appear on any partition or disk
+            ".Trash-",
+            // .nfs files are created when an open file is removed but is still being accessed
+            ".nfs",
+        ];
+
+        static IGNORED_EXTENSIONS_UNIX: &[&str] = &["~"];
+
+        return is_ignored_file(IGNORED_FILES_UNIX, file)
+            || is_ignored_prefix(IGNORED_PREFIXES_UNIX, file)
+            || is_ignored_extension(IGNORED_EXTENSIONS_UNIX, file);
+    }
+
+    false
+}
+
 pub struct DirWalk {
     queue: Vec<path::PathBuf>,
 }
@@ -40,6 +127,10 @@ impl Iterator for DirWalk {
 
     fn next(&mut self) -> Option<Self::Item> {
         let curr_file = self.queue.pop()?;
+
+        if is_ignored_file(&curr_file) {
+            return self.next();
+        }
 
         if curr_file.is_dir() {
             for file in fs::read_dir(&curr_file).unwrap() {
@@ -647,5 +738,24 @@ mod tests {
         assert!(group_dir.exists());
         super::pop_cmd(None, &["test".into()], true).unwrap();
         assert!(!group_dir.exists());
+    }
+
+    #[test]
+    fn ignore_garbage_files() {
+        assert!(is_ignored_file("asdfadsfaf") == false);
+
+        if cfg!(target_os = "macos") {
+            assert!(is_ignored_file(".DS_Store"));
+        }
+
+        if cfg!(target_family = "windows") {
+            assert!(is_ignored_file("Thumbs.db"));
+            assert!(is_ignored_file("test.stackdump"));
+        }
+
+        if cfg!(target_family = "unix") {
+            assert!(is_ignored_file(".Trash-tuckr"));
+            assert!(is_ignored_file("tuckr-backup~"));
+        }
     }
 }
