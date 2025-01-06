@@ -846,7 +846,31 @@ pub fn status_cmd(profile: Option<String>, groups: Option<Vec<String>>) -> Resul
     }
 
     match groups {
-        Some(groups) => print_groups_status(profile, &sym, groups)?,
+        Some(groups) => {
+            let mut invalid_group_errs = Vec::new();
+
+            let groups: Vec<_> = groups
+                .into_iter()
+                .filter_map(|g| match dotfiles::is_valid_groupname(&g) {
+                    Ok(()) => Some(g),
+                    Err(err) => {
+                        invalid_group_errs.push(err);
+                        None
+                    }
+                })
+                .collect();
+
+            let ret = print_groups_status(profile, &sym, groups);
+
+            if !invalid_group_errs.is_empty() {
+                for err in invalid_group_errs {
+                    eprintln!("{}", err.red());
+                }
+            }
+
+            return ret;
+        }
+
         None => print_global_status(&sym)?,
     }
 

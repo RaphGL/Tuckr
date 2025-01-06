@@ -338,6 +338,50 @@ pub fn check_invalid_groups(
     Some(invalid_groups)
 }
 
+/// Returns true if the group's name is valid on all platforms
+///
+/// For more information check: https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names
+/// This avoids further headaches for the end user and also allows tuckr to be able to detect invalid groups instead of just panicking
+pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
+    let group = group.as_ref();
+
+    let last_char = group.chars().next_back().unwrap();
+    if group.len() > 1 && (last_char.is_whitespace() || last_char == '.') {
+        return Err(format!(
+            "group `{group}` ends with a `{last_char}` which is invalid on Windows",
+        ));
+    }
+
+    for char in group.chars() {
+        if matches!(
+            char,
+            '/' | '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*' | '\0'
+        ) {
+            return Err(format!(
+                "group `{group}` contains invalid character `{char}`"
+            ));
+        }
+
+        if char.is_control() {
+            return Err(format!("group `{group}` contains control characters"));
+        }
+    }
+
+    match group {
+        // Windows invalid file names
+        "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6"
+        | "COM7" | "COM8" | "COM9" | "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6"
+        | "LPT7" | "LPT8" | "LPT9" => Err(format!("group `{group}` is an invalid name on Windows")),
+
+        // Unix invalid file names
+        "." | ".." => Err(format!(
+            "group `{group}` is an invalid name on Unix-like systems"
+        )),
+
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::dotfiles::{get_dotfiles_path, Dotfile};

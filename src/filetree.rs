@@ -70,7 +70,7 @@ impl<'a> FileTree<'a> {
             .get(root_node.path_idx)
             .unwrap()
             .as_ref()
-            .expect("root's should never be None");
+            .expect("root should never be None");
 
         value.starts_with(root_path)
     }
