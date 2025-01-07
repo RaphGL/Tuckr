@@ -322,12 +322,13 @@ pub fn dotfile_contains(profile: Option<String>, dtype: DotfileType, group: &str
 pub fn check_invalid_groups(
     profile: Option<String>,
     dtype: DotfileType,
-    groups: &[String],
+    groups: &[impl AsRef<str>],
 ) -> Option<Vec<String>> {
     let mut invalid_groups = Vec::new();
     for group in groups {
+        let group = group.as_ref();
         if !dotfiles::dotfile_contains(profile.clone(), dtype, group) && group != "*" {
-            invalid_groups.push(group.clone());
+            invalid_groups.push(group.into());
         }
     }
 

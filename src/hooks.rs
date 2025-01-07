@@ -172,6 +172,16 @@ pub fn set_cmd(
                 }
 
                 DeployStep::Symlink => {
+                    if dotfiles::check_invalid_groups(
+                        profile.clone(),
+                        dotfiles::DotfileType::Configs,
+                        &[&group.group_name],
+                    )
+                    .is_some()
+                    {
+                        continue;
+                    }
+
                     print_info_box(
                         &t!("info.symlinking_group"),
                         group.group_name.yellow().to_string().as_str(),
@@ -226,6 +236,25 @@ pub fn set_cmd(
             })
         }
     } else {
+        // groups with their related conditional groups added
+        let groups = {
+            let mut groups = groups.to_vec();
+
+            for file in hooks_dir.read_dir().unwrap() {
+                let filename = file.unwrap().file_name();
+                let filename = filename.into_string().unwrap();
+                let base_group = dotfiles::group_without_target(&filename);
+
+                if groups.iter().any(|g| g == base_group && *g != filename) {
+                    groups.push(filename);
+                }
+            }
+
+            // sorting is necessary to ensure that the conditional groups are run right after their base group
+            groups.sort();
+            groups
+        };
+
         for group in groups {
             let hook_path = hooks_dir.join(group);
             let Ok(group) = Dotfile::try_from(hook_path.clone()) else {
