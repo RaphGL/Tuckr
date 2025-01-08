@@ -466,26 +466,29 @@ pub fn add_cmd(
     exclude: &[String],
     force: bool,
     adopt: bool,
+    assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    if force {
-        print!("Are you sure you want to override conflicts? (N/y) ");
-    } else if adopt {
-        print!("Are you sure you want to adopt conflicts? (N/y) ");
-    }
+    if !assume_yes {
+        if force {
+            print!("Are you sure you want to override conflicts? (N/y) ");
+        } else if adopt {
+            print!("Are you sure you want to adopt conflicts? (N/y) ");
+        }
 
-    if force || adopt {
-        std::io::stdout()
-            .flush()
-            .expect("Could not print to stdout");
+        if force || adopt {
+            std::io::stdout()
+                .flush()
+                .expect("Could not print to stdout");
 
-        let mut answer = String::new();
-        std::io::stdin()
-            .read_line(&mut answer)
-            .expect("Could not read from stdin");
+            let mut answer = String::new();
+            std::io::stdin()
+                .read_line(&mut answer)
+                .expect("Could not read from stdin");
 
-        match answer.trim().to_lowercase().as_str() {
-            "y" | "yes" => (),
-            _ => return Ok(()),
+            match answer.trim().to_lowercase().as_str() {
+                "y" | "yes" => (),
+                _ => return Ok(()),
+            }
         }
     }
 
@@ -956,7 +959,7 @@ mod tests {
         );
 
         assert!(!sym.symlinked.contains_key("Group1"));
-        super::add_cmd(None, &["Group1".to_string()], &[], false, false).unwrap();
+        super::add_cmd(None, &["Group1".to_string()], &[], false, false, false).unwrap();
 
         let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(sym.symlinked.contains_key("Group1"));
@@ -965,7 +968,7 @@ mod tests {
     fn test_removing_symlink() {
         let _test = Test::start();
 
-        super::add_cmd(None, &["Group1".to_string()], &[], false, false).unwrap();
+        super::add_cmd(None, &["Group1".to_string()], &[], false, false, false).unwrap();
 
         let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(
