@@ -58,6 +58,10 @@ enum Command {
         /// Adopt conflicting dotfiles
         #[arg(short, long)]
         adopt: bool,
+
+        /// Automatically answer yes to stdin prompts
+        #[arg(short = 'y', long)]
+        assume_yes: bool,
     },
 
     /// Remove dotfiles for the supplied groups
@@ -86,6 +90,10 @@ enum Command {
         /// Adopt conflicting dotfiles
         #[arg(short, long)]
         adopt: bool,
+
+        /// Automatically answer yes to stdin prompts
+        #[arg(short = 'y', long)]
+        assume_yes: bool,
     },
 
     /// Encrypt files and move them to dotfiles/Secrets (alias: e)
@@ -163,14 +171,16 @@ fn main() -> ExitCode {
             exclude,
             force,
             adopt,
-        } => hooks::set_cmd(cli.profile, &groups, &exclude, force, adopt),
+            assume_yes,
+        } => hooks::set_cmd(cli.profile, &groups, &exclude, force, adopt, assume_yes),
 
         Command::Add {
             groups,
             exclude,
             force,
             adopt,
-        } => symlinks::add_cmd(cli.profile, &groups, &exclude, force, adopt),
+            assume_yes,
+        } => symlinks::add_cmd(cli.profile, &groups, &exclude, force, adopt, assume_yes),
 
         Command::Rm { groups, exclude } => symlinks::remove_cmd(cli.profile, &groups, &exclude),
         Command::Status { groups } => symlinks::status_cmd(cli.profile, groups),

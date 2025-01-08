@@ -139,6 +139,7 @@ pub fn set_cmd(
     exclude: &[String],
     force: bool,
     adopt: bool,
+    assume_yes: bool,
 ) -> Result<(), ExitCode> {
     if let Some(invalid_groups) =
         dotfiles::check_invalid_groups(profile.clone(), dotfiles::DotfileType::Hooks, groups)
@@ -186,7 +187,7 @@ pub fn set_cmd(
                         &t!("info.symlinking_group"),
                         group.group_name.yellow().to_string().as_str(),
                     );
-                    symlinks::add_cmd(profile.clone(), groups, exclude, force, adopt)?;
+                    symlinks::add_cmd(profile.clone(), groups, exclude, force, adopt, assume_yes)?;
                 }
 
                 DeployStep::PostHook => {
