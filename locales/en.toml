@@ -21,7 +21,7 @@ want_to_override = "Do you want to override it? (y/N)"
 want_to_proceed = "Do you want to proceed? (y/N)"
 
 [errors]
-failed_to_symlink_x = "failed to symlink group `%{groupname}`: ${err_msg}"
+failed_to_symlink_x = "failed to symlink group `%{groupname}`: %{err_msg}"
 failed_to_link_file = "failed to link %{file}"
 no_dotfiles_for_group = "There's no dotfiles for %{group}"
 no_group = "There's no group called %{group}"

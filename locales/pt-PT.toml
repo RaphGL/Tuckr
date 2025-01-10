@@ -21,7 +21,7 @@ want_to_override = "Quer substituí-lo? (y/N)"
 want_to_proceed = "Quer continuar? (y/N)"
 
 [errors]
-failed_to_symlink_x = "Falhou a linkar o grupo `%{groupname}`: ${err_msg}"
+failed_to_symlink_x = "Falhou a linkar o grupo `%{groupname}`: %{err_msg}"
 failed_to_link_file = "falhou a linkar %{file}"
 no_dotfiles_for_group = "Não existem dotfiles para %{group}"
 no_group = "Não existe um grupo chamado %{group}"
