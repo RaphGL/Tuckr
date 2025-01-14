@@ -101,7 +101,7 @@ enum Command {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        /// Exclude certain groups from being added and hooked
+        /// Exclude certain groups from being removed
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
     },
