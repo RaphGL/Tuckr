@@ -96,6 +96,16 @@ enum Command {
         assume_yes: bool,
     },
 
+    /// Remove groups and run their cleanup hooks
+    Unset {
+        #[arg(required = true, value_name = "group")]
+        groups: Vec<String>,
+
+        /// Exclude certain groups from being added and hooked
+        #[arg(short, long, value_name = "group", use_value_delimiter = true)]
+        exclude: Vec<String>,
+    },
+
     /// Encrypt files and move them to dotfiles/Secrets (alias: e)
     #[command(alias = "e")]
     Encrypt {
@@ -173,6 +183,8 @@ fn main() -> ExitCode {
             adopt,
             assume_yes,
         } => hooks::set_cmd(cli.profile, &groups, &exclude, force, adopt, assume_yes),
+
+        Command::Unset { groups, exclude } => hooks::unset_cmd(cli.profile, &groups, &exclude),
 
         Command::Add {
             groups,

@@ -69,7 +69,11 @@ impl Iterator for DeployStages {
 }
 
 /// Runs hooks of type PreHook or PostHook
-fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
+fn run_set_hook(
+    profile: Option<String>,
+    group: &str,
+    hook_type: DeployStep,
+) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
         Ok(dir) => dir,
         Err(e) => {
@@ -78,7 +82,7 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
         }
     };
 
-    let group_dir = PathBuf::from(&dotfiles_dir).join("Hooks").join(group);
+    let group_dir = dotfiles_dir.join("Hooks").join(group);
     let Ok(group_dir) = fs::read_dir(group_dir) else {
         eprintln!("{}", t!("errors.could_not_read_hooks").red());
         return Err(ReturnCode::NoSetupFolder.into());
@@ -87,7 +91,7 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
     for file in group_dir {
         let file = file.unwrap().path();
         let filename = file.file_name().unwrap().to_str().unwrap();
-        let file = file.to_str().unwrap();
+
         // make sure it will only run for their specific hooks
         match hook_type {
             DeployStep::PreHook => {
@@ -112,7 +116,7 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
             _ => (),
         }
 
-        let mut output = match Command::new(file).spawn() {
+        let mut output = match Command::new(&file).spawn() {
             Ok(output) => output,
             Err(e) => {
                 eprintln!("{e}");
@@ -132,15 +136,10 @@ fn run_hook(profile: Option<String>, group: &str, hook_type: DeployStep) -> Resu
     Ok(())
 }
 
-/// Runs hooks for specified groups
-pub fn set_cmd(
-    profile: Option<String>,
+fn get_hooks_dir_if_groups_are_valid(
+    profile: &Option<String>,
     groups: &[String],
-    exclude: &[String],
-    force: bool,
-    adopt: bool,
-    assume_yes: bool,
-) -> Result<(), ExitCode> {
+) -> Result<PathBuf, ExitCode> {
     if let Some(invalid_groups) =
         dotfiles::check_invalid_groups(profile.clone(), dotfiles::DotfileType::Hooks, groups)
     {
@@ -159,6 +158,20 @@ pub fn set_cmd(
         }
     };
 
+    Ok(hooks_dir)
+}
+
+/// Runs hooks for specified groups and symlinks them
+pub fn set_cmd(
+    profile: Option<String>,
+    groups: &[String],
+    exclude: &[String],
+    force: bool,
+    adopt: bool,
+    assume_yes: bool,
+) -> Result<(), ExitCode> {
+    let hooks_dir = get_hooks_dir_if_groups_are_valid(&profile, groups)?;
+
     let run_deploy_steps = |step: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
         if !group.is_valid_target() {
             return Ok(());
@@ -169,7 +182,7 @@ pub fn set_cmd(
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_hook(profile.clone(), &group.group_name, DeployStep::PreHook)?;
+                    run_set_hook(profile.clone(), &group.group_name, DeployStep::PreHook)?;
                 }
 
                 DeployStep::Symlink => {
@@ -191,7 +204,7 @@ pub fn set_cmd(
                 }
 
                 DeployStep::PostHook => {
-                    run_hook(profile.clone(), &group.group_name, DeployStep::PostHook)?
+                    run_set_hook(profile.clone(), &group.group_name, DeployStep::PostHook)?
                 }
             }
         }
@@ -284,6 +297,55 @@ pub fn set_cmd(
 
         println!("\n\n Hooks have finished running. Here's a summary:");
         println!("{hooks_list}");
+    }
+
+    Ok(())
+}
+
+/// Runs cleanup hooks for groups and then removes all their symlinks
+pub fn unset_cmd(
+    profile: Option<String>,
+    groups: &[String],
+    exclude: &[String],
+) -> Result<(), ExitCode> {
+    let hooks_dir = get_hooks_dir_if_groups_are_valid(&profile, groups)?;
+
+    for group in groups {
+        let group_dir = hooks_dir.join(group);
+
+        for file in group_dir.read_dir().unwrap() {
+            let file = file.unwrap().path();
+            let filename = file.file_name().unwrap().to_str().unwrap();
+
+            if filename.starts_with("rm") {
+                print_info_box("Running cleanup hook", group.yellow().to_string().as_str());
+
+                let hook = Command::new(&file).spawn();
+
+                let mut output = match hook {
+                    Ok(out) => out,
+                    Err(err) => {
+                        eprintln!("{err}");
+                        return Err(ReturnCode::NoSuchFileOrDir.into());
+                    }
+                };
+
+                if !output.wait().unwrap().success() {
+                    print_info_box(
+                        t!("errors.failed_to_hook").red().to_string().as_str(),
+                        format!("{group} {filename}").as_str(),
+                    );
+                    return Err(ExitCode::FAILURE);
+                }
+            }
+        }
+
+        print_info_box(
+            "Removing symlinked group",
+            group.yellow().to_string().as_str(),
+        );
+
+        symlinks::remove_cmd(profile.clone(), &[group.to_owned()], exclude)?;
     }
 
     Ok(())
