@@ -117,6 +117,14 @@ impl SymlinkHandler {
     fn validate(mut self) -> Result<Self, ExitCode> {
         let configs_dir = Dotfile::try_from(self.dotfiles_dir.join("Configs")).unwrap();
 
+        if !configs_dir.path.exists() && !configs_dir.path.is_dir() {
+            eprintln!(
+                "There is no Configs directory in dotfiles ({})",
+                configs_dir.path.display()
+            );
+            return Err(ReturnCode::CouldntFindDotfiles.into());
+        }
+
         let mut symlinked = HashCache::new();
         let mut not_symlinked = HashCache::new();
         let mut not_owned = HashCache::new();

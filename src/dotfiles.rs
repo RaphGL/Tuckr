@@ -246,6 +246,12 @@ impl Iterator for DotfileIter {
 /// this testing directory is unique to the thread it's running on,
 /// so different unit tests cannot interact with the other's dotfiles directory
 pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+    if let Ok(dir) = std::env::var("TUCKR_HOME") {
+        if !dir.is_empty() {
+            return Ok(PathBuf::from(dir));
+        }
+    }
+
     let (home_dotfiles, config_dotfiles) = {
         let dotfiles_dir = match profile {
             Some(ref profile) => format!("dotfiles_{profile}"),
