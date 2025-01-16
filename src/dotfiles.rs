@@ -57,9 +57,15 @@ pub fn get_dotfile_profile_from_path<T: AsRef<Path>>(file: T) -> Option<String> 
     let dotfiles_start = file.find(DIRNAME)?;
 
     let file = &file[dotfiles_start + DIRNAME.len()..];
-    let dotfiles_end = file.find(std::path::MAIN_SEPARATOR)?;
+    let dotfiles_end = file.find(std::path::MAIN_SEPARATOR);
 
-    Some(file[..dotfiles_end].into())
+    Some(
+        match dotfiles_end {
+            Some(end) => &file[..end],
+            None => file,
+        }
+        .into(),
+    )
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -450,11 +456,7 @@ mod tests {
             .join("somethingelse_work")
             .join("Configs")
             .join("Vim");
-        let work_profile_dir = dirs::config_dir()
-            .unwrap()
-            .join("dotfiles_work")
-            .join("Configs")
-            .join("Vim");
+        let work_profile_dir = dirs::config_dir().unwrap().join("dotfiles_work");
         let home_profile_dir = dirs::config_dir()
             .unwrap()
             .join("dotfiles_my_home")
