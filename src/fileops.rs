@@ -484,27 +484,34 @@ pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
 pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
     let home_dir = dirs::home_dir().unwrap();
     let config_dir = dirs::config_dir().unwrap();
+    let custom_target_dir = std::env::var("TUCKR_TARGET");
 
-    fn get_profiles_from_dir(dir: PathBuf) -> HashSet<String> {
+    let profiles = {
         let mut available_profiles = HashSet::new();
 
-        for file in dir.read_dir().unwrap() {
-            let file = file.unwrap();
+        let dirs = {
+            let mut dirs = vec![home_dir, config_dir];
+            if let Ok(target) = custom_target_dir {
+                dirs.push(target.into());
+            }
+            dirs
+        };
 
-            let Some(profile) = dotfiles::get_dotfile_profile_from_path(file.path()) else {
-                continue;
-            };
+        for dir in dirs {
+            for file in dir.read_dir().unwrap() {
+                let file = file.unwrap();
 
-            available_profiles.insert(profile);
+                let Some(profile) = dotfiles::get_dotfile_profile_from_path(file.path()) else {
+                    continue;
+                };
+
+                available_profiles.insert(profile);
+            }
         }
 
         available_profiles
-    }
+    };
 
-    let home_profiles = get_profiles_from_dir(home_dir);
-    let config_profiles = get_profiles_from_dir(config_dir);
-
-    let profiles: HashSet<_> = home_profiles.union(&config_profiles).collect();
     if profiles.is_empty() {
         println!("{}", t!("errors.no_x_setup_yet", x = "profiles").yellow());
         return Ok(());

@@ -24,7 +24,14 @@ use tabled::{Table, Tabled};
 fn symlink_file(f: PathBuf) {
     match Dotfile::try_from(f.clone()) {
         Ok(group) => {
-            let target_path = group.to_target_path();
+            let target_path = match group.to_target_path() {
+                Ok(t) => t,
+                Err(err) => {
+                    eprintln!("{err}");
+                    return;
+                }
+            };
+
             if target_path.exists() {
                 return;
             }
@@ -97,6 +104,11 @@ impl SymlinkHandler {
             }
         };
 
+        if let Err(err) = dotfiles::get_dotfiles_target_dir_path() {
+            eprintln!("{err}");
+            return Err(ReturnCode::NoSuchFileOrDir.into());
+        }
+
         let symlinker = SymlinkHandler {
             dotfiles_dir,
             symlinked: HashCache::new(),
@@ -136,7 +148,7 @@ impl SymlinkHandler {
                 continue;
             }
 
-            let target = f.to_target_path();
+            let target = f.to_target_path().unwrap();
 
             if target.is_symlink() {
                 let link = match fs::read_link(target) {
@@ -326,7 +338,7 @@ impl SymlinkHandler {
     fn remove(&self, group: &str) {
         fn remove_symlink(file: PathBuf) {
             let dotfile = Dotfile::try_from(file).unwrap();
-            let target_dotfile = dotfile.to_target_path();
+            let target_dotfile = dotfile.to_target_path().unwrap();
             let Ok(linked) = fs::read_link(&target_dotfile) else {
                 return;
             };
@@ -505,7 +517,7 @@ pub fn add_cmd(
             let group = status_group.get(group);
             if let Some(group_files) = group {
                 for file in group_files {
-                    let target_file = file.to_target_path();
+                    let target_file = file.to_target_path().unwrap();
 
                     let deleted_file = if adopt { &file.path } else { &target_file };
 
@@ -556,7 +568,7 @@ fn get_conflicts_in_cache(cache: &HashCache) -> HashCache {
     // mark group as conflicting if at least one value already exists in $HOME
     for files in cache.values() {
         for file in files {
-            if !file.to_target_path().exists() || !file.is_valid_target() {
+            if !file.to_target_path().unwrap().exists() || !file.is_valid_target() {
                 continue;
             }
 
@@ -784,7 +796,7 @@ fn print_groups_status(
                     continue;
                 }
 
-                let conflict = file.to_target_path();
+                let conflict = file.to_target_path().unwrap();
                 println!("\t\t-> {} ({})", conflict.display(), msg,);
             }
         };
@@ -947,7 +959,7 @@ mod tests {
                 // delete everything to ensure everything starts from a blank slate
                 if file.exists() {
                     let dotfile_path = Dotfile::try_from(file.clone()).unwrap();
-                    _ = fs::remove_file(dotfile_path.to_target_path());
+                    _ = fs::remove_file(dotfile_path.to_target_path().unwrap());
                 }
             }
 

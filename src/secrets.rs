@@ -106,12 +106,16 @@ pub fn encrypt_cmd(
         fs::create_dir_all(&dest_dir).unwrap();
     }
 
-    // canonicalizing the home_dir so that it can work with
-    // windows' NT UNC paths (the paths used by fs::canonicalize on windows)
-    let home_dir = dirs::home_dir().unwrap().canonicalize().unwrap();
+    let target_dir = match dotfiles::get_dotfiles_target_dir_path() {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("{}", err.red());
+            return Err(ReturnCode::NoSuchFileOrDir.into());
+        }
+    };
 
     let encrypt_file = |dotfile: &Path| -> Result<(), ExitCode> {
-        let target_file = dotfile.strip_prefix(&home_dir).unwrap();
+        let target_file = dotfile.strip_prefix(&target_dir).unwrap();
 
         let dir_path = {
             let mut tf = target_file.to_path_buf();

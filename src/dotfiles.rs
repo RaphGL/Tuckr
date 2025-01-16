@@ -6,7 +6,7 @@ use crate::dotfiles;
 use crate::fileops;
 use rust_i18n::t;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{
     path::{self, Component},
     process,
@@ -49,38 +49,17 @@ impl From<ReturnCode> for process::ExitCode {
     }
 }
 
-pub fn get_dotfile_profile_from_path<T: AsRef<path::Path>>(file: T) -> Option<String> {
-    let file = file.as_ref();
+pub fn get_dotfile_profile_from_path<T: AsRef<Path>>(file: T) -> Option<String> {
+    let file: &Path = file.as_ref();
+    let file = file.to_str().unwrap();
 
-    let dotfiles_path = {
-        let home_path = dirs::home_dir().unwrap();
-        let configs_path = dirs::config_dir().unwrap();
+    const DIRNAME: &str = "dotfiles_";
+    let dotfiles_start = file.find(DIRNAME)?;
 
-        if file.starts_with(&configs_path) {
-            configs_path
-        } else if file.starts_with(&home_path) {
-            home_path
-        } else {
-            return None;
-        }
-    };
+    let file = &file[dotfiles_start + DIRNAME.len()..];
+    let dotfiles_end = file.find(std::path::MAIN_SEPARATOR)?;
 
-    let dotfiles_path = file.strip_prefix(dotfiles_path).unwrap();
-
-    let dotfiles_dirname = dotfiles_path
-        .components()
-        .next()?
-        .as_os_str()
-        .to_str()
-        .unwrap();
-
-    let (dirname, profile_name) = dotfiles_dirname.split_once('_')?;
-
-    if dirname != "dotfiles" {
-        return None;
-    }
-
-    Some(profile_name.into())
+    Some(file[..dotfiles_end].into())
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -190,8 +169,8 @@ impl Dotfile {
     }
 
     /// Converts a path string from dotfiles/Configs to where they should be
-    /// deployed on $HOME
-    pub fn to_target_path(&self) -> path::PathBuf {
+    /// deployed on $TUCKR_TARGET
+    pub fn to_target_path(&self) -> Result<PathBuf, String> {
         // uses join("") so that the path appends / or \ depending on platform
         let dotfiles_configs_path = get_dotfiles_path(get_dotfile_profile_from_path(&self.path))
             .unwrap()
@@ -210,11 +189,14 @@ impl Dotfile {
             }
         };
 
-        if self.targets_root() {
-            path::PathBuf::from(path::MAIN_SEPARATOR_STR).join(group_path)
+        let target_path = if self.targets_root() {
+            path::PathBuf::from(path::MAIN_SEPARATOR_STR)
         } else {
-            dirs::home_dir().unwrap().join(group_path)
+            get_dotfiles_target_dir_path()?
         }
+        .join(group_path);
+
+        Ok(target_path)
     }
 
     /// Creates an iterator that walks the directory
@@ -246,18 +228,18 @@ impl Iterator for DotfileIter {
 /// this testing directory is unique to the thread it's running on,
 /// so different unit tests cannot interact with the other's dotfiles directory
 pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+    let dotfiles_dir = match profile {
+        Some(ref profile) => format!("dotfiles_{profile}"),
+        None => "dotfiles".into(),
+    };
+
     if let Ok(dir) = std::env::var("TUCKR_HOME") {
         if !dir.is_empty() {
-            return Ok(PathBuf::from(dir));
+            return Ok(PathBuf::from(dir).join(dotfiles_dir));
         }
     }
 
     let (home_dotfiles, config_dotfiles) = {
-        let dotfiles_dir = match profile {
-            Some(ref profile) => format!("dotfiles_{profile}"),
-            None => "dotfiles".into(),
-        };
-
         let home_dotfiles = dirs::home_dir().unwrap();
         let config_dotfiles = dirs::config_dir().unwrap();
 
@@ -297,8 +279,24 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
 
 /// removes the $HOME from path
 pub fn get_target_basepath(target: &path::Path) -> Option<PathBuf> {
-    let home_dir = dirs::home_dir().unwrap();
-    Some(target.strip_prefix(home_dir).ok()?.into())
+    let target_dir = get_dotfiles_target_dir_path().ok()?;
+    Some(target.strip_prefix(target_dir).ok()?.into())
+}
+
+pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
+    #[cfg(test)]
+    {
+        std::env::remove_var("TUCKR_TARGET");
+        println!("is being run");
+    }
+
+    if let Ok(dir) = std::env::var("TUCKR_TARGET") {
+        if !dir.is_empty() {
+            return Ok(dir.into());
+        }
+    }
+
+    dirs::home_dir().ok_or("No destination directory was found.".into())
 }
 
 #[derive(Copy, Clone)]
@@ -402,7 +400,7 @@ mod tests {
             .join(".zshrc");
 
         assert_eq!(
-            Dotfile::try_from(group).unwrap().to_target_path(),
+            Dotfile::try_from(group).unwrap().to_target_path().unwrap(),
             dirs::home_dir().unwrap().join(".zshrc")
         );
     }
