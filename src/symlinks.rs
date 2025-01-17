@@ -314,23 +314,30 @@ impl SymlinkHandler {
 
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
-        let Some(groups) =
+        let Some(mut groups) =
             self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
         else {
             return;
         };
 
-        for group in groups {
+        loop {
+            let Some(idx) = dotfiles::get_highest_priority_target_idx(&groups) else {
+                break;
+            };
+
+            let group = &groups[idx];
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
             if group.path.exists() {
                 // iterate through all the files in group_dir
-                group.try_iter().unwrap().for_each(|f| symlink_file(f.path));
+                group.try_iter().unwrap().for_each(|f| symlink_file(f.path))
             } else {
                 eprintln!(
                     "{}",
                     t!("errors.no_dotfiles_for_group", group = group.group_name).red()
                 );
             }
+
+            groups.remove(idx);
         }
     }
 
@@ -533,6 +540,7 @@ pub fn add_cmd(
                 }
             }
         };
+
         // Symlink dotfile by force
         if force {
             remove_files_and_decide_if_adopt(&sym.not_owned, false);

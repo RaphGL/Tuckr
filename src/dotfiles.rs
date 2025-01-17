@@ -29,6 +29,32 @@ pub const VALID_TARGETS: &[&str] = &[
     "_windows",
 ];
 
+pub fn get_highest_priority_target_idx(targets: &[impl AsRef<str>]) -> Option<usize> {
+    if targets.is_empty() {
+        return None;
+    }
+
+    let mut highest_priority = 0;
+    let mut highest_idx = 0;
+
+    for (idx, target) in targets.iter().enumerate() {
+        let target = target.as_ref();
+
+        let target_priority = match target {
+            "_unix" | "_windows" => 2,
+            _ if !group_ends_with_target_name(target) => 0,
+            _ => 1,
+        };
+
+        if target_priority >= highest_priority {
+            highest_priority = target_priority;
+            highest_idx = idx;
+        }
+    }
+
+    Some(highest_idx)
+}
+
 // Exit codes
 /// Couldn't find the dotfiles directory
 pub enum ReturnCode {
