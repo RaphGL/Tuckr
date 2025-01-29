@@ -312,6 +312,47 @@ impl SymlinkHandler {
         }
     }
 
+    /// returns a cache with files in dotfiles that already exist in $HOME
+    /// todo: test and somethingsomething group not being marked as conflict when both have $HOME/test file
+    fn get_conflicts_in_cache(&self) -> HashCache {
+        let mut conflicts = HashCache::new();
+
+        // mark group as conflicting if at least one value already exists in $HOME
+        for files in self.not_symlinked.values() {
+            for file in files {
+                if file.to_target_path().unwrap().exists() && file.is_valid_target() {
+                    conflicts.entry(file.group_name.clone()).or_default();
+                    let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
+                    curr_entry.insert(file.clone());
+                }
+            }
+        }
+
+        for files in self.not_owned.values() {
+            for file in files {
+                conflicts.entry(file.group_name.clone()).or_default();
+                let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
+
+                let dotfile_source = file.to_target_path().unwrap().read_link().unwrap();
+                let Ok(dotfile) = Dotfile::try_from(dotfile_source) else {
+                    curr_entry.insert(file.clone());
+                    continue;
+                };
+
+                let target_has_higher_priority = dotfiles::get_target_priority(&dotfile.group_name)
+                    > dotfiles::get_target_priority(&file.group_name);
+                let not_same_base_group = dotfiles::group_without_target(&file.group_name)
+                    != dotfiles::group_without_target(&dotfile.group_name);
+
+                if dotfile.path != file.path && target_has_higher_priority && not_same_base_group {
+                    curr_entry.insert(file.clone());
+                }
+            }
+        }
+
+        conflicts.into_iter().filter(|g| !g.1.is_empty()).collect()
+    }
+
     /// Symlinks all the files of a group to the user's $HOME
     fn add(&self, group: &str) {
         let Some(mut groups) =
@@ -569,26 +610,6 @@ pub fn remove_cmd(
     Ok(())
 }
 
-/// returns a cache with files in dotfiles that already exist in $HOME
-fn get_conflicts_in_cache(cache: &HashCache) -> HashCache {
-    let mut conflicts = HashCache::new();
-
-    // mark group as conflicting if at least one value already exists in $HOME
-    for files in cache.values() {
-        for file in files {
-            if !file.to_target_path().unwrap().exists() || !file.is_valid_target() {
-                continue;
-            }
-
-            conflicts.entry(file.group_name.clone()).or_default();
-            let entry = conflicts.get_mut(&file.group_name).unwrap();
-            entry.insert(file.clone());
-        }
-    }
-
-    conflicts
-}
-
 fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     #[derive(Tabled, Debug)]
     struct SymlinkRow<'a> {
@@ -667,10 +688,10 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     };
 
     // --- detect conflicts ---
-    let conflicts = get_conflicts_in_cache(&sym.not_symlinked);
+    let conflicts = sym.get_conflicts_in_cache();
     // whether a conflict is a symlink or a pre-existing file does not matter for global status
     // so we just add them together
-    let conflicts: HashSet<_> = conflicts.keys().chain(sym.not_owned.keys()).collect();
+    let conflicts: HashSet<_> = conflicts.keys().collect();
 
     // --- Creates all the tables and prints them ---
     use tabled::{
@@ -773,13 +794,6 @@ fn print_groups_status(
     let not_symlinked = get_related_groups(sym, None);
     let symlinked = get_related_groups(sym, Some(&not_symlinked));
 
-    let not_owned: HashCache = sym
-        .not_owned
-        .clone()
-        .into_iter()
-        .filter(|(group, _)| groups.contains(group))
-        .collect();
-
     let unsupported = {
         let mut unsupported = groups
             .iter()
@@ -793,29 +807,44 @@ fn print_groups_status(
         unsupported
     };
 
-    if !not_symlinked.is_empty() || !not_owned.is_empty() {
-        let print_conflicts = |conflicts_cache: &HashCache, group: &str, msg: &str| {
+    let file_conflicts: HashCache = sym
+        .get_conflicts_in_cache()
+        .into_iter()
+        .filter(|(g, _)| groups.contains(g))
+        .collect();
+
+    if !file_conflicts.is_empty() || !not_symlinked.is_empty() {
+        fn print_conflicts(conflicts_cache: &HashCache, group: &str) {
             let Some(conflicts) = conflicts_cache.get(group) else {
                 return;
             };
 
             for file in conflicts {
-                if file.group_name != group {
-                    continue;
-                }
-
                 let conflict = file.to_target_path().unwrap();
-                println!("\t\t-> {} ({})", conflict.display(), msg,);
-            }
-        };
+                let conflict_dotfile = Dotfile::try_from(conflict.read_link().unwrap());
 
-        let file_conflicts = get_conflicts_in_cache(&sym.not_symlinked);
+                let msg = match conflict_dotfile {
+                    Ok(conflict) => {
+                        if file.path != conflict.path {
+                            t!("errors.already_exists")
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                    Err(_) => t!("errors.symlinks_elsewhere"),
+                };
+                println!("\t\t -> {} ({})", conflict.display(), msg,);
+            }
+        }
 
         println!("{}:", t!("table-column.not_symlinked"));
-        for group in &not_symlinked {
+        for group in not_symlinked {
             println!("\t{}", group.red());
-            print_conflicts(&file_conflicts, group, &t!("errors.already_exists"));
-            print_conflicts(&sym.not_owned, group, &t!("errors.symlinks_elsewhere"));
+        }
+
+        for group in file_conflicts.keys() {
+            println!("\t{}", group.red());
+            print_conflicts(&file_conflicts, group);
         }
 
         println!();
@@ -846,7 +875,7 @@ fn print_groups_status(
         println!();
     }
 
-    if !not_symlinked.is_empty() {
+    if !file_conflicts.is_empty() {
         println!(
             "{}",
             t!("info.learn_how_to_fix_symlinks", cmd = "tuckr help add")

@@ -29,6 +29,15 @@ pub const VALID_TARGETS: &[&str] = &[
     "_windows",
 ];
 
+pub fn get_target_priority(target: impl AsRef<str>) -> usize {
+    let target = target.as_ref();
+    match target {
+        "_unix" | "_windows" => 2,
+        _ if !group_ends_with_target_name(target) => 0,
+        _ => 1,
+    }
+}
+
 pub fn get_highest_priority_target_idx(targets: &[impl AsRef<str>]) -> Option<usize> {
     if targets.is_empty() {
         return None;
@@ -38,13 +47,7 @@ pub fn get_highest_priority_target_idx(targets: &[impl AsRef<str>]) -> Option<us
     let mut highest_idx = 0;
 
     for (idx, target) in targets.iter().enumerate() {
-        let target = target.as_ref();
-
-        let target_priority = match target {
-            "_unix" | "_windows" => 2,
-            _ if !group_ends_with_target_name(target) => 0,
-            _ => 1,
-        };
+        let target_priority = get_target_priority(target);
 
         if target_priority >= highest_priority {
             highest_priority = target_priority;
