@@ -29,15 +29,22 @@ pub const VALID_TARGETS: &[&str] = &[
     "_windows",
 ];
 
-pub fn get_target_priority(target: impl AsRef<str>) -> usize {
-    let target = target.as_ref();
+/// Returns the priority number for the group
+/// A higher number means a higher priority
+pub fn get_group_priority(group: impl AsRef<str>) -> usize {
+    let group = group.as_ref();
+    let target = group.split('_').last().unwrap_or(group);
+
+    // priority is in order of specificity
+    // the more os specific target has higher priority
     match target {
-        "_unix" | "_windows" => 2,
-        _ if !group_ends_with_target_name(target) => 0,
-        _ => 1,
+        "unix" | "windows" => 1,
+        _ if !group_ends_with_target_name(group) => 0,
+        _ => 2,
     }
 }
 
+/// Returns the index of the group with the highest priority in the `targets`
 pub fn get_highest_priority_target_idx(targets: &[impl AsRef<str>]) -> Option<usize> {
     if targets.is_empty() {
         return None;
@@ -47,7 +54,7 @@ pub fn get_highest_priority_target_idx(targets: &[impl AsRef<str>]) -> Option<us
     let mut highest_idx = 0;
 
     for (idx, target) in targets.iter().enumerate() {
-        let target_priority = get_target_priority(target);
+        let target_priority = get_group_priority(target);
 
         if target_priority >= highest_priority {
             highest_priority = target_priority;
@@ -58,9 +65,9 @@ pub fn get_highest_priority_target_idx(targets: &[impl AsRef<str>]) -> Option<us
     Some(highest_idx)
 }
 
-// Exit codes
-/// Couldn't find the dotfiles directory
+/// Exit codes
 pub enum ReturnCode {
+    /// Couldn't find the dotfiles directory
     CouldntFindDotfiles = 2,
     /// No Configs/Hooks/Secrets folder setup
     NoSetupFolder = 3,
@@ -107,6 +114,7 @@ pub struct Dotfile {
 impl TryFrom<path::PathBuf> for Dotfile {
     type Error = String;
 
+    /// Returns Ok if the path is pointing to a group within $TUCKR_HOME
     fn try_from(value: path::PathBuf) -> Result<Self, Self::Error> {
         /// returns the path for the group the file belongs to.
         /// an error is returned if the file does not belong to dotfiles
@@ -503,5 +511,21 @@ mod tests {
         );
         assert_eq!(super::get_dotfile_profile_from_path(no_profile_dir), None,);
         assert_eq!(super::get_dotfile_profile_from_path(invalid_dir), None,);
+    }
+
+    #[test]
+    fn group_priority() {
+        let groups = [
+            ("first_group_windows", 1),
+            ("second_linux", 2),
+            ("anotherone_here_macos", 2),
+            ("another_unix", 1),
+            ("priority_is_zero", 0),
+            ("no_priority", 0),
+        ];
+
+        for (group, expected_priority) in groups {
+            assert_eq!(super::get_group_priority(group), expected_priority);
+        }
     }
 }

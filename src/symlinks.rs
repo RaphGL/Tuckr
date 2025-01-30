@@ -313,7 +313,6 @@ impl SymlinkHandler {
     }
 
     /// returns a cache with files in dotfiles that already exist in $HOME
-    /// todo: test and somethingsomething group not being marked as conflict when both have $HOME/test file
     fn get_conflicts_in_cache(&self) -> HashCache {
         let mut conflicts = HashCache::new();
 
@@ -328,6 +327,9 @@ impl SymlinkHandler {
             }
         }
 
+        // doesn't mark not owned dotfiles as conflicts if a higher priority dotfile
+        // with the same file is already symlinked. this allows dotfile fallbacks to
+        // work properly instead of falsely flagged as conflicts
         for files in self.not_owned.values() {
             for file in files {
                 conflicts.entry(file.group_name.clone()).or_default();
@@ -339,8 +341,8 @@ impl SymlinkHandler {
                     continue;
                 };
 
-                let target_has_higher_priority = dotfiles::get_target_priority(&dotfile.group_name)
-                    > dotfiles::get_target_priority(&file.group_name);
+                let target_has_higher_priority = dotfiles::get_group_priority(&dotfile.group_name)
+                    > dotfiles::get_group_priority(&file.group_name);
                 let not_same_base_group = dotfiles::group_without_target(&file.group_name)
                     != dotfiles::group_without_target(&dotfile.group_name);
 
@@ -367,7 +369,7 @@ impl SymlinkHandler {
             };
 
             let group = &groups[idx];
-            let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(&group)).unwrap();
+            let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(group)).unwrap();
             if group.path.exists() {
                 // iterate through all the files in group_dir
                 group.try_iter().unwrap().for_each(|f| symlink_file(f.path))
@@ -487,7 +489,6 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
         valid_groups
     };
 
-    // handles wildcard
     if groups.contains(&"*".to_string()) {
         let symgroups = if symlinked {
             &sym.not_symlinked
@@ -496,15 +497,10 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
         };
 
         for group in symgroups.keys() {
-            // Takes the name of the group to be passed the function
-            // Ignore groups in the excludes array
             if exclude.contains(group) {
                 continue;
             }
 
-            // Ignore conditional groups for other platforms.
-            // To force linking a group of other target_os/target_family, use
-            // explict argument passing instead of wildcard.
             if !dotfiles::group_is_valid_target(group) {
                 continue;
             }
@@ -689,8 +685,6 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
     // --- detect conflicts ---
     let conflicts = sym.get_conflicts_in_cache();
-    // whether a conflict is a symlink or a pre-existing file does not matter for global status
-    // so we just add them together
     let conflicts: HashSet<_> = conflicts.keys().collect();
 
     // --- Creates all the tables and prints them ---
