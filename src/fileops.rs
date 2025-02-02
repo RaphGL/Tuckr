@@ -7,7 +7,7 @@ use crate::fileops;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::HashSet;
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::{fs, path};
@@ -141,68 +141,6 @@ impl Iterator for DirWalk {
 
         Some(curr_file)
     }
-}
-
-/// Converts a stow directory into a tuckr directory
-pub fn from_stow_cmd(profile: Option<String>, assume_yes: bool) -> Result<(), ExitCode> {
-    // assume that from_stow is always run from a no profile dotfiles dir
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
-        Ok(path) => path,
-        Err(e) => {
-            eprintln!("{e}");
-            return Err(ReturnCode::NoSetupFolder.into());
-        }
-    };
-
-    // --- Getting user confirmation ---
-    println!(
-        "{}",
-        t!(
-            "info.dotfiles_will_be_converted",
-            location = dotfiles_dir.display()
-        )
-        .yellow()
-    );
-    print!("{}", t!("warn.want_to_convert_dotfiles"));
-    io::stdout().flush().unwrap();
-
-    if !assume_yes {
-        let mut answer = String::new();
-        io::stdin().read_line(&mut answer).unwrap();
-        if !matches!(answer.trim().to_lowercase().as_str(), "yes" | "y") {
-            return Ok(());
-        }
-    }
-
-    // --- initializing required directory ---
-    let configs_path = dotfiles_dir.join("Configs");
-    fs::create_dir_all(&configs_path).expect(&t!("errors.couldnt_create_required_dir"));
-
-    // --- Moving dotfiles to Configs/ ---
-    let cwd = fs::read_dir(&dotfiles_dir).expect(&t!("errors.couldnt_open_curr_dir"));
-
-    for file in cwd {
-        let dir = file.unwrap();
-        if !dir.metadata().unwrap().is_dir() {
-            continue;
-        }
-
-        let dirname = dir.file_name().to_str().unwrap().to_owned();
-        if dirname.starts_with('.') {
-            continue;
-        }
-
-        let path = configs_path.join(&dirname);
-
-        if !dirname.ends_with("Configs")
-            && !dirname.ends_with("Hooks")
-            && !dirname.ends_with("Secrets")
-        {
-            fs::rename(dir.path(), path).expect(&t!("errors.couldnt_move_files"));
-        }
-    }
-
-    Ok(())
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist

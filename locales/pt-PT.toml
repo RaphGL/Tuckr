@@ -10,13 +10,11 @@ how_to_get_started = "Para começar: adicione os seus dotfiles com `tuckr push` 
 running_prehook = "A executar prehook"
 running_posthook = "A executar posthook"
 symlinking_group = "A fazer symlink do grupo"
-dotfiles_will_be_converted = "Os dotfiles em `%{location}` serão convertidos para Tuckr."
 dotfiles_created_at = "O diretório de dotfiles foi criado em `%{location}`."
 groups_will_be_removed = "Os seguintes grupos serão removidos"
 x_available = "%{x} disponíveis"
 
 [warn]
-want_to_convert_dotfiles = "Tem a certeza que quer converter os seus dotfiles para tuckr? (y/N)"
 want_to_override = "Quer substituí-lo? (y/N)"
 want_to_proceed = "Quer continuar? (y/N)"
 
@@ -38,9 +36,6 @@ make_sure_dir_exists_or_run = "Certifique de que o diretório `%{dir}` existe ou
 could_not_read_hooks = "Não conseguimos ler os hooks, o diretório poderá não existir ou não ter as permissões necessárias"
 failed_to_hook = "O hook falhou"
 got_invalid_group = "Recebemos um grupo inválido: %{hook_group}"
-couldnt_create_required_dir = "Não foi possível criar o diretório obrigatório."
-couldnt_open_curr_dir = "Não foi possível abrir o diretório atual"
-couldnt_move_files = "Não foi possível mover os ficheiros"
 no_dir_setup_for_x = "Não há um diretório criado para %{x}"
 no_x_setup_yet = "Ainda nenhum %{x} foi configurado"
 not_a_tuckr_dotfile = "`%{file}` não é um ficheiro do tuckr."

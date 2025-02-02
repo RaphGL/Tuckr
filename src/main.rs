@@ -149,12 +149,6 @@ enum Command {
     /// Creates the files that are necessary to use Tuckr
     Init,
 
-    /// Convert a GNU Stow repo into Tuckr
-    FromStow {
-        #[arg(short = 'y', long)]
-        assume_yes: bool,
-    },
-
     /// Return the group files belongs to
     #[command(name = "groupis", arg_required_else_help = true)]
     GroupIs { files: Vec<String> },
@@ -202,7 +196,6 @@ fn main() -> ExitCode {
         Command::Decrypt { groups, exclude } => {
             secrets::decrypt_cmd(cli.profile, &groups, &exclude)
         }
-        Command::FromStow { assume_yes } => fileops::from_stow_cmd(cli.profile, assume_yes),
         Command::Init => fileops::init_cmd(cli.profile),
 
         Command::Ls(ls_type) => match ls_type {
