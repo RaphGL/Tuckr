@@ -340,9 +340,11 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         #[tabled(rename = "Group")]
         group: String,
         #[tabled(rename = "Prehook")]
-        prehook: &'a str,
+        pre_hook: &'a str,
         #[tabled(rename = "Posthook")]
-        posthook: &'a str,
+        post_hook: &'a str,
+        #[tabled(rename = "Remove")]
+        rm_hook: &'a str,
     }
 
     let dir = fs::read_dir(dir).unwrap();
@@ -358,17 +360,20 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
 
         let mut hook_entry = ListRow {
             group,
-            prehook: &false_symbol,
-            posthook: &false_symbol,
+            pre_hook: &false_symbol,
+            post_hook: &false_symbol,
+            rm_hook: &false_symbol,
         };
 
         for hook in fs::read_dir(hook_dir.path()).unwrap() {
             let hook = hook.unwrap().file_name();
             let hook = hook.to_str().unwrap();
             if hook.starts_with("pre") {
-                hook_entry.prehook = &true_symbol;
+                hook_entry.pre_hook = &true_symbol;
             } else if hook.starts_with("post") {
-                hook_entry.posthook = &true_symbol;
+                hook_entry.post_hook = &true_symbol;
+            } else if hook.starts_with("rm") {
+                hook_entry.rm_hook = &true_symbol;
             }
         }
 
