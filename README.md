@@ -8,7 +8,7 @@
   <h3 align="center">A super powered replacement for GNU Stow</h3>
   <p align="center">
     <br />
-    <a href="https://github.com/RaphGL/Tuckr"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/RaphGL/Tuckr/wiki"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     ·
@@ -59,9 +59,9 @@ To achieve that goal Tuckr tries to only cover what is directly needed to manage
 - No configuration
 - Commands can be run from anywhere
 - Symlinks are tracked and validated
-- All configuration grouped and handled as a logical unit 
-- Provide hooks, optionally write configuration scripts for each group
-- Easily encrypt and deploy sensitive configuration files
+- Configuration files are grouped and handled as a logical unit 
+- Provide ability to run hooks (scripts) that facilitate deployment and uninstallation
+- Easily encrypt and deploy sensitive configuration files (WIP: please do not secrets for production just yet)
 
 <!-- GETTING STARTED -->
 
@@ -90,10 +90,11 @@ Tuckr is interchangeable with Stow. To migrate:
 stow -t $HOME --delete *
 ```
 
-2. Move your dotfiles directory to one of the valid paths and convert your repo:
+2. Move your dotfiles directory to one of the valid paths and move all your directories there:
 
 ```
-tuckr from-stow
+$ mkdir -p <CONFIG_PATH>/Configs
+$ mv -t <CONFIG_PATH> * 
 ```
 
 3. Resymlink your dotfiles with:
@@ -102,7 +103,7 @@ tuckr from-stow
 tuckr add \*
 ```
 
-4. Confirm that your dotfiles have been deployed:
+4. You can confirm that your dotfiles have been deployed:
 
 ```
 tuckr status
@@ -135,7 +136,7 @@ paru -S tuckr-git
 ```sh
 $ tuckr add \* # adds all dotfiles to the system
 $ tuckr add \* -e neovim # adds all dotfiles except neovim
-$ tuckr add neovim zsh # adds the neovim and zsh dotfiles only
+$ tuckr add neovim zsh # adds only the neovim and zsh dotfiles
 $ tuckr set \* # adds all the dotfiles and runs their hooks (scripts)
 $ tuckr rm \* # removes all dotfiles from your system
 ```
@@ -146,19 +147,19 @@ Super powered GNU Stow replacement
 Usage: tuckr [OPTIONS] <COMMAND>
 
 Commands:
-  status     Get dotfiles' symlinking status (alias: s)
-  add        Deploy dotfiles for the supplied groups (alias: a)
-  rm         Remove dotfiles for the supplied groups
-  set        Setup groups and run their hooks
-  encrypt    Encrypt files and move them to dotfiles/Secrets (alias: e)
-  decrypt    Decrypt files (alias: d)
-  push       Copy files into groups
-  pop        Remove groups from dotfiles/Configs
-  ls         List dotfiles hooks, secrets, profiles
-  init       Initialize dotfile directory
-  from-stow  Convert a GNU Stow repo into Tuckr
-  groupis    Return the group files belongs to
-  help       Print this message or the help of the given subcommand(s)
+  status   Get dotfiles' symlinking status (alias: s)
+  add      Deploy dotfiles for the supplied groups (alias: a)
+  rm       Remove dotfiles for the supplied groups
+  set      Setup groups and run their hooks
+  unset    Remove groups and run their cleanup hooks
+  encrypt  Encrypt files and move them to dotfiles/Secrets (alias: e)
+  decrypt  Decrypt files (alias: d)
+  push     Copy files into groups
+  pop      Remove groups from dotfiles/Configs
+  ls       List dotfiles hooks, secrets, profiles
+  init     Initialize dotfile directory
+  groupis  Return the group files belongs to
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
   -p, --profile <PROFILE>  Choose which dotfile profile to use
@@ -180,7 +181,7 @@ dotfiles
 └── Hooks # Setup scripts go here
 ```
 
-These directories contain directories that separate the dotfiles by program name (or whatever you want to separate them by)
+These directories contain directories that separate the dotfiles by program name (or whatever criteria you want to group them by)
 
 ```sh
 dotfiles
@@ -192,7 +193,7 @@ dotfiles
     └── zsh
 ```
 
-Inside of these program directories the structure is exactly the same as what your $HOME looks like.
+Inside of these group directories the structure is exactly the same as what your $HOME looks like.
 
 ```sh
 Configs
@@ -205,7 +206,7 @@ Configs
     └── .zshrc
 ```
 
-The program directories' names are used to reference them in commands
+The group directories' names are used to reference them on tuckr.
 
 ### Using Hooks
 
@@ -225,6 +226,8 @@ Hooks
 To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*` to run all hooks.
 
 ### Using Secrets
+Please not that secrets are still WIP and their security is really not guaranteed. So it's best to avoid it in production. If you want to deploy secrets with tuckr,
+then consider create a hook that deploys secrets for you using some of the reputable encryption tools out there like veracrypt, gpg, etc.
 
 #### Encrypting files
 
@@ -247,14 +250,14 @@ tuckr decrypt <group_name...>
 ### Conditional deployment
 Conditional deployment is used when a dotfile should only be deployed on a specific platform. This is done by creating a separate group with the same name suffixed with the desired platform.
 
-This group is entirely ignored on unsupported systems.
+Conditional groups are entirely ignored on unsupported systems.
 
 Example:
 
 ```sh
 Configs
 ├── config
-├── config_unix # deployed on any unix system
+├── config_unix # deployed on any unix-like system
 ├── config_linux # linux only files
 ├── config_macos # macos only files
 └── config_windows # windows only files
@@ -274,7 +277,7 @@ For scripting purposes Tuckr has the following exit codes:
 - `5` Encryption failed
 - `6` Decryption failed
 
-On success Tuckr returns whatever is the default success return code for the platform (0 on unix systems).
+On success Tuckr returns whatever is the default success return code for the platform (0 on unix-like systems).
 
 <!-- LICENSE -->
 
