@@ -243,7 +243,8 @@ impl SymlinkHandler {
         self.symlinked.is_empty() && self.not_symlinked.is_empty() && self.not_owned.is_empty()
     }
 
-    fn __get_related_cond_groups(
+    /// only meant for internal use
+    fn get_related_cond_groups(
         &self,
         target_group: &str,
         cache: &HashCache,
@@ -280,19 +281,19 @@ impl SymlinkHandler {
         symtype: BitFlags<SymlinkType>,
     ) -> Option<Vec<String>> {
         let symlinked = if symtype.contains(SymlinkType::Symlinked) {
-            self.__get_related_cond_groups(target_group, &self.symlinked)
+            self.get_related_cond_groups(target_group, &self.symlinked)
         } else {
             None
         };
 
         let not_symlinked = if symtype.contains(SymlinkType::NotSymlinked) {
-            self.__get_related_cond_groups(target_group, &self.not_symlinked)
+            self.get_related_cond_groups(target_group, &self.not_symlinked)
         } else {
             None
         };
 
         let not_owned = if symtype.contains(SymlinkType::NotOwned) {
-            self.__get_related_cond_groups(target_group, &self.not_owned)
+            self.get_related_cond_groups(target_group, &self.not_owned)
         } else {
             None
         };

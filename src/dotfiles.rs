@@ -330,7 +330,6 @@ pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
     #[cfg(test)]
     {
         std::env::remove_var("TUCKR_TARGET");
-        println!("is being run");
     }
 
     if let Ok(dir) = std::env::var("TUCKR_TARGET") {

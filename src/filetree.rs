@@ -7,6 +7,7 @@ struct FileNode<'a> {
     parent_node_idx: usize,
     // points to a path in FileTree::paths
     path_idx: usize,
+    // index into FileTree::nodes
     children: Option<Vec<usize>>,
 }
 
@@ -57,6 +58,7 @@ impl<'a> FileTree<'a> {
         }
     }
 
+    /// Returns true if the path is starts with the path in the root node of the file tree
     pub fn path_is_in_root(&self, value: &Path) -> bool {
         let root_node = self
             .nodes
@@ -100,9 +102,9 @@ impl<'a> FileTree<'a> {
         None
     }
 
-    // todo: separate values into components and then insert each component's contructed path at a time
-    // todo: make all paths absolute before insertion
-    pub fn insert(&mut self, group: Option<&'a str>, value: &Path) -> bool {
+    /// inserts a path from a group with no regard for intermediate values (each component in the path)
+    /// Returns true if the insertion was successful
+    fn insert_path(&mut self, group: Option<&'a str>, value: &Path) -> bool {
         if self.contains_path(value) {
             return false;
         }
@@ -156,25 +158,99 @@ impl<'a> FileTree<'a> {
         }
     }
 
-    pub fn remove(&mut self, idx: usize) -> Option<PathBuf> {
+    /// Inserts a path from a group along with all of the intermediate paths (each component in the path)
+    /// An intermediate paths group is always `None`
+    pub fn insert(&mut self, group: Option<&'a str>, value: &Path) -> bool {
+        if self.paths.is_empty() {
+            return self.insert_path(group, value);
+        }
+
+        let mut curr_path = self.paths[0].clone().expect("root should never be none");
+        let Ok(value_components) = value.strip_prefix(&curr_path) else {
+            return false;
+        };
+
+        let Some(last_component) = value.file_name() else {
+            return false;
+        };
+
+        let mut last_insert_ret = false;
+        for component in value_components {
+            curr_path.push(component);
+            last_insert_ret = self.insert_path(
+                if component == last_component {
+                    group
+                } else {
+                    None
+                },
+                &curr_path,
+            );
+        }
+
+        last_insert_ret
+    }
+
+    fn remove_idx(&mut self, idx: usize) -> Option<PathBuf> {
         let node = self.nodes.get(idx)?.clone()?;
 
         if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx] {
             if let Some(ref children) = parent_node.children {
-                parent_node.children =
-                    Some(children.iter().filter(|v| **v != idx).copied().collect());
-            }
-        }
+                let children: Vec<_> = children.iter().filter(|v| **v != idx).copied().collect();
 
-        if let Some(group) = node.group {
-            self.groups.remove(group);
+                parent_node.children = if children.is_empty() {
+                    None
+                } else {
+                    Some(children)
+                };
+            }
         }
 
         self.nodes[idx] = None;
         let discarded_path = self.paths[node.path_idx].clone()?;
         self.paths[node.path_idx] = None;
 
+        if let Some(group) = node.group {
+            let has_group = self.nodes.iter().any(|n| {
+                let Some(n) = n else {
+                    return false;
+                };
+
+                let Some(ngroup) = n.group else {
+                    return false;
+                };
+
+                ngroup == group
+            });
+
+            if !has_group {
+                self.groups.remove(group);
+            }
+        }
+
         Some(discarded_path)
+    }
+
+    // todo: find out way to remove lingering None group node
+    pub fn remove(&mut self, idx: usize) -> Option<PathBuf> {
+        let mut curr_idx = idx;
+        while let Some(node) = self.nodes.get(curr_idx)? {
+            let parent_idx = node.parent_node_idx;
+
+            let parent = self.nodes[parent_idx].clone().unwrap();
+            if parent.group.is_some() {
+                break;
+            }
+
+            let children = parent.children.expect("parent should always have children");
+
+            if children.len() == 1 {
+                self.remove_idx(node.parent_node_idx);
+            }
+
+            curr_idx = parent_idx;
+        }
+
+        self.remove_idx(idx)
     }
 
     pub fn remove_path(&mut self, value: &Path) -> Option<PathBuf> {
@@ -182,7 +258,7 @@ impl<'a> FileTree<'a> {
         self.remove(value_idx)
     }
 
-    // note: instead of PathBuf should use T or just plain dotfiles::Dotfile
+    // note: instead of PathBuf consider using T or just plain dotfiles::Dotfile
     pub fn get(&self, group: &str) -> Option<HashSet<PathBuf>> {
         let mut group_paths = HashSet::new();
 
@@ -252,11 +328,11 @@ mod tests {
     fn removing_items() {
         let mut ft = FileTree::new(Path::new("/"));
         ft.insert(Some("test"), Path::new("/usr"));
-        ft.insert(Some("test2"), Path::new("/usr/bin"));
+        ft.insert(Some("test2"), Path::new("/usr/bin/ls"));
 
-        ft.remove_path(Path::new("/usr/bin"));
+        ft.remove_path(Path::new("/usr/bin/ls"));
+
         assert!(!ft.contains_group("test2"));
-
         assert!(ft.nodes.iter().any(|p| p.is_none()));
     }
 
@@ -268,6 +344,36 @@ mod tests {
         ft.remove_path(Path::new("/usr/bin"));
 
         assert!(!ft.iter().any(|(_, v)| v.is_none()));
+
+        let mut ft = FileTree::new(Path::new("/"));
+        ft.insert(Some("test"), Path::new("/usr"));
+        ft.insert(Some("test"), Path::new("/usr/bin/ls"));
+
+        // todo: extract into its own test
+        // what it does: ensures that intermediary nodes are always inserted with group `None`
+        for node in ft.iter() {
+            let node = node.1.as_ref().unwrap();
+            println!(
+                "
+                    group: {:?}
+                    path: {:?}
+                ",
+                node.group, ft.paths[node.path_idx]
+            );
+
+            let Some(ref children) = node.children else {
+                continue;
+            };
+
+            for child in children {
+                println!(
+                    "
+                    child: {:?}
+                    ",
+                    ft.paths[ft.nodes[*child].as_ref().unwrap().path_idx]
+                );
+            }
+        }
     }
 
     #[test]
