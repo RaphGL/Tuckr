@@ -144,17 +144,7 @@ impl Iterator for DirWalk {
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
-pub fn init_cmd(profile: Option<String>) -> Result<(), ExitCode> {
-    macro_rules! create_dirs {
-        ($($dirname: expr),+) => {
-            $(
-            if let Err(e) = fs::create_dir_all($dirname) {
-                eprintln!("{}", e.red());
-                return Err(ExitCode::FAILURE);
-            })+
-        };
-    }
-
+pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> {
     let dotfiles_dir = if cfg!(test) {
         dotfiles::get_dotfiles_path(None).unwrap()
     } else {
@@ -165,11 +155,18 @@ pub fn init_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         dirs::config_dir().unwrap().join(dotfiles_dir_name)
     };
 
-    create_dirs!(
+    for dir in [
         dotfiles_dir.join("Configs"),
         dotfiles_dir.join("Hooks"),
-        dotfiles_dir.join("Secrets")
-    );
+        dotfiles_dir.join("Secrets"),
+    ] {
+        if dry_run {
+            eprintln!("creating directory `{}`", dir.display())
+        } else if let Err(e) = fs::create_dir_all(dir) {
+            eprintln!("{}", e.red());
+            return Err(ExitCode::FAILURE);
+        }
+    }
 
     println!(
         "{}",

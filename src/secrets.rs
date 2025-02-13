@@ -82,6 +82,7 @@ impl SecretsHandler {
 /// Encrypts secrets
 pub fn encrypt_cmd(
     profile: Option<String>,
+    dry_run: bool,
     group: &str,
     dotfiles: &[String],
 ) -> Result<(), ExitCode> {
@@ -117,6 +118,16 @@ pub fn encrypt_cmd(
     let encrypt_file = |dotfile: &Path| -> Result<(), ExitCode> {
         let target_file = dotfile.strip_prefix(&target_dir).unwrap();
 
+        let encrypted_file_path = dest_dir.join(target_file);
+        if dry_run {
+            eprintln!(
+                "encrypting `{}` into `{}`",
+                dotfile.display(),
+                encrypted_file_path.display()
+            );
+            return Ok(());
+        }
+
         let dir_path = {
             let mut tf = target_file.to_path_buf();
             tf.pop();
@@ -130,7 +141,7 @@ pub fn encrypt_cmd(
 
         // makes sure all parent directories of the dotfile are created
         fs::create_dir_all(dest_dir.join(dir_path)).unwrap();
-        fs::write(dest_dir.join(target_file), encrypted_file).unwrap();
+        fs::write(encrypted_file_path, encrypted_file).unwrap();
 
         Ok(())
     };
@@ -159,6 +170,7 @@ pub fn encrypt_cmd(
 /// Decrypts secrets
 pub fn decrypt_cmd(
     profile: Option<String>,
+    dry_run: bool,
     groups: &[String],
     exclude: &[String],
 ) -> Result<(), ExitCode> {
@@ -186,9 +198,19 @@ pub fn decrypt_cmd(
                 continue;
             }
 
-            let decrypted = handler.decrypt(secret.to_str().unwrap())?;
+            let decrypted_dest = dest_dir.join(secret.file_name().unwrap());
 
-            fs::write(dest_dir.join(secret.file_name().unwrap()), decrypted).unwrap();
+            if dry_run {
+                eprintln!(
+                    "decrypting `{}` into `{}`",
+                    secret.display(),
+                    decrypted_dest.display()
+                );
+                continue;
+            }
+
+            let decrypted = handler.decrypt(secret.to_str().unwrap())?;
+            fs::write(decrypted_dest, decrypted).unwrap();
         }
 
         Ok(())

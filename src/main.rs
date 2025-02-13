@@ -24,9 +24,13 @@ rust_i18n::i18n!("locales", minify_key = true, fallback = "en");
 #[derive(Parser)]
 #[command(about, author, version, propagate_version = true)]
 struct Cli {
-    #[arg(short, long)]
     /// Choose which dotfile profile to use
+    #[arg(short, long)]
     profile: Option<String>,
+
+    /// No filesystem operations. Only print what would happen
+    #[arg(short = 'n', long)]
+    dry_run: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -176,9 +180,19 @@ fn main() -> ExitCode {
             force,
             adopt,
             assume_yes,
-        } => hooks::set_cmd(cli.profile, &groups, &exclude, force, adopt, assume_yes),
+        } => hooks::set_cmd(
+            cli.profile,
+            cli.dry_run,
+            &groups,
+            &exclude,
+            force,
+            adopt,
+            assume_yes,
+        ),
 
-        Command::Unset { groups, exclude } => hooks::unset_cmd(cli.profile, &groups, &exclude),
+        Command::Unset { groups, exclude } => {
+            hooks::unset_cmd(cli.profile, cli.dry_run, &groups, &exclude)
+        }
 
         Command::Add {
             groups,
@@ -186,17 +200,27 @@ fn main() -> ExitCode {
             force,
             adopt,
             assume_yes,
-        } => symlinks::add_cmd(cli.profile, &groups, &exclude, force, adopt, assume_yes),
+        } => symlinks::add_cmd(
+            cli.profile,
+            cli.dry_run,
+            &groups,
+            &exclude,
+            force,
+            adopt,
+            assume_yes,
+        ),
 
-        Command::Rm { groups, exclude } => symlinks::remove_cmd(cli.profile, &groups, &exclude),
+        Command::Rm { groups, exclude } => {
+            symlinks::remove_cmd(cli.profile, cli.dry_run, &groups, &exclude)
+        }
         Command::Status { groups } => symlinks::status_cmd(cli.profile, groups),
         Command::Encrypt { group, dotfiles } => {
-            secrets::encrypt_cmd(cli.profile, &group, &dotfiles)
+            secrets::encrypt_cmd(cli.profile, cli.dry_run, &group, &dotfiles)
         }
         Command::Decrypt { groups, exclude } => {
-            secrets::decrypt_cmd(cli.profile, &groups, &exclude)
+            secrets::decrypt_cmd(cli.profile, cli.dry_run, &groups, &exclude)
         }
-        Command::Init => fileops::init_cmd(cli.profile),
+        Command::Init => fileops::init_cmd(cli.profile, cli.dry_run),
 
         Command::Ls(ls_type) => match ls_type {
             ListType::Profiles => fileops::ls_profiles_cmd(),

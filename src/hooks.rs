@@ -71,6 +71,7 @@ impl Iterator for DeployStages {
 /// Runs hooks of type PreHook or PostHook
 fn run_set_hook(
     profile: Option<String>,
+    dry_run: bool,
     group: &str,
     hook_type: DeployStep,
 ) -> Result<(), ExitCode> {
@@ -114,6 +115,10 @@ fn run_set_hook(
                 );
             }
             _ => (),
+        }
+
+        if dry_run {
+            continue;
         }
 
         let mut output = match Command::new(&file).spawn() {
@@ -164,6 +169,7 @@ fn get_hooks_dir_if_groups_are_valid(
 /// Runs hooks for specified groups and symlinks them
 pub fn set_cmd(
     profile: Option<String>,
+    dry_run: bool,
     groups: &[String],
     exclude: &[String],
     force: bool,
@@ -172,17 +178,17 @@ pub fn set_cmd(
 ) -> Result<(), ExitCode> {
     let hooks_dir = get_hooks_dir_if_groups_are_valid(&profile, groups)?;
 
-    let run_deploy_steps = |step: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
+    let run_deploy_steps = |stages: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
         if !group.is_valid_target() {
             return Ok(());
         }
 
-        for i in step {
-            match i {
+        for step in stages {
+            match step {
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_set_hook(profile.clone(), &group.group_name, DeployStep::PreHook)?;
+                    run_set_hook(profile.clone(), dry_run, &group.group_name, step)?;
                 }
 
                 DeployStep::Symlink => {
@@ -200,11 +206,19 @@ pub fn set_cmd(
                         &t!("info.symlinking_group"),
                         group.group_name.yellow().to_string().as_str(),
                     );
-                    symlinks::add_cmd(profile.clone(), groups, exclude, force, adopt, assume_yes)?;
+                    symlinks::add_cmd(
+                        profile.clone(),
+                        dry_run,
+                        groups,
+                        exclude,
+                        force,
+                        adopt,
+                        assume_yes,
+                    )?;
                 }
 
                 DeployStep::PostHook => {
-                    run_set_hook(profile.clone(), &group.group_name, DeployStep::PostHook)?
+                    run_set_hook(profile.clone(), dry_run, &group.group_name, step)?
                 }
             }
         }
@@ -305,6 +319,7 @@ pub fn set_cmd(
 /// Runs cleanup hooks for groups and then removes all their symlinks
 pub fn unset_cmd(
     profile: Option<String>,
+    dry_run: bool,
     groups: &[String],
     exclude: &[String],
 ) -> Result<(), ExitCode> {
@@ -319,6 +334,10 @@ pub fn unset_cmd(
 
             if filename.starts_with("rm") {
                 print_info_box("Running cleanup hook", group.yellow().to_string().as_str());
+
+                if dry_run {
+                    continue;
+                }
 
                 let hook = Command::new(&file).spawn();
 
@@ -345,7 +364,7 @@ pub fn unset_cmd(
             group.yellow().to_string().as_str(),
         );
 
-        symlinks::remove_cmd(profile.clone(), &[group.to_owned()], exclude)?;
+        symlinks::remove_cmd(profile.clone(), dry_run, &[group.to_owned()], exclude)?;
     }
 
     Ok(())

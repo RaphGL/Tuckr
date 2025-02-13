@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
-fn symlink_file(f: PathBuf) {
+fn symlink_file(dry_run: bool, f: PathBuf) {
     match Dotfile::try_from(f.clone()) {
         Ok(group) => {
             let target_path = match group.to_target_path() {
@@ -33,6 +33,21 @@ fn symlink_file(f: PathBuf) {
             };
 
             if target_path.exists() {
+                if dry_run {
+                    eprintln!(
+                        "`{}` is ignored, as it already exists",
+                        target_path.display()
+                    );
+                }
+                return;
+            }
+
+            if dry_run {
+                eprintln!(
+                    "symlinking `{}` to `{}`",
+                    f.display(),
+                    target_path.display()
+                );
                 return;
             }
 
@@ -357,7 +372,7 @@ impl SymlinkHandler {
     }
 
     /// Symlinks all the files of a group to the user's $HOME
-    fn add(&self, group: &str) {
+    fn add(&self, dry_run: bool, group: &str) {
         let Some(mut groups) =
             self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
         else {
@@ -373,7 +388,10 @@ impl SymlinkHandler {
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(group)).unwrap();
             if group.path.exists() {
                 // iterate through all the files in group_dir
-                group.try_iter().unwrap().for_each(|f| symlink_file(f.path))
+                group
+                    .try_iter()
+                    .unwrap()
+                    .for_each(|f| symlink_file(dry_run, f.path))
             } else {
                 eprintln!(
                     "{}",
@@ -386,8 +404,8 @@ impl SymlinkHandler {
     }
 
     /// Deletes symlinks from $HOME if they're owned by dotfiles dir
-    fn remove(&self, group: &str) {
-        fn remove_symlink(file: PathBuf) {
+    fn remove(&self, dry_run: bool, group: &str) {
+        fn remove_symlink(dry_run: bool, file: PathBuf) {
             let dotfile = Dotfile::try_from(file).unwrap();
             let target_dotfile = dotfile.to_target_path().unwrap();
             let Ok(linked) = fs::read_link(&target_dotfile) else {
@@ -395,6 +413,11 @@ impl SymlinkHandler {
             };
 
             if dotfile.path != linked {
+                return;
+            }
+
+            if dry_run {
+                eprintln!("removing `{}`", target_dotfile.display());
                 return;
             }
 
@@ -424,7 +447,7 @@ impl SymlinkHandler {
             group
                 .try_iter()
                 .unwrap()
-                .for_each(|f| remove_symlink(f.path));
+                .for_each(|f| remove_symlink(dry_run, f.path));
         }
     }
 }
@@ -527,6 +550,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
 /// Adds symlinks
 pub fn add_cmd(
     profile: Option<String>,
+    dry_run: bool,
     groups: &[String],
     exclude: &[String],
     force: bool,
@@ -566,14 +590,26 @@ pub fn add_cmd(
 
                     let deleted_file = if adopt { &file.path } else { &target_file };
 
-                    if target_file.is_dir() {
-                        fs::remove_dir_all(deleted_file).unwrap();
-                    } else if target_file.is_file() {
-                        fs::remove_file(deleted_file).unwrap();
+                    if dry_run {
+                        eprintln!("removing `{}`", deleted_file.display());
+                    } else {
+                        if target_file.is_dir() {
+                            fs::remove_dir_all(deleted_file).unwrap();
+                        } else if target_file.is_file() {
+                            fs::remove_file(deleted_file).unwrap();
+                        }
                     }
 
                     if adopt {
-                        fs::rename(target_file, &file.path).unwrap();
+                        if dry_run {
+                            eprintln!(
+                                "moving `{}` to `{}`",
+                                target_file.display(),
+                                file.path.display()
+                            );
+                        } else {
+                            fs::rename(target_file, &file.path).unwrap();
+                        }
                     }
                 }
             }
@@ -591,7 +627,7 @@ pub fn add_cmd(
             remove_files_and_decide_if_adopt(&sym.not_symlinked, true);
         }
 
-        sym.add(group)
+        sym.add(dry_run, group)
     })?;
 
     Ok(())
@@ -600,10 +636,13 @@ pub fn add_cmd(
 /// Removes symlinks
 pub fn remove_cmd(
     profile: Option<String>,
+    dry_run: bool,
     groups: &[String],
     exclude: &[String],
 ) -> Result<(), ExitCode> {
-    foreach_group(profile, groups, exclude, false, |sym, p| sym.remove(p))?;
+    foreach_group(profile, groups, exclude, false, |sym, p| {
+        sym.remove(dry_run, p)
+    })?;
     Ok(())
 }
 
@@ -955,7 +994,7 @@ mod tests {
 
     impl Test {
         fn start() -> Self {
-            crate::fileops::init_cmd(None).unwrap();
+            crate::fileops::init_cmd(None, false).unwrap();
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
             let new_config_dir = group_dir.join(".config");
@@ -996,7 +1035,7 @@ mod tests {
             }
 
             if dotfiles_dir.exists() {
-                _ = super::remove_cmd(None, &["*".to_string()], &[]);
+                _ = super::remove_cmd(None, false, &["*".to_string()], &[]);
                 fs::remove_dir_all(dotfiles_dir).unwrap();
             }
         }
@@ -1011,7 +1050,16 @@ mod tests {
         );
 
         assert!(!sym.symlinked.contains_key("Group1"));
-        super::add_cmd(None, &["Group1".to_string()], &[], false, false, false).unwrap();
+        super::add_cmd(
+            None,
+            false,
+            &["Group1".to_string()],
+            &[],
+            false,
+            false,
+            false,
+        )
+        .unwrap();
 
         let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(sym.symlinked.contains_key("Group1"));
@@ -1020,7 +1068,16 @@ mod tests {
     fn test_removing_symlink() {
         let _test = Test::start();
 
-        super::add_cmd(None, &["Group1".to_string()], &[], false, false, false).unwrap();
+        super::add_cmd(
+            None,
+            false,
+            &["Group1".to_string()],
+            &[],
+            false,
+            false,
+            false,
+        )
+        .unwrap();
 
         let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(
@@ -1029,7 +1086,7 @@ mod tests {
 
         assert!(!sym.not_symlinked.contains_key("Group1"));
 
-        super::remove_cmd(None, &["Group1".to_string()], &[]).unwrap();
+        super::remove_cmd(None, false, &["Group1".to_string()], &[]).unwrap();
         let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(sym.not_symlinked.contains_key("Group1"));
     }
