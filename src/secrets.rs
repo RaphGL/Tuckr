@@ -185,7 +185,13 @@ pub fn decrypt_cmd(
         return Err(ReturnCode::DecryptionFailed.into());
     }
 
-    let dest_dir = std::env::current_dir().unwrap();
+    let target_dir = match dotfiles::get_dotfiles_target_dir_path() {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("{}", err.red());
+            return Err(ReturnCode::NoSuchFileOrDir.into());
+        }
+    };
 
     let decrypt_group = |group: Dotfile| -> Result<(), ExitCode> {
         if exclude.contains(&group.group_name) || !group.is_valid_target() {
@@ -193,12 +199,13 @@ pub fn decrypt_cmd(
         }
 
         let group_dir = handler.dotfiles_dir.join("Secrets").join(&group.group_path);
-        for secret in DirWalk::new(group_dir) {
+        for secret in DirWalk::new(&group_dir) {
             if secret.is_dir() {
                 continue;
             }
 
-            let decrypted_dest = dest_dir.join(secret.file_name().unwrap());
+            let base_secret_path = secret.strip_prefix(&group_dir).unwrap();
+            let decrypted_dest = target_dir.join(base_secret_path);
 
             if dry_run {
                 eprintln!(
@@ -208,6 +215,9 @@ pub fn decrypt_cmd(
                 );
                 continue;
             }
+
+            let decrypted_parent_dir = decrypted_dest.parent().unwrap();
+            fs::create_dir_all(decrypted_parent_dir).unwrap();
 
             let decrypted = handler.decrypt(secret.to_str().unwrap())?;
             fs::write(decrypted_dest, decrypted).unwrap();
