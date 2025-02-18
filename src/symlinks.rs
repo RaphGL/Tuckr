@@ -35,7 +35,8 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
             if target_path.exists() {
                 if dry_run {
                     eprintln!(
-                        "`{}` is ignored, as it already exists",
+                        "{} `{}` as it already exists",
+                        "ignoring".yellow(),
                         target_path.display()
                     );
                 }
@@ -44,7 +45,8 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
 
             if dry_run {
                 eprintln!(
-                    "symlinking `{}` to `{}`",
+                    "{} `{}` to `{}`",
+                    "symlking".green(),
                     f.display(),
                     target_path.display()
                 );
@@ -417,7 +419,7 @@ impl SymlinkHandler {
             }
 
             if dry_run {
-                eprintln!("removing `{}`", target_dotfile.display());
+                eprintln!("{} `{}`", "removing".red(), target_dotfile.display());
                 return;
             }
 
@@ -591,7 +593,7 @@ pub fn add_cmd(
                     let deleted_file = if adopt { &file.path } else { &target_file };
 
                     if dry_run {
-                        eprintln!("removing `{}`", deleted_file.display());
+                        eprintln!("{} `{}`", "removing".red(), deleted_file.display());
                     } else if target_file.is_dir() {
                         fs::remove_dir_all(deleted_file).unwrap();
                     } else if target_file.is_file() {
@@ -601,7 +603,8 @@ pub fn add_cmd(
                     if adopt {
                         if dry_run {
                             eprintln!(
-                                "moving `{}` to `{}`",
+                                "{} `{}` to `{}`",
+                                "moving".yellow(),
                                 target_file.display(),
                                 file.path.display()
                             );
@@ -853,24 +856,32 @@ fn print_groups_status(
 
             for file in conflicts {
                 let conflict = file.to_target_path().unwrap();
-                let conflict_dotfile = Dotfile::try_from(conflict.read_link().unwrap());
+                let msg = if !conflict.is_symlink() {
+                    t!("errors.already_exists")
+                } else {
+                    let conflict_dotfile = Dotfile::try_from(conflict.read_link().unwrap());
 
-                let msg = match conflict_dotfile {
-                    Ok(conflict) => {
-                        if file.path != conflict.path {
-                            t!("errors.already_exists")
-                        } else {
-                            unreachable!();
+                    match conflict_dotfile {
+                        Ok(conflict) => {
+                            if file.path != conflict.path {
+                                t!("errors.already_exists")
+                            } else {
+                                unreachable!();
+                            }
                         }
+                        Err(_) => t!("errors.symlinks_elsewhere"),
                     }
-                    Err(_) => t!("errors.symlinks_elsewhere"),
                 };
+
                 println!("\t\t -> {} ({})", conflict.display(), msg,);
             }
         }
 
         println!("{}:", t!("table-column.not_symlinked"));
         for group in not_symlinked {
+            if file_conflicts.contains_key(&group) {
+                continue;
+            }
             println!("\t{}", group.red());
         }
 

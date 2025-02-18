@@ -160,7 +160,7 @@ pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> 
         dotfiles_dir.join("Secrets"),
     ] {
         if dry_run {
-            eprintln!("creating directory `{}`", dir.display())
+            eprintln!("{} directory `{}`", "creating".green(), dir.display())
         } else if let Err(e) = fs::create_dir_all(dir) {
             eprintln!("{}", e.red());
             return Err(ExitCode::FAILURE);
