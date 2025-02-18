@@ -592,12 +592,10 @@ pub fn add_cmd(
 
                     if dry_run {
                         eprintln!("removing `{}`", deleted_file.display());
-                    } else {
-                        if target_file.is_dir() {
-                            fs::remove_dir_all(deleted_file).unwrap();
-                        } else if target_file.is_file() {
-                            fs::remove_file(deleted_file).unwrap();
-                        }
+                    } else if target_file.is_dir() {
+                        fs::remove_dir_all(deleted_file).unwrap();
+                    } else if target_file.is_file() {
+                        fs::remove_file(deleted_file).unwrap();
                     }
 
                     if adopt {

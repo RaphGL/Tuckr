@@ -108,13 +108,12 @@ pub struct DirWalk {
 impl DirWalk {
     pub fn new(dir_path: impl AsRef<Path>) -> Self {
         let dir_path = dir_path.as_ref();
-        let dir = match fs::read_dir(dir_path) {
-            Ok(f) => f,
-            Err(_) => panic!(
+        let dir = fs::read_dir(dir_path).unwrap_or_else(|_| {
+            panic!(
                 "{}",
                 t!("errors.x_doesnt_exist", x = dir_path.to_str().unwrap())
-            ),
-        };
+            )
+        });
 
         Self {
             queue: dir.map(|f| f.unwrap().path()).collect(),
@@ -232,7 +231,7 @@ pub fn push_cmd(
             continue;
         }
 
-        for f in fileops::DirWalk::new(file) {
+        for f in DirWalk::new(file) {
             if f.is_dir() {
                 continue;
             }
@@ -394,7 +393,6 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     Ok(())
 }
 
-// todo: make ls-secrets command prettier
 pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     let secrets_dir = dotfiles::get_dotfiles_path(profile)
         .unwrap()
