@@ -3,7 +3,6 @@
 //! Contains functions to create the base directories and to convert users from stow to tuckr
 
 use crate::dotfiles::{self, ReturnCode};
-use crate::fileops;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::HashSet;
@@ -181,6 +180,7 @@ pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> 
 
 pub fn push_cmd(
     profile: Option<String>,
+    dry_run: bool,
     group: String,
     files: &[String],
     assume_yes: bool,
@@ -223,11 +223,31 @@ pub fn push_cmd(
             }
         }
 
-        let target_dir = target_file.parent().unwrap();
-        fs::create_dir_all(target_dir).unwrap();
+        #[inline]
+        fn push_file(dry_run: bool, target_parent_dir: &Path, target_file: &Path, file: &Path) {
+            if dry_run {
+                if !target_parent_dir.exists() {
+                    eprintln!(
+                        "{} parent directory `{}`",
+                        "creating".yellow(),
+                        target_parent_dir.display()
+                    );
+                }
+                eprintln!(
+                    "{} `{}` to `{}`",
+                    "copying".green(),
+                    file.display(),
+                    target_file.display()
+                );
+            } else {
+                fs::create_dir_all(target_parent_dir).unwrap();
+                fs::copy(file, target_file).unwrap();
+            }
+        }
 
         if file.is_file() {
-            fs::copy(file, target_file).unwrap();
+            let target_dir = target_file.parent().unwrap();
+            push_file(dry_run, target_dir, &target_file, &file);
             continue;
         }
 
@@ -245,9 +265,14 @@ pub fn push_cmd(
             let file = path::absolute(f).unwrap();
 
             let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
+            let target_parent_file = target_file.parent().unwrap();
 
-            fs::create_dir_all(target_file.parent().unwrap()).unwrap();
-            fs::copy(file, target_file).unwrap();
+            push_file(
+                dry_run,
+                target_parent_file,
+                target_file.as_path(),
+                file.as_path(),
+            );
         }
     }
 
@@ -260,6 +285,7 @@ pub fn push_cmd(
 
 pub fn pop_cmd(
     profile: Option<String>,
+    dry_run: bool,
     groups: &[String],
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
@@ -289,7 +315,7 @@ pub fn pop_cmd(
 
     if !invalid_groups.is_empty() {
         for group in invalid_groups {
-            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).yellow());
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
         }
 
         return Err(ReturnCode::NoSuchFileOrDir.into());
@@ -311,6 +337,11 @@ pub fn pop_cmd(
     }
 
     for group_path in valid_groups {
+        if dry_run {
+            eprintln!("{} `{}`", "removing".red(), group_path.display());
+            continue;
+        }
+
         fs::remove_dir_all(group_path).unwrap();
     }
 
@@ -595,6 +626,7 @@ mod tests {
 
         super::push_cmd(
             None,
+            false,
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
             true,
@@ -609,6 +641,7 @@ mod tests {
         file.write("something something".as_bytes()).unwrap();
         super::push_cmd(
             None,
+            false,
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
             true,
@@ -648,6 +681,7 @@ mod tests {
 
         super::push_cmd(
             None,
+            false,
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
             true,
@@ -674,6 +708,7 @@ mod tests {
 
         super::push_cmd(
             None,
+            false,
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
             true,
@@ -681,7 +716,7 @@ mod tests {
         .unwrap();
 
         assert!(group_dir.exists());
-        super::pop_cmd(None, &["test".into()], true).unwrap();
+        super::pop_cmd(None, false, &["test".into()], true).unwrap();
         assert!(!group_dir.exists());
     }
 

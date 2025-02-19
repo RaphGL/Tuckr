@@ -232,8 +232,10 @@ fn main() -> ExitCode {
             group,
             files,
             assume_yes,
-        } => fileops::push_cmd(cli.profile, group, &files, assume_yes),
-        Command::Pop { groups, assume_yes } => fileops::pop_cmd(cli.profile, &groups, assume_yes),
+        } => fileops::push_cmd(cli.profile, cli.dry_run, group, &files, assume_yes),
+        Command::Pop { groups, assume_yes } => {
+            fileops::pop_cmd(cli.profile, cli.dry_run, &groups, assume_yes)
+        }
         Command::GroupIs { files } => fileops::groupis_cmd(cli.profile, &files),
     };
 
