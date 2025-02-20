@@ -46,7 +46,7 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
             if dry_run {
                 eprintln!(
                     "{} `{}` to `{}`",
-                    "symlking".green(),
+                    "symlinking".green(),
                     f.display(),
                     target_path.display()
                 );

@@ -1,9 +1,8 @@
 //! Contains utilities to handle dotfiles
 
-use owo_colors::OwoColorize;
-
 use crate::dotfiles;
 use crate::fileops;
+use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -329,7 +328,7 @@ pub fn get_target_basepath(target: &path::Path) -> Option<PathBuf> {
 pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
     #[cfg(test)]
     {
-        std::env::remove_var("TUCKR_TARGET");
+        unsafe { std::env::remove_var("TUCKR_TARGET") };
     }
 
     if let Ok(dir) = std::env::var("TUCKR_TARGET") {
@@ -431,7 +430,7 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::dotfiles::{get_dotfiles_path, Dotfile};
+    use crate::dotfiles::{Dotfile, get_dotfiles_path};
 
     #[test]
     fn dotfile_to_target_path() {
