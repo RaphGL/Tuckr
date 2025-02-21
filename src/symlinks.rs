@@ -8,10 +8,10 @@
 //!   therefore they are in conflict
 //!
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
-//! $HOME equivalents are pointing to them and categorizing them accordingly.
+//! $TUCKR_TARGET equivalents are pointing to them and categorizing them accordingly.
 
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
-use enumflags2::{make_bitflags, BitFlags};
+use enumflags2::{BitFlags, make_bitflags};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
@@ -106,7 +106,7 @@ type HashCache = HashMap<String, HashSet<Dotfile>>;
 struct SymlinkHandler {
     dotfiles_dir: PathBuf,    // path to the dotfiles directory
     symlinked: HashCache,     // dotfiles that have been symlinked from Dotfiles/Configs
-    not_symlinked: HashCache, // dotfiles that haven't been symlinked to $HOME yet
+    not_symlinked: HashCache, // dotfiles that haven't been symlinked to $TUCKR_TARGET yet
     not_owned: HashCache, // dotfiles that are symlinks but points somewhere outside of their respective Dotfiles/Configs's group dir
 }
 
@@ -330,11 +330,11 @@ impl SymlinkHandler {
         }
     }
 
-    /// returns a cache with files in dotfiles that already exist in $HOME
+    /// returns a cache with files in dotfiles that already exist in $TUCKR_TARGET
     fn get_conflicts_in_cache(&self) -> HashCache {
         let mut conflicts = HashCache::new();
 
-        // mark group as conflicting if at least one value already exists in $HOME
+        // mark group as conflicting if at least one value already exists in $TUCKR_TARGET
         for files in self.not_symlinked.values() {
             for file in files {
                 if file.to_target_path().unwrap().exists() && file.is_valid_target() {
@@ -373,8 +373,8 @@ impl SymlinkHandler {
         conflicts.into_iter().filter(|g| !g.1.is_empty()).collect()
     }
 
-    /// Symlinks all the files of a group to the user's $HOME
-    fn add(&self, dry_run: bool, group: &str) {
+    /// Symlinks all the files of a group to the user's $TUCKR_TARGET
+    fn add(&self, dry_run: bool, only_files: bool, group: &str) {
         let Some(mut groups) =
             self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
         else {
@@ -389,11 +389,24 @@ impl SymlinkHandler {
             let group = &groups[idx];
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(group)).unwrap();
             if group.path.exists() {
-                // iterate through all the files in group_dir
-                group
-                    .try_iter()
-                    .unwrap()
-                    .for_each(|f| symlink_file(dry_run, f.path))
+                for f in group.try_iter().unwrap() {
+                    if only_files {
+                        if f.path.is_dir() {
+                            continue;
+                        }
+
+                        // we need to ensure that the target dotfile's parent exists otherwise symlink will fail
+                        let f_target = f.to_target_path().unwrap();
+                        let target_parent = f_target.parent().unwrap();
+
+                        if !target_parent.exists() {
+                            println!("creating parent dir for {group:?}");
+                            fs::create_dir_all(target_parent).unwrap();
+                        }
+                    }
+
+                    symlink_file(dry_run, f.path);
+                }
             } else {
                 eprintln!(
                     "{}",
@@ -405,7 +418,7 @@ impl SymlinkHandler {
         }
     }
 
-    /// Deletes symlinks from $HOME if they're owned by dotfiles dir
+    /// Deletes symlinks from $TUCKR_TARGET if they're owned by dotfiles dir
     fn remove(&self, dry_run: bool, group: &str) {
         fn remove_symlink(dry_run: bool, file: PathBuf) {
             let dotfile = Dotfile::try_from(file).unwrap();
@@ -553,6 +566,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
 pub fn add_cmd(
     profile: Option<String>,
     dry_run: bool,
+    only_files: bool,
     groups: &[String],
     exclude: &[String],
     force: bool,
@@ -628,7 +642,7 @@ pub fn add_cmd(
             remove_files_and_decide_if_adopt(&sym.not_symlinked, true);
         }
 
-        sym.add(dry_run, group)
+        sym.add(dry_run, only_files, group)
     })?;
 
     Ok(())
@@ -730,7 +744,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
     // --- Creates all the tables and prints them ---
     use tabled::{
-        col, format::Format, object::Columns, object::Rows, Alignment, Margin, Modify, Style,
+        Alignment, Margin, Modify, Style, col, format::Format, object::Columns, object::Rows,
     };
 
     let mut sym_table = Table::new(status_rows);
@@ -1062,6 +1076,7 @@ mod tests {
         super::add_cmd(
             None,
             false,
+            false,
             &["Group1".to_string()],
             &[],
             false,
@@ -1079,6 +1094,7 @@ mod tests {
 
         super::add_cmd(
             None,
+            false,
             false,
             &["Group1".to_string()],
             &[],

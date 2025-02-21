@@ -63,9 +63,13 @@ enum Command {
         #[arg(short, long)]
         adopt: bool,
 
-        /// Automatically answer yes to stdin prompts
+        /// Automatically answer yes on every prompt
         #[arg(short = 'y', long)]
         assume_yes: bool,
+
+        /// Only add files and ignore directories
+        #[arg(long)]
+        only_files: bool,
     },
 
     /// Remove dotfiles for the supplied groups
@@ -98,6 +102,10 @@ enum Command {
         /// Automatically answer yes to stdin prompts
         #[arg(short = 'y', long)]
         assume_yes: bool,
+
+        /// Only add files and ignore directories
+        #[arg(long)]
+        only_files: bool,
     },
 
     /// Remove groups and run their cleanup hooks
@@ -160,10 +168,13 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ListType {
+    /// Lists dotfiles directories with a suffix _<profile> (alias: p)
     #[command(alias = "p")]
     Profiles,
     #[command(alias = "s")]
+    /// Lists encrypted files (alias: s)
     Secrets,
+    /// Lists which hooks exists for each group (alias: h)
     #[command(alias = "h")]
     Hooks,
 }
@@ -180,9 +191,11 @@ fn main() -> ExitCode {
             force,
             adopt,
             assume_yes,
+            only_files,
         } => hooks::set_cmd(
             cli.profile,
             cli.dry_run,
+            only_files,
             &groups,
             &exclude,
             force,
@@ -200,9 +213,11 @@ fn main() -> ExitCode {
             force,
             adopt,
             assume_yes,
+            only_files,
         } => symlinks::add_cmd(
             cli.profile,
             cli.dry_run,
+            only_files,
             &groups,
             &exclude,
             force,

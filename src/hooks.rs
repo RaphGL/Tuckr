@@ -170,6 +170,7 @@ fn get_hooks_dir_if_groups_are_valid(
 pub fn set_cmd(
     profile: Option<String>,
     dry_run: bool,
+    only_files: bool,
     groups: &[String],
     exclude: &[String],
     force: bool,
@@ -209,6 +210,7 @@ pub fn set_cmd(
                     symlinks::add_cmd(
                         profile.clone(),
                         dry_run,
+                        only_files,
                         groups,
                         exclude,
                         force,
@@ -237,13 +239,7 @@ pub fn set_cmd(
     let true_symbol = "✓".green().to_string();
     let false_symbol = "✗".red().to_string();
 
-    let get_symbol = |success: bool| -> &str {
-        if success {
-            &true_symbol
-        } else {
-            &false_symbol
-        }
-    };
+    let get_symbol = |success: bool| -> &str { if success { &true_symbol } else { &false_symbol } };
 
     let mut hooks_summary: Vec<RunStatus> = Vec::new();
 
@@ -301,7 +297,7 @@ pub fn set_cmd(
     }
 
     if groups.len() > 1 {
-        use tabled::{object::Segment, Alignment, Margin, Modify, Style};
+        use tabled::{Alignment, Margin, Modify, Style, object::Segment};
 
         let mut hooks_list = Table::new(hooks_summary);
         hooks_list
