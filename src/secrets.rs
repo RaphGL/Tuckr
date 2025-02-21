@@ -4,7 +4,7 @@
 
 use crate::dotfiles::{self, Dotfile, ReturnCode};
 use crate::fileops::DirWalk;
-use chacha20poly1305::{aead::Aead, AeadCore, KeyInit, XChaCha20Poly1305};
+use chacha20poly1305::{AeadCore, KeyInit, XChaCha20Poly1305, aead::Aead};
 use owo_colors::OwoColorize;
 use rand::rngs;
 use rust_i18n::t;

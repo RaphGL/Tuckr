@@ -21,8 +21,19 @@ use std::process::ExitCode;
 
 rust_i18n::i18n!("locales", minify_key = true, fallback = "en");
 
+/// style similar to cargo's
+const fn tuckr_color_styles() -> clap::builder::Styles {
+    use clap::builder::styling::{AnsiColor, Styles};
+    let styles = Styles::styled()
+        .header(AnsiColor::Green.on_default())
+        .usage(AnsiColor::Green.on_default())
+        .placeholder(AnsiColor::BrightCyan.on_default())
+        .literal(AnsiColor::BrightCyan.on_default());
+    styles
+}
+
 #[derive(Parser)]
-#[command(about, author, version, propagate_version = true)]
+#[command(about, author, version, propagate_version = true, styles = tuckr_color_styles())]
 struct Cli {
     /// Choose which dotfile profile to use
     #[arg(short, long)]
