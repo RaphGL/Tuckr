@@ -563,6 +563,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
 }
 
 /// Adds symlinks
+#[allow(clippy::too_many_arguments)]
 pub fn add_cmd(
     profile: Option<String>,
     dry_run: bool,

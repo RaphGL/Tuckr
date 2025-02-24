@@ -11,7 +11,6 @@ use crate::symlinks;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::fs;
-use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 use tabled::{Table, Tabled};
 
@@ -141,32 +140,40 @@ fn run_set_hook(
     Ok(())
 }
 
-fn get_hooks_dir_if_groups_are_valid(
-    profile: &Option<String>,
-    groups: &[String],
-) -> Result<PathBuf, ExitCode> {
-    if let Some(invalid_groups) =
-        dotfiles::check_invalid_groups(profile.clone(), dotfiles::DotfileType::Hooks, groups)
-    {
-        for group in invalid_groups {
-            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
+macro_rules! get_hooks_dir_if_exists_or_run_cmd {
+    ($profile:ident, $groups:ident, $cmd:expr) => {{
+        if let Some(invalid_groups) =
+            dotfiles::check_invalid_groups($profile.clone(), dotfiles::DotfileType::Hooks, $groups)
+        {
+            if dotfiles::check_invalid_groups(
+                $profile.clone(),
+                dotfiles::DotfileType::Configs,
+                $groups,
+            )
+            .is_some()
+            {
+                for group in invalid_groups {
+                    println!("{}", t!("errors.x_doesnt_exist", x = group).red());
+                }
+
+                return Err(ReturnCode::NoSuchFileOrDir.into());
+            } else {
+                return $cmd;
+            }
         }
 
-        return Err(ReturnCode::NoSuchFileOrDir.into());
-    }
-
-    let hooks_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
-        Ok(dir) => dir.join("Hooks"),
-        Err(e) => {
-            eprintln!("{e}",);
-            return Err(ReturnCode::NoSetupFolder.into());
+        match dotfiles::get_dotfiles_path($profile.clone()) {
+            Ok(dir) => dir.join("Hooks"),
+            Err(err) => {
+                eprintln!("{}", err.red());
+                return Err(ReturnCode::NoSetupFolder.into());
+            }
         }
-    };
-
-    Ok(hooks_dir)
+    }};
 }
 
 /// Runs hooks for specified groups and symlinks them
+#[allow(clippy::too_many_arguments)]
 pub fn set_cmd(
     profile: Option<String>,
     dry_run: bool,
@@ -177,7 +184,12 @@ pub fn set_cmd(
     adopt: bool,
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    let hooks_dir = get_hooks_dir_if_groups_are_valid(&profile, groups)?;
+    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
+        println!("{}", "No hooks exist. Running `tuckr rm <args>`".yellow());
+        symlinks::add_cmd(
+            profile, dry_run, only_files, groups, exclude, force, adopt, assume_yes,
+        )
+    });
 
     let run_deploy_steps = |stages: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
         if !group.is_valid_target() {
@@ -319,7 +331,10 @@ pub fn unset_cmd(
     groups: &[String],
     exclude: &[String],
 ) -> Result<(), ExitCode> {
-    let hooks_dir = get_hooks_dir_if_groups_are_valid(&profile, groups)?;
+    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
+        println!("{}", "No hooks exist. Running `tuckr rm <args>`".yellow());
+        symlinks::remove_cmd(profile, dry_run, groups, exclude)
+    });
 
     for group in groups {
         let group_dir = hooks_dir.join(group);
