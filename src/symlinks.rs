@@ -598,7 +598,7 @@ pub fn add_cmd(
         }
     }
 
-    foreach_group(profile, groups, exclude, true, |sym, group| {
+    foreach_group(profile.clone(), groups, exclude, true, |sym, group| {
         let remove_files_and_decide_if_adopt = |status_group: &HashCache, adopt: bool| {
             let group = status_group.get(group);
             if let Some(group_files) = group {
@@ -646,6 +646,25 @@ pub fn add_cmd(
         sym.add(dry_run, only_files, group)
     })?;
 
+    let post_add_sym = SymlinkHandler::try_new(profile.clone())?;
+    let potential_conflicts = post_add_sym.get_conflicts_in_cache();
+
+    if !potential_conflicts.is_empty() {
+        if groups.iter().any(|g| g == "*") {
+            println!(
+                "{}",
+                "Conflicts were detected. Run `tuckr status` to learn more.".yellow()
+            );
+        }
+
+        if groups.iter().any(|g| potential_conflicts.contains_key(g)) {
+            println!(
+                "{}\n",
+                "Conflicts were detected. Conflicting groups won't be added until conflicts are resolved.".yellow()
+            );
+            return print_groups_status(profile, &post_add_sym, groups.into());
+        }
+    }
     Ok(())
 }
 
@@ -888,7 +907,7 @@ fn print_groups_status(
                     }
                 };
 
-                println!("\t\t -> {} ({})", conflict.display(), msg,);
+                println!("\t -> {} ({})", conflict.display(), msg,);
             }
         }
 
@@ -901,7 +920,7 @@ fn print_groups_status(
         }
 
         for group in file_conflicts.keys() {
-            println!("\t{}", group.red());
+            print!("\t{}", group.red());
             print_conflicts(&file_conflicts, group);
         }
 
