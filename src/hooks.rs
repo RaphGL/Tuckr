@@ -6,11 +6,12 @@
 //! 2. Dotfiles are symlinked
 //! 3. Post setup scripts are run
 
-use crate::dotfiles::{self, Dotfile, ReturnCode};
+use crate::dotfiles::{self, ReturnCode};
 use crate::symlinks;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 use tabled::{Table, Tabled};
 
@@ -83,6 +84,11 @@ fn run_set_hook(
     };
 
     let group_dir = dotfiles_dir.join("Hooks").join(group);
+    // a hook might just be a `tuckr add` meaning, so a corresponding hooks group dir might just not exist at all
+    if !group_dir.exists() {
+        return Ok(());
+    }
+
     let Ok(group_dir) = fs::read_dir(group_dir) else {
         eprintln!("{}", t!("errors.could_not_read_hooks").red());
         return Err(ReturnCode::NoSetupFolder.into());
@@ -191,8 +197,8 @@ pub fn set_cmd(
         )
     });
 
-    let run_deploy_steps = |stages: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
-        if !group.is_valid_target() || exclude.contains(&group.group_name) {
+    let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
+        if !dotfiles::group_is_valid_target(&group) || exclude.contains(&group) {
             return Ok(());
         }
 
@@ -201,14 +207,14 @@ pub fn set_cmd(
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_set_hook(profile.clone(), dry_run, &group.group_name, step)?;
+                    run_set_hook(profile.clone(), dry_run, &group, step)?;
                 }
 
                 DeployStep::Symlink => {
                     if dotfiles::check_invalid_groups(
                         profile.clone(),
                         dotfiles::DotfileType::Configs,
-                        &[&group.group_name],
+                        &[&group],
                     )
                     .is_some()
                     {
@@ -217,13 +223,13 @@ pub fn set_cmd(
 
                     print_info_box(
                         &t!("info.symlinking_group"),
-                        group.group_name.yellow().to_string().as_str(),
+                        group.yellow().to_string().as_str(),
                     );
                     symlinks::add_cmd(
                         profile.clone(),
                         dry_run,
                         only_files,
-                        &[group.group_name.clone()],
+                        &[group.clone()],
                         exclude,
                         force,
                         adopt,
@@ -231,14 +237,57 @@ pub fn set_cmd(
                     )?;
                 }
 
-                DeployStep::PostHook => {
-                    run_set_hook(profile.clone(), dry_run, &group.group_name, step)?
-                }
+                DeployStep::PostHook => run_set_hook(profile.clone(), dry_run, &group, step)?,
             }
         }
 
         Ok(())
     };
+
+    let mut groups = if groups.contains(&'*'.to_string()) {
+        let mut groups = Vec::new();
+        let mut add_group_dotfiles = |dir: PathBuf| -> Result<(), ExitCode> {
+            for folder in fs::read_dir(dir).unwrap() {
+                let folder = folder.unwrap();
+                groups.push(folder.file_name().into_string().unwrap());
+            }
+
+            Ok(())
+        };
+
+        add_group_dotfiles(hooks_dir)?;
+
+        let configs_dir = dotfiles::get_dotfiles_path(profile.clone())
+            .unwrap()
+            .join("Configs");
+
+        if configs_dir.exists() {
+            add_group_dotfiles(configs_dir)?;
+        }
+        groups
+    } else {
+        // groups with their related conditional groups added
+        let mut expanded_groups = groups.to_vec();
+
+        for file in hooks_dir.read_dir().unwrap() {
+            let filename = file.unwrap().file_name().into_string().unwrap();
+            let base_group = dotfiles::group_without_target(&filename);
+
+            if expanded_groups
+                .iter()
+                .any(|group| group == base_group && *group != filename)
+            {
+                expanded_groups.push(filename);
+            }
+        }
+
+        expanded_groups
+    };
+    // sorting is necessary to ensure that the conditional groups are run right after their base group
+    groups.sort();
+    groups.dedup();
+    // trick to restore immutability
+    let groups = groups;
 
     #[derive(Tabled)]
     struct RunStatus<'a> {
@@ -250,62 +299,14 @@ pub fn set_cmd(
 
     let true_symbol = "✓".green().to_string();
     let false_symbol = "✗".red().to_string();
-
     let get_symbol = |success: bool| -> &str { if success { &true_symbol } else { &false_symbol } };
 
     let mut hooks_summary: Vec<RunStatus> = Vec::new();
-
-    if groups.contains(&'*'.to_string()) {
-        for folder in fs::read_dir(hooks_dir).unwrap() {
-            let folder = folder.unwrap().path();
-            let Ok(group) = Dotfile::try_from(folder.clone()) else {
-                eprintln!(
-                    "{}",
-                    format!("Got an invalid group: {}", folder.display()).red()
-                );
-                return Err(ExitCode::FAILURE);
-            };
-
-            hooks_summary.push(RunStatus {
-                succeeded: get_symbol(run_deploy_steps(DeployStages::new(), &group).is_ok()),
-                group: group.group_name,
-            })
-        }
-    } else {
-        // groups with their related conditional groups added
-        let groups = {
-            let mut groups = groups.to_vec();
-
-            for file in hooks_dir.read_dir().unwrap() {
-                let filename = file.unwrap().file_name();
-                let filename = filename.into_string().unwrap();
-                let base_group = dotfiles::group_without_target(&filename);
-
-                if groups.iter().any(|g| g == base_group && *g != filename) {
-                    groups.push(filename);
-                }
-            }
-
-            // sorting is necessary to ensure that the conditional groups are run right after their base group
-            groups.sort();
-            groups
-        };
-
-        for group in groups {
-            let hook_path = hooks_dir.join(group);
-            let Ok(group) = Dotfile::try_from(hook_path.clone()) else {
-                eprintln!(
-                    "{}",
-                    t!("errors.got_invalid_group", group = hook_path.display()).red()
-                );
-                return Err(ExitCode::FAILURE);
-            };
-
-            hooks_summary.push(RunStatus {
-                succeeded: get_symbol(run_deploy_steps(DeployStages::new(), &group).is_ok()),
-                group: group.group_name,
-            })
-        }
+    for group in &groups {
+        hooks_summary.push(RunStatus {
+            succeeded: get_symbol(run_deploy_steps(DeployStages::new(), group.clone()).is_ok()),
+            group: group.clone(),
+        })
     }
 
     if groups.len() > 1 {
@@ -317,7 +318,10 @@ pub fn set_cmd(
             .with(Margin::new(2, 4, 1, 1))
             .with(Modify::new(Segment::new(1.., 1..)).with(Alignment::center()));
 
-        println!("\n\n Hooks have finished running. Here's a summary:");
+        println!(
+            "{}",
+            "\n\n Hooks have finished running. Here's a summary:".green()
+        );
         println!("{hooks_list}");
     }
 
@@ -335,6 +339,11 @@ pub fn unset_cmd(
         println!("{}", "No hooks exist. Running `tuckr rm`".yellow());
         symlinks::remove_cmd(profile, dry_run, groups, exclude)
     });
+
+    let wildcard = String::from("*");
+    if groups.contains(&wildcard) {
+        return symlinks::remove_cmd(profile, dry_run, &[wildcard], exclude);
+    }
 
     for group in groups {
         let group_dir = hooks_dir.join(group);
