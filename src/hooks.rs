@@ -185,14 +185,14 @@ pub fn set_cmd(
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
     let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
-        println!("{}", "No hooks exist. Running `tuckr rm <args>`".yellow());
+        println!("{}", "No hooks exist. Running `tuckr add`".yellow());
         symlinks::add_cmd(
             profile, dry_run, only_files, groups, exclude, force, adopt, assume_yes,
         )
     });
 
     let run_deploy_steps = |stages: DeployStages, group: &Dotfile| -> Result<(), ExitCode> {
-        if !group.is_valid_target() {
+        if !group.is_valid_target() || exclude.contains(&group.group_name) {
             return Ok(());
         }
 
@@ -223,7 +223,7 @@ pub fn set_cmd(
                         profile.clone(),
                         dry_run,
                         only_files,
-                        groups,
+                        &[group.group_name.clone()],
                         exclude,
                         force,
                         adopt,
@@ -332,7 +332,7 @@ pub fn unset_cmd(
     exclude: &[String],
 ) -> Result<(), ExitCode> {
     let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
-        println!("{}", "No hooks exist. Running `tuckr rm <args>`".yellow());
+        println!("{}", "No hooks exist. Running `tuckr rm`".yellow());
         symlinks::remove_cmd(profile, dry_run, groups, exclude)
     });
 
