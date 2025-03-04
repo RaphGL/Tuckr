@@ -20,3 +20,4 @@ sha2 = "0.10"
 sys-locale = "0.3.2"
 tabled = {version = "0.10", features = ["color"]}
 zeroize = "1.5"
+age = "0.11"
