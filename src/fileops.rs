@@ -159,7 +159,10 @@ pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> 
         dotfiles_dir.join("Secrets"),
     ] {
         if dry_run {
-            eprintln!("{} directory `{}`", "creating".green(), dir.display())
+            eprintln!(
+                "{}",
+                t!("dry-run.creating_dir", dir = dir.display()).green(),
+            )
         } else if let Err(e) = fs::create_dir_all(dir) {
             eprintln!("{}", e.red());
             return Err(ExitCode::FAILURE);
@@ -234,10 +237,13 @@ pub fn push_cmd(
                     );
                 }
                 eprintln!(
-                    "{} `{}` to `{}`",
-                    "copying".green(),
-                    file.display(),
-                    target_file.display()
+                    "{}",
+                    t!(
+                        "dry-run.copying_x_to_y",
+                        x = file.display(),
+                        y = target_file.display()
+                    )
+                    .green()
                 );
             } else {
                 fs::create_dir_all(target_parent_dir).unwrap();
@@ -338,7 +344,10 @@ pub fn pop_cmd(
 
     for group_path in valid_groups {
         if dry_run {
-            eprintln!("{} `{}`", "removing".red(), group_path.display());
+            eprintln!(
+                "{}",
+                t!("dry-run.removing_x", x = group_path.display()).red()
+            );
             continue;
         }
 
@@ -408,7 +417,7 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     }
 
     if rows.is_empty() {
-        println!("{}", "No hooks have been set up yet.".to_string().yellow());
+        println!("{}", t!("errors.no_x_setup_yet", x = "hooks").yellow());
         return Ok(());
     }
 

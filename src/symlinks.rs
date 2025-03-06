@@ -35,9 +35,12 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
             if target_path.exists() {
                 if dry_run {
                     eprintln!(
-                        "{} `{}` as it already exists",
-                        "ignoring".yellow(),
-                        target_path.display()
+                        "{}",
+                        t!(
+                            "dry-run.ignoring_x_already_exists",
+                            x = target_path.display()
+                        )
+                        .yellow()
                     );
                 }
                 return;
@@ -45,10 +48,12 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
 
             if dry_run {
                 eprintln!(
-                    "{} `{}` to `{}`",
-                    "symlinking".green(),
-                    f.display(),
-                    target_path.display()
+                    "{}",
+                    t!(
+                        "dry-run.symlinking_x_to_y",
+                        x = f.display(),
+                        y = target_path.display()
+                    )
                 );
                 return;
             }
@@ -148,8 +153,11 @@ impl SymlinkHandler {
 
         if !configs_dir.path.exists() && !configs_dir.path.is_dir() {
             eprintln!(
-                "There is no Configs directory in dotfiles ({})",
-                configs_dir.path.display()
+                "{}",
+                t!(
+                    "errors.no_configs_dir_in_dotfiles",
+                    dotfiles = configs_dir.path.display()
+                )
             );
             return Err(ReturnCode::CouldntFindDotfiles.into());
         }
@@ -400,7 +408,6 @@ impl SymlinkHandler {
                         let target_parent = f_target.parent().unwrap();
 
                         if !target_parent.exists() {
-                            println!("creating parent dir for {group:?}");
                             fs::create_dir_all(target_parent).unwrap();
                         }
                     }
@@ -432,7 +439,10 @@ impl SymlinkHandler {
             }
 
             if dry_run {
-                eprintln!("{} `{}`", "removing".red(), target_dotfile.display());
+                eprintln!(
+                    "{}",
+                    t!("dry-run.removing_x", x = target_dotfile.display()).red()
+                );
                 return;
             }
 
@@ -608,7 +618,10 @@ pub fn add_cmd(
                     let deleted_file = if adopt { &file.path } else { &target_file };
 
                     if dry_run {
-                        eprintln!("{} `{}`", "removing".red(), deleted_file.display());
+                        eprintln!(
+                            "{}",
+                            t!("dry-run.removing_x", x = deleted_file.display()).red()
+                        );
                     } else if target_file.is_dir() {
                         fs::remove_dir_all(deleted_file).unwrap();
                     } else if target_file.is_file() {
@@ -618,10 +631,13 @@ pub fn add_cmd(
                     if adopt {
                         if dry_run {
                             eprintln!(
-                                "{} `{}` to `{}`",
-                                "moving".yellow(),
-                                target_file.display(),
-                                file.path.display()
+                                "{}",
+                                t!(
+                                    "dry-run.moving_x_to_y",
+                                    x = target_file.display(),
+                                    y = file.path.display()
+                                )
+                                .yellow()
                             );
                         } else {
                             fs::rename(target_file, &file.path).unwrap();
@@ -652,15 +668,21 @@ pub fn add_cmd(
     if !potential_conflicts.is_empty() {
         if groups.iter().any(|g| g == "*") {
             println!(
-                "{}",
-                "Conflicts were detected. Run `tuckr status` to learn more.".yellow()
+                "{} {}",
+                t!("info.conflicts_detected").yellow(),
+                t!("info.learn_more_about_conflicts", cmd = "tuckr status").yellow(),
             );
         }
 
         if groups.iter().any(|g| potential_conflicts.contains_key(g)) {
             println!(
-                "{}\n",
-                "Conflicts were detected. Conflicting groups won't be added until conflicts are resolved.".yellow()
+                "{} {}",
+                t!("info.conflicts_detected").yellow(),
+                t!(
+                    "info.conflicting_groups_not_added_until_resolved",
+                    cmd = "tuckr status"
+                )
+                .yellow(),
             );
             return print_groups_status(profile, &post_add_sym, groups.into());
         }

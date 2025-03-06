@@ -121,10 +121,13 @@ pub fn encrypt_cmd(
         let encrypted_file_path = dest_dir.join(target_file);
         if dry_run {
             eprintln!(
-                "{} `{}` into `{}`",
-                "encrypting".green(),
-                dotfile.display(),
-                encrypted_file_path.display()
+                "{}",
+                t!(
+                    "dry-run.encrypting_x_into_y",
+                    x = dotfile.display(),
+                    y = encrypted_file_path.display()
+                )
+                .green()
             );
             return Ok(());
         }
@@ -210,10 +213,13 @@ pub fn decrypt_cmd(
 
             if dry_run {
                 eprintln!(
-                    "{} `{}` into `{}`",
-                    "decrypting".green(),
-                    secret.display(),
-                    decrypted_dest.display()
+                    "{}",
+                    t!(
+                        "dry-run.decrypting_x_into_y",
+                        x = secret.display(),
+                        y = decrypted_dest.display()
+                    )
+                    .green()
                 );
                 continue;
             }

@@ -191,7 +191,10 @@ pub fn set_cmd(
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
     let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
-        println!("{}", "No hooks exist. Running `tuckr add`".yellow());
+        println!(
+            "{}",
+            t!("info.no_hooks_exist_running_cmd", cmd = "tuckr add").yellow()
+        );
         symlinks::add_cmd(
             profile, dry_run, only_files, groups, exclude, force, adopt, assume_yes,
         )
@@ -318,10 +321,7 @@ pub fn set_cmd(
             .with(Margin::new(2, 4, 1, 1))
             .with(Modify::new(Segment::new(1.., 1..)).with(Alignment::center()));
 
-        println!(
-            "{}",
-            "\n\n Hooks have finished running. Here's a summary:".green()
-        );
+        println!("\n\n{}", t!("info.hooks_finished").green());
         println!("{hooks_list}");
     }
 
@@ -336,7 +336,10 @@ pub fn unset_cmd(
     exclude: &[String],
 ) -> Result<(), ExitCode> {
     let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
-        println!("{}", "No hooks exist. Running `tuckr rm`".yellow());
+        println!(
+            "{}",
+            t!("info.no_hooks_exist_running_cmd", cmd = "tuckr rm").yellow()
+        );
         symlinks::remove_cmd(profile, dry_run, groups, exclude)
     });
 
