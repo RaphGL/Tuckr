@@ -18,15 +18,16 @@ use tabled::{Table, Tabled};
 /// Prints a single row info box with title on the left
 /// and content on the right
 fn print_info_box(title: &str, content: &str) {
-    let mut hook_box = tabled::builder::Builder::default()
-        .set_columns([title])
-        .add_record([content])
-        .to_owned()
-        .build();
-    hook_box
-        .with(tabled::Rotate::Left)
-        .with(tabled::Style::rounded().off_vertical());
-    println!("{hook_box}");
+    let mut box_builder = tabled::builder::Builder::new();
+    box_builder.push_column([title]);
+    box_builder.push_record([content]);
+
+    let mut box_table = box_builder.build();
+    box_table
+        .with(tabled::settings::Rotate::Left)
+        .with(tabled::settings::Style::modern_rounded().remove_vertical());
+
+    println!("{box_table}");
 }
 
 #[derive(Debug, PartialEq)]
@@ -313,7 +314,7 @@ pub fn set_cmd(
     }
 
     if groups.len() > 1 {
-        use tabled::{Alignment, Margin, Modify, Style, object::Segment};
+        use tabled::settings::{Alignment, Margin, Modify, Style, object::Segment};
 
         let mut hooks_list = Table::new(hooks_summary);
         hooks_list

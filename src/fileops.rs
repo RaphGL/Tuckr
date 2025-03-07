@@ -10,8 +10,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::{fs, path};
-use tabled::object::Segment;
-use tabled::{Alignment, Modify, Table, Tabled};
+use tabled::{Table, Tabled};
 
 fn is_ignored_file(file: impl AsRef<Path>) -> bool {
     let file = file.as_ref().file_name().unwrap().to_str().unwrap();
@@ -421,13 +420,11 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         return Ok(());
     }
 
-    use tabled::{Margin, Style};
-
     let mut hooks_list = Table::new(rows);
-    hooks_list
-        .with(Style::rounded())
-        .with(Margin::new(4, 4, 1, 1))
-        .with(Modify::new(Segment::new(1.., 1..)).with(Alignment::center()));
+    hooks_list.with(tabled::settings::Alignment::center());
+    hooks_list.with(tabled::settings::Style::rounded());
+    hooks_list.with(tabled::settings::Margin::new(4, 4, 1, 1));
+
     println!("{hooks_list}");
 
     Ok(())

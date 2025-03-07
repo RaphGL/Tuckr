@@ -15,6 +15,7 @@ use enumflags2::{BitFlags, make_bitflags};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -785,22 +786,23 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     let conflicts: HashSet<_> = conflicts.keys().collect();
 
     // --- Creates all the tables and prints them ---
-    use tabled::{
-        Alignment, Margin, Modify, Style, col, format::Format, object::Columns, object::Rows,
+    use tabled::col;
+    use tabled::settings::{
+        Alignment, Margin, Modify, Style, format::Format, object::Columns, object::Rows,
     };
 
     let mut sym_table = Table::new(status_rows);
     sym_table
         .with(Style::rounded())
-        .with(Margin::new(4, 4, 1, 1))
-        .with(Modify::new(Rows::first()).with(Format::new(|s| s.default_color().to_string())))
-        .with(Modify::new(Columns::single(0)).with(Format::new(|s| s.green().to_string())))
-        .with(Modify::new(Columns::single(1)).with(Format::new(|s| s.red().to_string())));
+        .with(Modify::new(Rows::first()).with(Format::content(|s| s.default_color().to_string())))
+        .with(Modify::new(Columns::single(0)).with(Format::content(|s| s.green().to_string())))
+        .with(Modify::new(Columns::single(1)).with(Format::content(|s| s.red().to_string())));
 
-    let mut conflict_table = Table::builder(&conflicts)
-        .set_columns(["Conflicting Dotfiles".yellow().to_string()])
-        .clone()
-        .build();
+    let conflict_builder = tabled::Table::builder(&conflicts)
+        .index()
+        .column(0)
+        .name(Some("Conflicting Dotfiles".yellow().to_string()));
+    let mut conflict_table = conflict_builder.build();
     conflict_table
         .with(Style::empty())
         .with(Alignment::center());
@@ -812,12 +814,15 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
         col![sym_table, conflict_table]
     };
 
-    final_table.with(Style::empty()).with(Alignment::center());
+    final_table
+        .with(Style::empty())
+        .with(Alignment::center())
+        .with(Margin::new(4, 4, 1, 1));
     println!("{final_table}");
 
     if !conflicts.is_empty() {
         println!(
-            "\n{}",
+            "{}",
             t!(
                 "info.learn_more_about_conflicts",
                 cmd = "tuckr status <group...>"

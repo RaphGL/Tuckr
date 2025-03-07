@@ -18,5 +18,5 @@ rpassword = "7.3"
 rust-i18n = "3.1"
 sha2 = "0.10"
 sys-locale = "0.3.2"
-tabled = {version = "0.10", features = ["color"]}
+tabled = {version = "0.18", features = ["ansi"]}
 zeroize = "1.8"
