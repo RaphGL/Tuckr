@@ -370,6 +370,14 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
+    if !dir.is_dir() {
+        eprintln!(
+            "{}",
+            format!("`{}` has to be a directory not a file", dir.display()).red()
+        );
+        return Err(ReturnCode::NoSetupFolder.into());
+    }
+
     #[derive(Tabled)]
     struct ListRow<'a> {
         #[tabled(rename = "Group")]
@@ -389,18 +397,23 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     let false_symbol = "✗".red().to_string();
 
     for hook in dir {
-        let hook_dir = hook.unwrap();
+        let hook_dir = hook.unwrap().path();
+
+        if !hook_dir.is_dir() {
+            continue;
+        }
+
         let hook_name = hook_dir.file_name();
-        let group = hook_name.to_str().unwrap().to_string();
+        let group = hook_name.unwrap().to_str().unwrap();
 
         let mut hook_entry = ListRow {
-            group,
+            group: group.to_owned(),
             pre_hook: &false_symbol,
             post_hook: &false_symbol,
             rm_hook: &false_symbol,
         };
 
-        for hook in fs::read_dir(hook_dir.path()).unwrap() {
+        for hook in fs::read_dir(hook_dir).unwrap() {
             let hook = hook.unwrap().file_name();
             let hook = hook.to_str().unwrap();
             if hook.starts_with("pre") {

@@ -15,7 +15,6 @@ use enumflags2::{BitFlags, make_bitflags};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
