@@ -11,6 +11,7 @@
 //! $TUCKR_TARGET equivalents are pointing to them and categorizing them accordingly.
 
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
+use crate::filetree::FileTree;
 use enumflags2::{BitFlags, make_bitflags};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
@@ -109,14 +110,13 @@ type HashCache = HashMap<String, HashSet<Dotfile>>;
 
 /// Handles dotfile symlinking and their current status
 struct SymlinkHandler {
-    dotfiles_dir: PathBuf,    // path to the dotfiles directory
-    symlinked: HashCache,     // dotfiles that have been symlinked from Dotfiles/Configs
-    not_symlinked: HashCache, // dotfiles that haven't been symlinked to $TUCKR_TARGET yet
-    not_owned: HashCache, // dotfiles that are symlinks but points somewhere outside of their respective Dotfiles/Configs's group dir
+    dotfiles_dir: PathBuf,
+    symlinked: FileTree, // dotfiles that have been symlinked from Dotfiles/Configs
+    not_symlinked: FileTree, // dotfiles that haven't been symlinked to $TUCKR_TARGET yet
+    not_owned: FileTree, // dotfiles that are symlinks but point somewhere outside of their respective Dotfiles/Configs's group dir
 }
 
 impl SymlinkHandler {
-    /// Initializes SymlinkHandler and fills it dotfiles' status information
     fn try_new(profile: Option<String>) -> Result<Self, ExitCode> {
         let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
             Ok(dir) => dir,
@@ -131,11 +131,13 @@ impl SymlinkHandler {
             return Err(ReturnCode::NoSuchFileOrDir.into());
         }
 
+        let file_tree = FileTree::new(&Dotfile::try_from(dotfiles_dir.join("Configs")).unwrap());
+
         let symlinker = SymlinkHandler {
             dotfiles_dir,
-            symlinked: HashCache::new(),
-            not_symlinked: HashCache::new(),
-            not_owned: HashCache::new(),
+            symlinked: file_tree.clone(),
+            not_symlinked: file_tree.clone(),
+            not_owned: file_tree.clone(),
         };
 
         // this fills the symlinker with dotfile status information
@@ -146,8 +148,6 @@ impl SymlinkHandler {
     ///
     /// Checks which dotfiles are or are not symlinked and registers their Configs/$group path
     /// into the struct
-    ///
-    /// Returns a copy of self with all the fields set accordingly
     fn validate(mut self) -> Result<Self, ExitCode> {
         let configs_dir = Dotfile::try_from(self.dotfiles_dir.join("Configs")).unwrap();
 
@@ -207,59 +207,9 @@ impl SymlinkHandler {
             }
         }
 
-        fn remove_empty_groups(group_type: HashCache) -> HashCache {
-            group_type
-                .iter()
-                .filter(|(_, v)| !v.is_empty())
-                .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                .collect()
-        }
-
-        // removes entries for paths that are subpaths of another entry (canonicalization).
-        // this procedure makes so that symlinks are shallow.
-        //
-        // shallow symlinking: only symlinking files/directories that don't exist already
-        fn canonicalize_groups(groups: &mut HashCache) {
-            for files in groups.values_mut() {
-                let files_copy = files.clone();
-
-                for file in &files_copy {
-                    for file2 in &files_copy {
-                        if file2.path != file.path && file2.path.starts_with(&file.path) {
-                            files.remove(file2);
-                        }
-                    }
-                }
-            }
-        }
-
-        // canonicalizes not_symlinked based on symlinked cache
-        //
-        // this is necessary because if a directory is canonicalized and symlinked,
-        // files inside it won't be symlinked and thus marked as `not_symlinked` wrongly.
-        for (group, files) in &symlinked {
-            let Some(unsymlinked_group) = not_symlinked.get_mut(group) else {
-                continue;
-            };
-
-            let unsymlinked_group_copy = unsymlinked_group.clone();
-
-            for file1 in files {
-                for file2 in unsymlinked_group_copy.iter() {
-                    if file2.path.starts_with(&file1.path) {
-                        unsymlinked_group.remove(file2);
-                    }
-                }
-            }
-        }
-
-        canonicalize_groups(&mut symlinked);
-        canonicalize_groups(&mut not_symlinked);
-        canonicalize_groups(&mut not_owned);
-
-        self.symlinked = remove_empty_groups(symlinked);
-        self.not_symlinked = remove_empty_groups(not_symlinked);
-        self.not_owned = remove_empty_groups(not_owned);
+        self.symlinked.canonicalize();
+        self.not_symlinked.canonicalize();
+        self.not_owned.canonicalize();
 
         Ok(self)
     }
@@ -269,25 +219,23 @@ impl SymlinkHandler {
     }
 
     /// only meant for internal use
-    fn get_related_cond_groups(
-        &self,
-        target_group: &str,
-        cache: &HashCache,
-    ) -> Option<Vec<String>> {
-        if dotfiles::group_ends_with_target_name(target_group) && !cache.contains_key(target_group)
+    fn get_related_cond_groups(&self, target_group: &str, cache: &FileTree) -> Option<Vec<String>> {
+        if dotfiles::group_ends_with_target_name(target_group)
+            && !cache.contains_group(target_group)
         {
             return None;
         }
 
         let cond_groups: Vec<String> = cache
+            .get_groups()
             .iter()
-            .filter(|(group, files)| {
-                // any file in this group is in the same target so just pick any file to check
-                let file = files.iter().next().unwrap();
-
-                group.starts_with(target_group) && file.is_valid_target()
+            .filter_map(|group| {
+                if group.starts_with(target_group) && dotfiles::group_is_valid_target(group) {
+                    Some(group.clone())
+                } else {
+                    None
+                }
             })
-            .map(|(group, _)| group.clone())
             .collect();
 
         if cond_groups.is_empty() {
@@ -343,38 +291,38 @@ impl SymlinkHandler {
         let mut conflicts = HashCache::new();
 
         // mark group as conflicting if at least one value already exists in $TUCKR_TARGET
-        for files in self.not_symlinked.values() {
-            for file in files {
-                if file.to_target_path().unwrap().exists() && file.is_valid_target() {
-                    conflicts.entry(file.group_name.clone()).or_default();
-                    let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
-                    curr_entry.insert(file.clone());
-                }
+        for file in self.not_symlinked.iter() {
+            if file.to_target_path().unwrap().exists() && file.is_valid_target() {
+                conflicts.entry(file.group_name.clone()).or_default();
+                let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
+                curr_entry.insert(file.clone());
             }
         }
 
         // doesn't mark not owned dotfiles as conflicts if a higher priority dotfile
         // with the same file is already symlinked. this allows dotfile fallbacks to
         // work properly instead of falsely flagged as conflicts
-        for files in self.not_owned.values() {
-            for file in files {
-                conflicts.entry(file.group_name.clone()).or_default();
-                let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
+        for file in self.not_owned.iter() {
+            conflicts.entry(file.group_name.clone()).or_default();
+            let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
 
-                let dotfile_source = file.to_target_path().unwrap().read_link().unwrap();
-                let Ok(dotfile) = Dotfile::try_from(dotfile_source) else {
-                    curr_entry.insert(file.clone());
-                    continue;
-                };
+            let dotfile_source = file
+                .to_target_path()
+                .unwrap()
+                .read_link()
+                .expect("not owned files should be guaranteed to be symlinks");
+            let Ok(dotfile) = Dotfile::try_from(dotfile_source) else {
+                curr_entry.insert(file.clone());
+                continue;
+            };
 
-                let target_has_higher_priority = dotfiles::get_group_priority(&dotfile.group_name)
-                    > dotfiles::get_group_priority(&file.group_name);
-                let not_same_base_group = dotfiles::group_without_target(&file.group_name)
-                    != dotfiles::group_without_target(&dotfile.group_name);
+            let target_has_higher_priority = dotfiles::get_group_priority(&dotfile.group_name)
+                > dotfiles::get_group_priority(&file.group_name);
+            let not_same_base_group = dotfiles::group_without_target(&file.group_name)
+                != dotfiles::group_without_target(&dotfile.group_name);
 
-                if dotfile.path != file.path && target_has_higher_priority && not_same_base_group {
-                    curr_entry.insert(file.clone());
-                }
+            if dotfile.path != file.path && target_has_higher_priority && not_same_base_group {
+                curr_entry.insert(file.clone());
             }
         }
 
@@ -545,7 +493,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
             &sym.symlinked
         };
 
-        for group in symgroups.keys() {
+        for group in symgroups.get_groups() {
             if exclude.contains(group) {
                 continue;
             }
@@ -609,9 +557,10 @@ pub fn add_cmd(
     }
 
     foreach_group(profile.clone(), groups, exclude, true, |sym, group| {
-        let remove_files_and_decide_if_adopt = |status_group: &HashCache, adopt: bool| {
+        let remove_files_and_decide_if_adopt = |status_group: &FileTree, adopt: bool| {
             let group = status_group.get(group);
             if let Some(group_files) = group {
+                // TODO: fix to only remove files of the corresponding group
                 for file in group_files {
                     let target_file = file.to_target_path().unwrap();
 
@@ -718,15 +667,12 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     // will be marked as not_symlinked only
 
     let (symlinked, not_symlinked) = {
-        let mut not_symlinked: Vec<_> = sym
-            .not_symlinked
-            .keys()
-            .map(|group| group.as_str())
-            .collect();
+        let mut not_symlinked: Vec<_> = sym.not_symlinked.get_groups().iter().collect();
 
         let mut symlinked: Vec<_> = sym
             .symlinked
-            .keys()
+            .get_groups()
+            .iter()
             .filter_map(|group| {
                 if sym
                     .get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
@@ -871,7 +817,7 @@ fn print_groups_status(
                         }
 
                         None => {
-                            if !sym.not_symlinked.contains_key(&group) {
+                            if !sym.not_symlinked.contains_group(&group) {
                                 continue;
                             }
                         }
@@ -1118,7 +1064,7 @@ mod tests {
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
 
-        assert!(!sym.symlinked.contains_key("Group1"));
+        assert!(!sym.symlinked.contains_group("Group1"));
         super::add_cmd(
             None,
             false,
@@ -1132,7 +1078,7 @@ mod tests {
         .unwrap();
 
         let sym = SymlinkHandler::try_new(None).unwrap();
-        assert!(sym.symlinked.contains_key("Group1"));
+        assert!(sym.symlinked.contains_group("Group1"));
     }
 
     fn test_removing_symlink() {
@@ -1155,11 +1101,11 @@ mod tests {
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
 
-        assert!(!sym.not_symlinked.contains_key("Group1"));
+        assert!(!sym.not_symlinked.contains_group("Group1"));
 
         super::remove_cmd(None, false, &["Group1".to_string()], &[]).unwrap();
         let sym = SymlinkHandler::try_new(None).unwrap();
-        assert!(sym.not_symlinked.contains_key("Group1"));
+        assert!(sym.not_symlinked.contains_group("Group1"));
     }
 
     #[test]

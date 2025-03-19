@@ -164,6 +164,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
     }
 }
 
+// returns true if group ends with a valid target platform suffix
 pub fn group_ends_with_target_name(group: &str) -> bool {
     VALID_TARGETS.iter().any(|target| group.ends_with(target))
 }
@@ -213,20 +214,16 @@ impl Dotfile {
     /// Converts a path string from dotfiles/Configs to where they should be
     /// deployed on $TUCKR_TARGET
     pub fn to_target_path(&self) -> Result<PathBuf, String> {
-        // uses join("") so that the path appends / or \ depending on platform
         let dotfiles_configs_path = get_dotfiles_path(get_dotfile_profile_from_path(&self.path))
             .unwrap()
-            .join("Configs")
-            .join("");
+            .join("Configs");
 
         let group_path = {
-            let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+            let dotfile_path = self.path.strip_prefix(dotfiles_configs_path).unwrap();
+            let mut dotfile_path_components = dotfile_path.components();
 
-            let dotfile_path = self.path.to_str().unwrap();
-            let dotfile_path = dotfile_path.strip_prefix(dotfiles_configs_path).unwrap();
-
-            match dotfile_path.split_once(path::MAIN_SEPARATOR) {
-                Some(path) => path.1,
+            match dotfile_path_components.next() {
+                Some(_) => dotfile_path_components.as_path(),
                 None => dotfile_path,
             }
         };
