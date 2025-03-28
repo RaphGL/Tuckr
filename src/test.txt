@@ -1,0 +1,1 @@
+/home/raph/.config/dotfiles/Configs/test/Projects/Tuckr/src/test.txt

@@ -77,10 +77,14 @@ impl<'a> FileTree {
     }
 
     pub fn iter(&self) -> FileTreeIterator<'_, '_> {
-        FileTreeIterator {
+        let mut ft_iter = FileTreeIterator {
             tree: self,
             internal_iter: self.internal_iter(),
-        }
+        };
+        // since root is always guaranteed to be the first node
+        // we can just skip it, on iteration since we're pretending that we're iterating a diretory contents
+        ft_iter.internal_iter.next();
+        ft_iter
     }
 
     /// Returns true if the path is starts with the path in the root node of the file tree
@@ -376,105 +380,168 @@ impl<'a> FileTree {
     }
 }
 
-// TODO: fix unit tests
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dotfiles;
 
-//     #[test]
-//     fn ftree_initialized_with_root_at_idx_0() {
-//         let ft = FileTree::new(Path::new("/"));
-//         assert_eq!(ft.dotfiles.len(), 1);
-//         assert_eq!(ft.nodes.len(), 1);
-//         assert_eq!(ft.groups.len(), 0);
+    fn get_dotfiles_configs() -> Dotfile {
+        let mut dotfiles_path = dotfiles::get_dotfiles_path(None).unwrap();
+        dotfiles_path.push("Configs");
+        Dotfile::try_from(dotfiles_path).unwrap()
+    }
 
-//         let root_node = ft.nodes.first().unwrap().as_ref().unwrap();
-//         assert_eq!(root_node.dotfile_idx, 0);
+    #[test]
+    fn ftree_initialized_with_root_at_idx_0() {
+        let dotfiles_root = get_dotfiles_configs();
+        let ft = FileTree::new(&dotfiles_root);
+        assert_eq!(ft.dotfiles.len(), 1);
+        assert_eq!(ft.nodes.len(), 1);
+        assert_eq!(ft.groups.len(), 0);
 
-//         let root_path = ft
-//             .dotfiles
-//             .get(root_node.dotfile_idx)
-//             .unwrap()
-//             .as_ref()
-//             .unwrap();
-//         assert_eq!(root_path, Path::new("/"));
-//     }
+        let root_node = ft.nodes.first().unwrap().as_ref().unwrap();
+        assert_eq!(root_node.dotfile_idx, 0);
 
-//     #[test]
-//     fn inserting_items() {
-//         let mut ft = FileTree::new(Path::new("/"));
-//         ft.insert(Some("test".into()), Path::new("/usr"));
-//         ft.insert(Some("test".into()), Path::new("/usr/bin"));
+        let root_path = ft
+            .dotfiles
+            .get(root_node.dotfile_idx)
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        assert_eq!(root_path, &dotfiles_root);
+    }
 
-//         assert!(ft.contains_group("test"));
-//         assert!(ft.dotfiles.len() == 3 && ft.nodes.len() == 3);
+    #[test]
+    fn inserting_items() {
+        let root = get_dotfiles_configs();
+        let nvim = {
+            let mut nvim = root.clone();
+            nvim.path = nvim.path.join("nvim");
+            nvim
+        };
 
-//         assert!(!ft.insert(Some("test".into()), Path::new("/usr/bin")));
-//         assert!(ft.insert(Some("test".into()), Path::new("/usr/bin/tuckr")));
-//     }
+        let nvim_config = {
+            let mut nvim_config = nvim.clone();
+            nvim_config.path = nvim_config.path.join(".config");
+            nvim_config
+        };
 
-//     #[test]
-//     fn removing_items() {
-//         let mut ft = FileTree::new(Path::new("/"));
-//         ft.insert(Some("test".into()), Path::new("/usr"));
-//         ft.insert(Some("test2".into()), Path::new("/usr/bin/ls"));
+        let nvim_config_nvim = {
+            let mut nvim_config_nvim = nvim_config.clone();
+            nvim_config_nvim.path = nvim_config_nvim.path.join("neovim");
+            nvim_config_nvim
+        };
 
-//         ft.remove_path(Path::new("/usr/bin/ls"));
+        let mut ft = FileTree::new(&root);
 
-//         assert!(!ft.contains_group("test2"));
-//         assert!(ft.nodes.iter().any(|p| p.is_none()));
-//     }
+        ft.insert(Some("test".into()), &nvim);
+        ft.insert(Some("test".into()), &nvim_config);
 
-//     #[test]
-//     fn iterator_only_sees_valid_nodes() {
-//         let mut ft = FileTree::new(Path::new("/"));
-//         ft.insert(Some("test".into()), Path::new("/usr"));
-//         ft.insert(Some("test".into()), Path::new("/usr/bin"));
-//         ft.remove_path(Path::new("/usr/bin"));
+        assert!(ft.contains_group("test"));
+        assert!(ft.dotfiles.len() == 3 && ft.nodes.len() == 3);
 
-//         assert!(!ft.internal_iter().any(|(_, v)| v.is_none()));
+        assert!(!ft.insert(Some("test".into()), &nvim));
+        assert!(ft.insert(Some("test".into()), &nvim_config_nvim));
+    }
 
-//         let mut ft = FileTree::new(Path::new("/"));
-//         ft.insert(Some("test".into()), Path::new("/usr"));
-//         ft.insert(Some("test".into()), Path::new("/usr/bin/ls"));
+    #[test]
+    fn removing_items() {
+        let root = get_dotfiles_configs();
+        let mut ft = FileTree::new(&root);
 
-//         // todo: extract into its own test
-//         // what it does: ensures that intermediary nodes are always inserted with group `None`
-//         for node in ft.internal_iter() {
-//             let node = node.1.as_ref().unwrap();
-//             println!(
-//                 "
-//                     group: {:?}
-//                     path: {:?}
-//                 ",
-//                 node.group, ft.dotfiles[node.dotfile_idx]
-//             );
+        let test = {
+            let mut test = root.clone();
+            test.path = test.path.join("usr");
+            test
+        };
 
-//             let Some(ref children) = node.children else {
-//                 continue;
-//             };
+        let test_child = {
+            let mut test_child = test.clone();
+            test_child.path = test.path.join("bin").join("ls");
+            test_child
+        };
 
-//             for child in children {
-//                 println!(
-//                     "
-//                     child: {:?}
-//                     ",
-//                     ft.dotfiles[ft.nodes[*child].as_ref().unwrap().dotfile_idx]
-//                 );
-//             }
-//         }
-//     }
+        ft.insert(Some("test".into()), &test);
+        ft.insert(Some("test2".into()), &test_child);
 
-//     #[test]
-//     fn insert_rejects_paths_outside_of_root() {
-//         let mut ft = FileTree::new(Path::new("/home/tuckr"));
-//         assert_eq!(
-//             ft.insert(Some("test".into()), Path::new("/home/tuckr/test")),
-//             true
-//         );
+        ft.remove_path(&test_child);
 
-//         assert_eq!(ft.insert(Some("test".into()), Path::new("/usr/bin")), false);
-//         assert!(ft.remove_path(Path::new("/usr/bin")).is_none());
-//     }
-// }
+        assert!(!ft.contains_group("test2"));
+        assert!(ft.nodes.iter().any(|p| p.is_none()));
+    }
+
+    // TODO: finish fixing unit tests
+    //
+    // #[test]
+    // fn iterator_only_sees_valid_nodes() {
+    //     let mut ft = FileTree::new(Path::new("/"));
+    //     ft.insert(Some("test".into()), Path::new("/usr"));
+    //     ft.insert(Some("test".into()), Path::new("/usr/bin"));
+    //     ft.remove_path(Path::new("/usr/bin"));
+
+    //     assert!(!ft.internal_iter().any(|(_, v)| v.is_none()));
+
+    //     let mut ft = FileTree::new(Path::new("/"));
+    //     ft.insert(Some("test".into()), Path::new("/usr"));
+    //     ft.insert(Some("test".into()), Path::new("/usr/bin/ls"));
+
+    //     // todo: extract into its own test
+    //     // what it does: ensures that intermediary nodes are always inserted with group `None`
+    //     for node in ft.internal_iter() {
+    //         let node = node.1.as_ref().unwrap();
+    //         println!(
+    //             "
+    //                  group: {:?}
+    //                  path: {:?}
+    //              ",
+    //             node.group, ft.dotfiles[node.dotfile_idx]
+    //         );
+
+    //         let Some(ref children) = node.children else {
+    //             continue;
+    //         };
+
+    //         for child in children {
+    //             println!(
+    //                 "
+    //                  child: {:?}
+    //                  ",
+    //                 ft.dotfiles[ft.nodes[*child].as_ref().unwrap().dotfile_idx]
+    //             );
+    //         }
+    //     }
+    // }
+
+    #[test]
+    fn insert_rejects_paths_outside_of_root() {
+        let root = {
+            let mut root = get_dotfiles_configs();
+            root.path = root.path.join("nvim");
+            root
+        };
+
+        let in_root = {
+            let mut in_root = root.clone();
+            in_root.path = in_root.path.join("test");
+            in_root
+        };
+
+        let out_of_root = {
+            let mut out_of_root = get_dotfiles_configs();
+            out_of_root.path = out_of_root.path.join("something");
+            out_of_root
+        };
+
+        let nonexistent = {
+            let mut nonexistent = get_dotfiles_configs();
+            nonexistent.path = nonexistent.path.join("nonexistent");
+            nonexistent
+        };
+
+        let mut ft = FileTree::new(&root);
+        assert_eq!(ft.insert(Some("test".into()), &in_root), true);
+
+        assert_eq!(ft.insert(Some("test".into()), &out_of_root), false);
+        assert!(ft.remove_path(&nonexistent).is_none());
+    }
+}

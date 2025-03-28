@@ -162,10 +162,6 @@ impl SymlinkHandler {
             return Err(ReturnCode::CouldntFindDotfiles.into());
         }
 
-        let mut symlinked = HashCache::new();
-        let mut not_symlinked = HashCache::new();
-        let mut not_owned = HashCache::new();
-
         // iterates over every file inside dotfiles/Config and determines their symlink status
         for f in configs_dir.try_iter().unwrap() {
             // skip group directories otherwise it would try to link dotfiles/Configs/Groups to the users home
@@ -185,25 +181,16 @@ impl SymlinkHandler {
                 };
 
                 if link == f.path {
-                    symlinked.entry(f.group_name.clone()).or_default();
-
-                    let group = symlinked.get_mut(&f.group_name).unwrap();
-                    group.insert(f);
+                    self.symlinked.insert(Some(f.group_name.clone()), &f);
                 } else {
-                    not_owned.entry(f.group_name.clone()).or_default();
-
-                    let group = not_owned.get_mut(&f.group_name).unwrap();
-                    group.insert(f);
+                    self.not_owned.insert(Some(f.group_name.clone()), &f);
                 }
             } else {
                 if target.is_dir() {
                     continue;
                 }
 
-                not_symlinked.entry(f.group_name.clone()).or_default();
-
-                let group = not_symlinked.get_mut(&f.group_name).unwrap();
-                group.insert(f);
+                self.not_symlinked.insert(Some(f.group_name.clone()), &f);
             }
         }
 
@@ -311,6 +298,7 @@ impl SymlinkHandler {
                 .unwrap()
                 .read_link()
                 .expect("not owned files should be guaranteed to be symlinks");
+
             let Ok(dotfile) = Dotfile::try_from(dotfile_source) else {
                 curr_entry.insert(file.clone());
                 continue;
@@ -872,7 +860,7 @@ fn print_groups_status(
                             if file.path != conflict.path {
                                 t!("errors.already_exists")
                             } else {
-                                unreachable!();
+                                unreachable!("conflicting dotfiles should never be equal");
                             }
                         }
                         Err(_) => t!("errors.symlinks_elsewhere"),
