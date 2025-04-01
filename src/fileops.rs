@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::dotfiles::{self, ReturnCode};
+use crate::symlinks;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::io::Write;
@@ -251,9 +252,8 @@ pub fn push_cmd(
                     .green()
                 );
             } else {
-                if !target_parent_dir.exists() && !created_dirs.contains(target_parent_dir) {
+                if !target_parent_dir.exists() {
                     fs::create_dir_all(target_parent_dir).unwrap();
-                    created_dirs.insert(target_parent_dir.to_path_buf());
                 }
                 fs::copy(file, target_file).unwrap();
             }
@@ -304,7 +304,7 @@ pub fn pop_cmd(
     groups: &[String],
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
         Ok(dir) => dir.join("Configs"),
         Err(e) => {
             eprintln!("{e}");
@@ -360,14 +360,8 @@ pub fn pop_cmd(
             continue;
         }
 
-        for file in DirWalk::new(&group_path) {
-            if file.is_symlink() {
-                if let Err(e) = fs::remove_file(&file) {
-                    eprintln!("Failed to remove symlink {}: {}", file.display(), e);
-                }
-            }
-        }
-
+        let dotfile = dotfiles::Dotfile::try_from(group_path.clone()).unwrap();
+        symlinks::remove_cmd(profile.clone(), dry_run, &[dotfile.group_name], &[])?;
         fs::remove_dir_all(&group_path).unwrap();
     }
 
