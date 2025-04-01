@@ -1,4 +1,3 @@
-use crate::dotfiles::Dotfile;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -14,9 +13,15 @@ struct FileNode {
 
 #[derive(Default, Debug, Clone)]
 pub struct FileTree {
-    dotfiles: Vec<Option<Dotfile>>,
+    dotfiles: Vec<Option<PathBuf>>,
     nodes: Vec<Option<FileNode>>,
     groups: HashSet<String>,
+}
+
+// the struct exposed to the user through the iterator
+pub struct File<'tree> {
+    pub group: Option<String>,
+    pub path: &'tree Path,
 }
 
 struct InternalFileTreeIterator<'a> {
@@ -48,24 +53,32 @@ pub struct FileTreeIterator<'tree, 'iter> {
 }
 
 impl<'tree, 'iter> Iterator for FileTreeIterator<'tree, 'iter> {
-    type Item = &'tree Dotfile;
+    type Item = File<'tree>;
 
+    // TODO: change so that we only use &Path and return a FileNode of sorts that contains the path and the group the path belongs to
+    // this is so we can save on doing computations every time we want to insert a Dotfile
     fn next(&mut self) -> Option<Self::Item> {
-        let Some((_, node)) = self.internal_iter.next() else {
+        let Some((node_idx, curr_node)) = self.internal_iter.next() else {
             return None;
         };
 
-        self.tree.dotfiles[node.clone().unwrap().dotfile_idx].as_ref()
+        let curr_node = curr_node.as_ref().unwrap();
+
+        Some(File {
+            group: curr_node.group.clone(),
+            path: self.tree.dotfiles[node_idx].as_ref()?,
+        })
     }
 }
 
 impl<'a> FileTree {
-    pub fn new(root: &Dotfile) -> Self {
+    pub fn new<P: AsRef<Path>>(root: P) -> Self {
         let mut tree: Self = Default::default();
-        tree.insert(None, root);
+        tree.insert(None, root.as_ref());
         tree
     }
 
+    // returns an iterator that returns a tuple `(node_idx, node)`
     fn internal_iter(&'a self) -> InternalFileTreeIterator<'a> {
         InternalFileTreeIterator {
             tree: self,
@@ -103,10 +116,10 @@ impl<'a> FileTree {
             .as_ref()
             .expect("root should never be None");
 
-        value.starts_with(&root_path.path)
+        value.starts_with(&root_path)
     }
 
-    pub fn contains_path(&self, value: &Dotfile) -> bool {
+    pub fn contains_path(&self, value: &Path) -> bool {
         self.find_node_idx(value).is_some()
     }
 
@@ -114,7 +127,7 @@ impl<'a> FileTree {
         self.groups.contains(groupname)
     }
 
-    fn find_node_idx(&self, value: &Dotfile) -> Option<usize> {
+    fn find_node_idx(&self, value: &Path) -> Option<usize> {
         for (idx, node) in self.internal_iter() {
             let node = match node {
                 Some(node) => node,
@@ -133,7 +146,7 @@ impl<'a> FileTree {
 
     /// inserts a path from a group with no regard for intermediate values (each component in the path)
     /// Returns true if the insertion was successful
-    fn insert_path(&mut self, group: Option<String>, value: &Dotfile) -> bool {
+    fn insert_path(&mut self, group: Option<String>, value: &Path) -> bool {
         if self.contains_path(value) {
             return false;
         }
@@ -142,12 +155,12 @@ impl<'a> FileTree {
             self.groups.insert(group.into());
         }
 
-        self.dotfiles.push(Some(value.clone()));
+        self.dotfiles.push(Some(value.into()));
         let path_idx = self.dotfiles.len() - 1;
 
         let value_parent = {
-            let mut parent = value.clone();
-            parent.path.pop();
+            let mut parent = value.to_path_buf();
+            parent.pop();
             parent
         };
 
@@ -189,23 +202,23 @@ impl<'a> FileTree {
 
     /// Inserts a path from a group along with all of the intermediate paths (each component in the path)
     /// An intermediate paths group is always `None`
-    pub fn insert(&mut self, group: Option<String>, value: &Dotfile) -> bool {
+    pub fn insert(&mut self, group: Option<String>, value: &Path) -> bool {
         if self.dotfiles.is_empty() {
             return self.insert_path(group, value);
         }
 
         let mut curr_dotfile = self.dotfiles[0].clone().expect("root should never be none");
-        let Ok(value_components) = value.path.strip_prefix(&curr_dotfile.path) else {
+        let Ok(value_components) = value.strip_prefix(&curr_dotfile) else {
             return false;
         };
 
-        let Some(last_component) = value.path.file_name() else {
+        let Some(last_component) = value.file_name() else {
             return false;
         };
 
         let mut last_insert_ret = false;
         for component in value_components {
-            curr_dotfile.path.push(component);
+            curr_dotfile.push(component);
             last_insert_ret = self.insert_path(
                 if component == last_component {
                     group.clone()
@@ -219,7 +232,7 @@ impl<'a> FileTree {
         last_insert_ret
     }
 
-    fn remove_idx(&mut self, idx: usize) -> Option<Dotfile> {
+    fn remove_idx(&mut self, idx: usize) -> Option<PathBuf> {
         let node = self.nodes.get(idx)?.clone()?;
 
         if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx] {
@@ -235,7 +248,7 @@ impl<'a> FileTree {
         }
 
         self.nodes[idx] = None;
-        let discarded_path = self.dotfiles[node.dotfile_idx].clone()?;
+        let discarded_path = self.dotfiles[node.dotfile_idx].clone();
         self.dotfiles[node.dotfile_idx] = None;
 
         if let Some(group) = node.group {
@@ -256,11 +269,11 @@ impl<'a> FileTree {
             }
         }
 
-        Some(discarded_path)
+        discarded_path
     }
 
     // TODO: find out way to remove lingering None group node
-    pub fn remove(&mut self, idx: usize) -> Option<Dotfile> {
+    pub fn remove(&mut self, idx: usize) -> Option<PathBuf> {
         let mut curr_idx = idx;
         while let Some(node) = self.nodes.get(curr_idx)? {
             let parent_idx = node.parent_node_idx;
@@ -282,13 +295,13 @@ impl<'a> FileTree {
         self.remove_idx(idx)
     }
 
-    pub fn remove_path(&mut self, value: &Dotfile) -> Option<Dotfile> {
+    pub fn remove_path(&mut self, value: &Path) -> Option<PathBuf> {
         let value_idx = self.find_node_idx(value)?;
         self.remove(value_idx)
     }
 
     // note: instead of PathBuf consider using T or just plain dotfiles::Dotfile
-    pub fn get(&self, group: &str) -> Option<HashSet<Dotfile>> {
+    pub fn get(&self, group: &str) -> Option<HashSet<PathBuf>> {
         let mut group_paths = HashSet::new();
 
         for (_, node) in self.internal_iter() {
@@ -311,6 +324,29 @@ impl<'a> FileTree {
     }
 
     pub fn canonicalize(&mut self) {
+        // TODO: implement iter_mut so we can change the node group to None
+        for (node_idx, node) in self.internal_iter() {
+            let node = node.as_ref().unwrap();
+            let Some(ref children) = node.children else {
+                continue;
+            };
+
+            let first_child = self.nodes[children[0]].as_ref().unwrap();
+            let mut share_parent = false;
+            for child in &children[1..] {
+                let child = self.nodes[*child].as_ref().unwrap();
+                if child.group != first_child.group {
+                    share_parent = true;
+                    break;
+                }
+            }
+
+            if share_parent {
+                // let mut node = self.nodes[node_idx].as_mut().unwrap();
+                // node.group = None;
+            }
+        }
+
         // TODO: convert canonicalization logic to use file tree
         //
         // fn remove_empty_groups(group_type: HashCache) -> HashCache {
@@ -385,10 +421,10 @@ mod tests {
     use super::*;
     use crate::dotfiles;
 
-    fn get_dotfiles_configs() -> Dotfile {
+    fn get_dotfiles_configs() -> PathBuf {
         let mut dotfiles_path = dotfiles::get_dotfiles_path(None).unwrap();
         dotfiles_path.push("Configs");
-        Dotfile::try_from(dotfiles_path).unwrap()
+        dotfiles_path
     }
 
     #[test]
@@ -416,19 +452,19 @@ mod tests {
         let root = get_dotfiles_configs();
         let nvim = {
             let mut nvim = root.clone();
-            nvim.path = nvim.path.join("nvim");
+            nvim = nvim.join("nvim");
             nvim
         };
 
         let nvim_config = {
             let mut nvim_config = nvim.clone();
-            nvim_config.path = nvim_config.path.join(".config");
+            nvim_config = nvim_config.join(".config");
             nvim_config
         };
 
         let nvim_config_nvim = {
             let mut nvim_config_nvim = nvim_config.clone();
-            nvim_config_nvim.path = nvim_config_nvim.path.join("neovim");
+            nvim_config_nvim = nvim_config_nvim.join("neovim");
             nvim_config_nvim
         };
 
@@ -451,13 +487,13 @@ mod tests {
 
         let test = {
             let mut test = root.clone();
-            test.path = test.path.join("usr");
+            test = test.join("usr");
             test
         };
 
         let test_child = {
             let mut test_child = test.clone();
-            test_child.path = test.path.join("bin").join("ls");
+            test_child = test_child.join("bin").join("ls");
             test_child
         };
 
@@ -516,25 +552,25 @@ mod tests {
     fn insert_rejects_paths_outside_of_root() {
         let root = {
             let mut root = get_dotfiles_configs();
-            root.path = root.path.join("nvim");
+            root = root.join("nvim");
             root
         };
 
         let in_root = {
             let mut in_root = root.clone();
-            in_root.path = in_root.path.join("test");
+            in_root = in_root.join("test");
             in_root
         };
 
         let out_of_root = {
             let mut out_of_root = get_dotfiles_configs();
-            out_of_root.path = out_of_root.path.join("something");
+            out_of_root = out_of_root.join("something");
             out_of_root
         };
 
         let nonexistent = {
             let mut nonexistent = get_dotfiles_configs();
-            nonexistent.path = nonexistent.path.join("nonexistent");
+            nonexistent = nonexistent.join("nonexistent");
             nonexistent
         };
 

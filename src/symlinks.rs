@@ -131,7 +131,7 @@ impl SymlinkHandler {
             return Err(ReturnCode::NoSuchFileOrDir.into());
         }
 
-        let file_tree = FileTree::new(&Dotfile::try_from(dotfiles_dir.join("Configs")).unwrap());
+        let file_tree = FileTree::new(dotfiles_dir.join("Configs"));
 
         let symlinker = SymlinkHandler {
             dotfiles_dir,
@@ -181,16 +181,17 @@ impl SymlinkHandler {
                 };
 
                 if link == f.path {
-                    self.symlinked.insert(Some(f.group_name.clone()), &f);
+                    self.symlinked.insert(Some(f.group_name.clone()), &f.path);
                 } else {
-                    self.not_owned.insert(Some(f.group_name.clone()), &f);
+                    self.not_owned.insert(Some(f.group_name.clone()), &f.path);
                 }
             } else {
                 if target.is_dir() {
                     continue;
                 }
 
-                self.not_symlinked.insert(Some(f.group_name.clone()), &f);
+                self.not_symlinked
+                    .insert(Some(f.group_name.clone()), &f.path);
             }
         }
 
@@ -279,6 +280,7 @@ impl SymlinkHandler {
 
         // mark group as conflicting if at least one value already exists in $TUCKR_TARGET
         for file in self.not_symlinked.iter() {
+            let file = Dotfile::try_from(file.path.to_path_buf()).unwrap();
             if file.to_target_path().unwrap().exists() && file.is_valid_target() {
                 conflicts.entry(file.group_name.clone()).or_default();
                 let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
@@ -290,6 +292,8 @@ impl SymlinkHandler {
         // with the same file is already symlinked. this allows dotfile fallbacks to
         // work properly instead of falsely flagged as conflicts
         for file in self.not_owned.iter() {
+            let file = Dotfile::try_from(file.path.to_path_buf()).unwrap();
+
             conflicts.entry(file.group_name.clone()).or_default();
             let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
 
@@ -549,10 +553,13 @@ pub fn add_cmd(
             let group = status_group.get(group);
             if let Some(group_files) = group {
                 // TODO: fix to only remove files of the corresponding group
-                for file in group_files {
-                    let target_file = file.to_target_path().unwrap();
+                for file_path in group_files {
+                    let target_file = Dotfile::try_from(file_path.clone())
+                        .unwrap()
+                        .to_target_path()
+                        .unwrap();
 
-                    let deleted_file = if adopt { &file.path } else { &target_file };
+                    let deleted_file = if adopt { &file_path } else { &target_file };
 
                     if dry_run {
                         eprintln!(
@@ -572,12 +579,12 @@ pub fn add_cmd(
                                 t!(
                                     "dry-run.moving_x_to_y",
                                     x = target_file.display(),
-                                    y = file.path.display()
+                                    y = file_path.display()
                                 )
                                 .yellow()
                             );
                         } else {
-                            fs::rename(target_file, &file.path).unwrap();
+                            fs::rename(target_file, &file_path).unwrap();
                         }
                     }
                 }
