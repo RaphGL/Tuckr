@@ -1,13 +1,10 @@
-//! Creates basic file structure for tuckr
-//!
-//! Contains functions to create the base directories and to convert users from stow to tuckr
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use crate::dotfiles::{self, ReturnCode};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
-use std::collections::HashSet;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::{fs, path};
 use tabled::{Table, Tabled};
@@ -196,6 +193,8 @@ pub fn push_cmd(
     };
 
     let mut any_file_failed = false;
+    let mut created_dirs = HashSet::new();
+
     for file in files {
         let file = PathBuf::from(file);
         if !file.exists() {
@@ -226,14 +225,21 @@ pub fn push_cmd(
         }
 
         #[inline]
-        fn push_file(dry_run: bool, target_parent_dir: &Path, target_file: &Path, file: &Path) {
+        fn push_file(
+            dry_run: bool,
+            target_parent_dir: &Path,
+            target_file: &Path,
+            file: &Path,
+            created_dirs: &mut HashSet<PathBuf>,
+        ) {
             if dry_run {
-                if !target_parent_dir.exists() {
+                if !target_parent_dir.exists() && !created_dirs.contains(target_parent_dir) {
                     eprintln!(
                         "{} parent directory `{}`",
                         "creating".yellow(),
                         target_parent_dir.display()
                     );
+                    created_dirs.insert(target_parent_dir.to_path_buf());
                 }
                 eprintln!(
                     "{}",
@@ -245,14 +251,17 @@ pub fn push_cmd(
                     .green()
                 );
             } else {
-                fs::create_dir_all(target_parent_dir).unwrap();
+                if !target_parent_dir.exists() && !created_dirs.contains(target_parent_dir) {
+                    fs::create_dir_all(target_parent_dir).unwrap();
+                    created_dirs.insert(target_parent_dir.to_path_buf());
+                }
                 fs::copy(file, target_file).unwrap();
             }
         }
 
         if file.is_file() {
             let target_dir = target_file.parent().unwrap();
-            push_file(dry_run, target_dir, &target_file, &file);
+            push_file(dry_run, target_dir, &target_file, &file, &mut created_dirs);
             continue;
         }
 
@@ -277,6 +286,7 @@ pub fn push_cmd(
                 target_parent_file,
                 target_file.as_path(),
                 file.as_path(),
+                &mut created_dirs,
             );
         }
     }
@@ -350,7 +360,15 @@ pub fn pop_cmd(
             continue;
         }
 
-        fs::remove_dir_all(group_path).unwrap();
+        for file in DirWalk::new(&group_path) {
+            if file.is_symlink() {
+                if let Err(e) = fs::remove_file(&file) {
+                    eprintln!("Failed to remove symlink {}: {}", file.display(), e);
+                }
+            }
+        }
+
+        fs::remove_dir_all(&group_path).unwrap();
     }
 
     Ok(())
