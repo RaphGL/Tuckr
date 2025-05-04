@@ -4,9 +4,8 @@
 
 use crate::dotfiles::{self, Dotfile, ReturnCode};
 use crate::fileops::DirWalk;
-use chacha20poly1305::{AeadCore, KeyInit, XChaCha20Poly1305, aead::Aead};
+use chacha20poly1305::{AeadCore, KeyInit, XChaCha20Poly1305, aead, aead::Aead};
 use owo_colors::OwoColorize;
-use rand::rngs;
 use rust_i18n::t;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -37,7 +36,7 @@ impl SecretsHandler {
         Ok(SecretsHandler {
             dotfiles_dir,
             key: input_hash,
-            nonce: XChaCha20Poly1305::generate_nonce(&mut rngs::OsRng),
+            nonce: XChaCha20Poly1305::generate_nonce(&mut aead::OsRng),
         })
     }
 
