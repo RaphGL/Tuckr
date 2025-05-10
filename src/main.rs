@@ -174,6 +174,10 @@ enum Command {
     /// Return the group files belongs to
     #[command(name = "groupis", arg_required_else_help = true)]
     GroupIs { files: Vec<String> },
+
+    // Converts a stow dotfiles repo into a tuckr one
+    #[command(name = "from-stow")]
+    FromStow { stow_path: Option<String> },
 }
 
 #[derive(Debug, Subcommand)]
@@ -262,6 +266,9 @@ fn main() -> ExitCode {
             fileops::pop_cmd(cli.profile, cli.dry_run, &groups, assume_yes)
         }
         Command::GroupIs { files } => fileops::groupis_cmd(cli.profile, &files),
+        Command::FromStow { stow_path } => {
+            fileops::from_stow_cmd(cli.profile, cli.dry_run, stow_path)
+        }
     };
 
     match exit_code {

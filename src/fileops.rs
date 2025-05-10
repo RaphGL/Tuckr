@@ -599,6 +599,111 @@ pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), Exit
     Ok(())
 }
 
+// TODO: eventually make every user confirmation in tuckr use this function
+// TODO: adhere to local specific yes and no variants
+fn get_user_confirmation(msg: &str) -> bool {
+    let mut answer = String::new();
+    print!("{msg} (y/N) ");
+    _ = std::io::stdout().flush();
+    std::io::stdin().read_line(&mut answer).unwrap();
+
+    match answer.trim().to_lowercase().as_str() {
+        "y" | "Y" => true,
+        _ => false,
+    }
+}
+
+// TODO: translate messages
+// TODO: add colors to the dry run messages
+pub fn from_stow_cmd(
+    profile: Option<String>,
+    dry_run: bool,
+    stow_path: Option<String>,
+) -> Result<(), ExitCode> {
+    println!("By running this command a copy of the stow dotfiles repo is created and converted to tuckr.
+
+    Before continuing take the time to read the following explanation if you've never used tuckr before:
+
+        Stow and Tuckr can mostly be used as alternatives to each other, but Tuckr uses groups to give meaning to your dotfiles.
+        A group is a directory with related config files. Tuckr uses those groups to validate that your dotfiles have been deployed correctly.
+
+        Usually a group is the configs for a specific program, but you can create groups however way you like.
+        After the conversion has been done, make sure you have your dotfiles separated by groups to take full advantage of Tuckr.
+
+        For more information, check the wiki: https://github.com/RaphGL/Tuckr/wiki
+    ");
+
+    let used_dot_prefix = get_user_confirmation("Did you use `--dotfiles` with Stow?");
+
+    if used_dot_prefix {
+        println!(
+            "{}",
+            "Tuckr does not support `dot-` like Stow does, but they will be converted into regular dotfiles in the new Tuckr dotfiles".yellow()
+        );
+    }
+
+    if !get_user_confirmation("Do you want to continue?") {
+        return Ok(());
+    }
+
+    init_cmd(profile.clone(), dry_run)?;
+
+    let stow_path = match stow_path {
+        Some(path) => PathBuf::from(path).canonicalize().unwrap(),
+        None => std::env::current_dir().unwrap(),
+    };
+
+    let new_configs_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("{err}");
+            return Err(ReturnCode::CouldntFindDotfiles.into());
+        }
+    }
+    .join("Configs");
+
+    for file in DirWalk::new(&stow_path) {
+        if dry_run && file.as_os_str().to_str().unwrap().contains("dot-") {
+            eprintln!("Converting `dot-` to `.` in file path `{}`", file.display());
+        }
+
+        let final_stem = file
+            .strip_prefix(&stow_path)
+            .unwrap()
+            .components()
+            .map(|component| {
+                let component = component.as_os_str().to_str().unwrap();
+                if used_dot_prefix && component.starts_with("dot-") {
+                    component.replacen("dot-", ".", 1)
+                } else {
+                    component.into()
+                }
+            })
+            .collect::<PathBuf>();
+
+        let tuckr_path = new_configs_dir.join(final_stem);
+
+        if file.is_dir() {
+            if dry_run {
+                eprintln!("Creating directory `{}`", tuckr_path.display());
+            }
+            fs::create_dir_all(tuckr_path).unwrap();
+            continue;
+        }
+
+        if dry_run {
+            eprintln!(
+                "Copying file `{}` to `{}`",
+                file.display(),
+                tuckr_path.display()
+            );
+        }
+        fs::copy(file, tuckr_path).unwrap();
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
