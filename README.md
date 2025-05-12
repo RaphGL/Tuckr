@@ -121,6 +121,11 @@ You need to enable developer mode for symlinking to work, this is a restriction 
 cargo install --git https://github.com/RaphGL/Tuckr.git
 ```
 
+**Install from crates.io:**
+```sh
+cargo install tuckr
+```
+
 Note: The binary will be installed to `$HOME/.cargo/bin` either move it to somewhere in your $PATH or add it to path.
 
 **Install from the AUR:**
