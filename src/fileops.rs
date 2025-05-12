@@ -621,46 +621,57 @@ pub fn from_stow_cmd(
     stow_path: Option<String>,
 ) -> Result<(), ExitCode> {
     println!("By running this command a copy of the stow dotfiles repo is created and converted to tuckr.
+        This operation is non-destructive, if you have a previous config it will be kept with a `_old` suffix.
 
-    Before continuing take the time to read the following explanation if you've never used tuckr before:
+        Before continuing, here's the differences between Stow and Tuckr you ought to know:
+            - Stow is unopinionated, Tuckr expects your dotfiles to have a certain file structure
+            - `--dotfiles` is not supported, but this command will properly convert `dot-`
+            - Tuckr validates that dotfiles are properly symlinked, so use groups to be able to get the most out of it
 
-        Stow and Tuckr can mostly be used as alternatives to each other, but Tuckr uses groups to give meaning to your dotfiles.
-        A group is a directory with related config files. Tuckr uses those groups to validate that your dotfiles have been deployed correctly.
+        Also note that this command only be so smart, so you will likely have to create the groups yourself to be able
+        to start using tuckr unless you already were using stow with different programs' dotfiles in different directories.
 
-        Usually a group is the configs for a specific program, but you can create groups however way you like.
-        After the conversion has been done, make sure you have your dotfiles separated by groups to take full advantage of Tuckr.
-
-        For more information, check the wiki: https://github.com/RaphGL/Tuckr/wiki
+        To check more in depth what Tuckr can do and how to use it, please check the wiki: https://github.com/RaphGL/Tuckr/wiki
     ");
 
     let used_dot_prefix = get_user_confirmation("Did you use `--dotfiles` with Stow?");
-
-    if used_dot_prefix {
-        println!(
-            "{}",
-            "Tuckr does not support `dot-` like Stow does, but they will be converted into regular dotfiles in the new Tuckr dotfiles".yellow()
-        );
-    }
 
     if !get_user_confirmation("Do you want to continue?") {
         return Ok(());
     }
 
-    init_cmd(profile.clone(), dry_run)?;
+    let temp_profile = Some(match profile.as_ref() {
+        Some(profile) => format!("{profile}_incomplete_conversion"),
+        None => "incomplete_conversion".into(),
+    });
+
+    init_cmd(temp_profile.clone(), dry_run)?;
 
     let stow_path = match stow_path {
         Some(path) => PathBuf::from(path).canonicalize().unwrap(),
         None => std::env::current_dir().unwrap(),
     };
 
-    let new_configs_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
         Ok(dir) => dir,
         Err(err) => {
             eprintln!("{err}");
             return Err(ReturnCode::CouldntFindDotfiles.into());
         }
-    }
-    .join("Configs");
+    };
+
+    // we want to preserve the user's original configs just in case we screw up the conversion
+    // or they want to go back and they didn't have version control enabled
+    // so we work on a new copy and then swap to the new one if it's converted successfully
+    let new_dotfiles_dir = match dotfiles::get_dotfiles_path(temp_profile.clone()) {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("{err}");
+            return Err(ReturnCode::CouldntFindDotfiles.into());
+        }
+    };
+
+    let new_configs_dir = new_dotfiles_dir.join("Configs");
 
     for file in DirWalk::new(&stow_path) {
         if dry_run && file.as_os_str().to_str().unwrap().contains("dot-") {
@@ -697,9 +708,34 @@ pub fn from_stow_cmd(
                 file.display(),
                 tuckr_path.display()
             );
+        } else {
+            fs::copy(file, tuckr_path).unwrap();
         }
-        fs::copy(file, tuckr_path).unwrap();
     }
+
+    if dotfiles_dir.exists() {
+        let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
+        let mut old_dotfiles = dotfiles_dir.clone();
+        old_dotfiles.set_file_name(format!("{}_old", old_dirname));
+
+        if dry_run {
+            eprintln!(
+                "Moving previous dofiles (`{}`) to `{}`",
+                dotfiles_dir.display(),
+                old_dotfiles.display()
+            );
+        } else {
+            fs::rename(&dotfiles_dir, old_dotfiles).unwrap();
+        }
+
+        if dry_run {
+            eprintln!("Moving converted dotfiles to `{}`", dotfiles_dir.display());
+        } else {
+            fs::rename(new_dotfiles_dir, dotfiles_dir).unwrap();
+        }
+    }
+
+    println!("{}", "\nYour dotfiles have been converted to Tuckr".green());
 
     Ok(())
 }
