@@ -164,6 +164,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
     }
 }
 
+// returns true if group ends with a valid target platform suffix
 pub fn group_ends_with_target_name(group: &str) -> bool {
     VALID_TARGETS.iter().any(|target| group.ends_with(target))
 }
@@ -202,41 +203,65 @@ impl Dotfile {
     }
 
     /// Checks whether the current groups is targetting the root path aka `/`
+    // TODO: check if the directory has permission for the user, if so, this might possibly just return false
+    // as root access would not be needed to be able to deploy to it
     pub fn targets_root(&self) -> bool {
-        let root_dir = get_dotfiles_path(get_dotfile_profile_from_path(&self.group_path))
-            .unwrap()
-            .join("Configs")
-            .join("Root");
-        self.group_path.starts_with(root_dir)
+        let Ok(target) = self.to_target_path() else {
+            return false;
+        };
+
+        let home_dir = dirs::home_dir().unwrap();
+        !target.starts_with(home_dir)
     }
 
     /// Converts a path string from dotfiles/Configs to where they should be
     /// deployed on $TUCKR_TARGET
     pub fn to_target_path(&self) -> Result<PathBuf, String> {
-        // uses join("") so that the path appends / or \ depending on platform
-        let dotfiles_configs_path = get_dotfiles_path(get_dotfile_profile_from_path(&self.path))
-            .unwrap()
-            .join("Configs")
-            .join("");
+        let dotfiles_configs_path =
+            get_dotfiles_path(get_dotfile_profile_from_path(&self.path))?.join("Configs");
 
         let group_path = {
-            let dotfiles_configs_path = dotfiles_configs_path.to_str().unwrap();
+            let dotfile_path = self.path.strip_prefix(dotfiles_configs_path).unwrap();
+            let mut dotfile_path_components = dotfile_path.components();
 
-            let dotfile_path = self.path.to_str().unwrap();
-            let dotfile_path = dotfile_path.strip_prefix(dotfiles_configs_path).unwrap();
-
-            match dotfile_path.split_once(path::MAIN_SEPARATOR) {
-                Some(path) => path.1,
+            match dotfile_path_components.next() {
+                Some(_) => dotfile_path_components.as_path(),
                 None => dotfile_path,
             }
         };
 
-        let target_path = if self.targets_root() {
-            path::PathBuf::from(path::MAIN_SEPARATOR_STR)
-        } else {
-            get_dotfiles_target_dir_path()?
+        // If we have a path component that starts with `^` it means that it will start from
+        // the root, if it starts with `%` then it is expanded from an environment variable.
+        // The last occurrence of one of these prefix is the one that is used.
+        let mut target_path = PathBuf::new();
+        let mut group_path_components = group_path.components();
+        while let Some(comp) = group_path_components.next() {
+            let comp = comp.as_os_str().to_str().unwrap();
+
+            if comp.len() < 2 {
+                continue;
+            }
+
+            let prefix = comp.chars().next().unwrap();
+            let comp = &comp[1..];
+
+            if prefix == '%' {
+                let Ok(comp) = env::var(comp) else {
+                    return Err(format!("Failed to read environment variable: {}", comp));
+                };
+                target_path = PathBuf::from(comp).join(group_path_components.as_path());
+            }
+
+            if prefix == '^' {
+                target_path = PathBuf::from(path::MAIN_SEPARATOR_STR)
+                    .join(comp)
+                    .join(group_path_components.as_path());
+            }
         }
-        .join(group_path);
+
+        if target_path.components().count() == 0 {
+            target_path = get_dotfiles_target_dir_path()?.join(group_path);
+        }
 
         Ok(target_path)
     }
@@ -450,7 +475,8 @@ mod tests {
     fn dotfile_targets_root() {
         let dotfiles_dir = super::get_dotfiles_path(None).unwrap().join("Configs");
 
-        let root_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Root")).unwrap();
+        let root_dotfile =
+            super::Dotfile::try_from(dotfiles_dir.join("Root").join("^bin")).unwrap();
         assert!(root_dotfile.targets_root());
 
         let nonroot_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Zsh")).unwrap();

@@ -173,7 +173,13 @@ impl SymlinkHandler {
                 continue;
             }
 
-            let target = f.to_target_path().unwrap();
+            let target = match f.to_target_path() {
+                Ok(target) => target,
+                Err(err) => {
+                    eprintln!("{}", err.red());
+                    continue;
+                }
+            };
 
             if target.is_symlink() {
                 let link = match fs::read_link(target) {
