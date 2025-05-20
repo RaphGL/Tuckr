@@ -32,7 +32,7 @@ pub const VALID_TARGETS: &[&str] = &[
 /// A higher number means a higher priority
 pub fn get_group_priority(group: impl AsRef<str>) -> usize {
     let group = group.as_ref();
-    let target = group.split('_').last().unwrap_or(group);
+    let target = group.split('_').next_back().unwrap_or(group);
 
     // priority is in order of specificity
     // the more os specific target has higher priority

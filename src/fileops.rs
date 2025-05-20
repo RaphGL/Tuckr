@@ -607,10 +607,7 @@ fn get_user_confirmation(msg: &str) -> bool {
     _ = std::io::stdout().flush();
     std::io::stdin().read_line(&mut answer).unwrap();
 
-    match answer.trim().to_lowercase().as_str() {
-        "y" | "Y" => true,
-        _ => false,
-    }
+    matches!(answer.trim().to_lowercase().as_str(), "y" | "Y")
 }
 
 // TODO: translate messages
