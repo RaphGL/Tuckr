@@ -40,6 +40,7 @@
         <li><a href="#using-hooks">Using hooks</a></li>
         <li><a href="#using-secrets">Using secrets</a></li>
         <li><a href="#conditional-deployment">Conditional Deployment</a></li>
+        <li><a href="#environment-variables">Environment variables</a></li>
         <li><a href="#exit-codes">Exit codes</a></li>
       </ul>
     </li>
@@ -271,6 +272,33 @@ Configs
 The groups that are supported on the target system will be treated as being a part of the original `config` group. One only needs to reference it to have all of the valid ones included as well.
 
 Any of the [options available](https://doc.rust-lang.org/reference/conditional-compilation.html#target_os) on Rust's `target_family` and `target_os` are valid targets.
+
+### Environment variables
+You might want to dynamically decide where to deploy a dotfile, for example a program might allow changing where the dotfiles will be or you might want to choose the location on a per machine basis.
+Tuckr allows you to use environment variables to decide where to place things.
+Anything prefixed with a `%` is considered an environment variable.
+
+For example:
+```
+program
+└── %PROGRAM_PATH
+    └── config.txt
+```
+
+The `%PROGRAM_PATH` will be expanded to whatever was in the environment variable. So if you had `%PROGRAM_PATH/config.txt` and the environment variable was set as `/home/user/Documents`, the Tuckr will attempt to symlink it to `/home/user/Documents/config.txt`.
+
+### Root targeting
+Some dotfiles are stored in some directory that outside of your home directory, by default tuckr doesn't support those, but by using the `^` it tells tuckr that it should target the root.
+So say you wanted to manage your crontab settings with tuckr, you would need to somehow symlink `/etc/crontab`. The file structure to do that would be:
+
+```
+crontab
+└── ^etc
+    └── crontab
+```
+
+The `^etc/crontab` would be expanded to `/etc/crontab`.
+
 
 ### Exit codes
 
