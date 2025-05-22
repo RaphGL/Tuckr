@@ -202,10 +202,10 @@ impl Dotfile {
         group_is_valid_target(self.group_name.as_str())
     }
 
-    /// Checks whether the current groups is targetting the root path aka `/`
-    // TODO: check if the directory has permission for the user, if so, this might possibly just return false
+    /// Checks whether the current groups is needs root privileges to modify the target path
+    // TODO: check if the directory has permission for the user, if so, this just returns false
     // as root access would not be needed to be able to deploy to it
-    pub fn targets_root(&self) -> bool {
+    pub fn needs_root_privilege(&self) -> bool {
         let Ok(target) = self.to_target_path() else {
             return false;
         };
@@ -247,7 +247,10 @@ impl Dotfile {
 
             if prefix == '%' {
                 let Ok(comp) = env::var(comp) else {
-                    return Err(format!("Failed to read environment variable: {}", comp));
+                    return Err(format!(
+                        "Failed to read environment variable `{comp}` defined at `{}`",
+                        self.path.display()
+                    ));
                 };
                 target_path = PathBuf::from(comp).join(group_path_components.as_path());
             }
