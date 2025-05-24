@@ -11,7 +11,10 @@ use std::{
     process,
 };
 
+// these targets come from the rust target_os and target_family cfg! values
 pub const VALID_TARGETS: &[&str] = &[
+    // special cases not available through cfg!
+    "_wsl",
     // default target_os values
     "_windows",
     "_macos",
@@ -38,6 +41,7 @@ pub fn get_group_priority(group: impl AsRef<str>) -> usize {
     // the more os specific target has higher priority
     match target {
         "unix" | "windows" => 1,
+        "wsl" => 3,
         _ if !group_ends_with_target_name(group) => 0,
         _ => 2,
     }
@@ -179,6 +183,30 @@ pub fn group_without_target(group: &str) -> &str {
     group
 }
 
+fn platform_is_under_wsl() -> bool {
+    if !cfg!(target_os = "linux") {
+        return false;
+    }
+
+    for file in &["/proc/sys/kernel/osrelease", "/proc/version"] {
+        if let Ok(content) = std::fs::read(file) {
+            let Ok(content) = std::str::from_utf8(&content) else {
+                return false;
+            };
+
+            if content.contains("microsoft") || content.contains("WSL") {
+                return true;
+            }
+        }
+    }
+
+    let Ok(wsl_interop_exists) =  std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop") else {
+        return false;
+    };
+
+    wsl_interop_exists
+}
+
 /// Returns true if a group with specified name can be used by current platform.
 /// Checks if a group should be linked on current platform. For unconditional
 /// groups, this function returns true; for conditional groups, this function
@@ -190,7 +218,9 @@ pub fn group_is_valid_target(group: &str) -> bool {
 
     // returns true if a group has no suffix or its suffix matches the current OS
     if group_ends_with_target_name(group) {
-        group.ends_with(&current_target_os) || group.ends_with(&current_target_family)
+        group.ends_with(&current_target_os)
+            || group.ends_with(&current_target_family)
+            || (group.ends_with("_wsl") && platform_is_under_wsl())
     } else {
         true
     }
