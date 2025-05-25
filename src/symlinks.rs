@@ -11,6 +11,7 @@
 //! $TUCKR_TARGET equivalents are pointing to them and categorizing them accordingly.
 
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
+use crate::fileops;
 use enumflags2::{BitFlags, make_bitflags};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
@@ -149,14 +150,14 @@ impl SymlinkHandler {
     ///
     /// Returns a copy of self with all the fields set accordingly
     fn validate(mut self) -> Result<Self, ExitCode> {
-        let configs_dir = Dotfile::try_from(self.dotfiles_dir.join("Configs")).unwrap();
+        let configs_dir = self.dotfiles_dir.join("Configs");
 
-        if !configs_dir.path.exists() && !configs_dir.path.is_dir() {
+        if !configs_dir.exists() && !configs_dir.is_dir() {
             eprintln!(
                 "{}",
                 t!(
                     "errors.no_configs_dir_in_dotfiles",
-                    dotfiles = configs_dir.path.display()
+                    dotfiles = configs_dir.display()
                 )
             );
             return Err(ReturnCode::CouldntFindDotfiles.into());
@@ -167,8 +168,10 @@ impl SymlinkHandler {
         let mut not_owned = HashCache::new();
 
         // iterates over every file inside dotfiles/Config and determines their symlink status
-        for f in configs_dir.try_iter().unwrap() {
+
+        for f in fileops::DirWalk::new(configs_dir) {
             // skip group directories otherwise it would try to link dotfiles/Configs/Groups to the users home
+            let f = Dotfile::try_from(f).unwrap();
             if f.path == f.group_path {
                 continue;
             }

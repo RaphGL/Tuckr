@@ -119,46 +119,36 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
     /// Returns Ok if the path is pointing to a group within $TUCKR_HOME
     fn try_from(value: path::PathBuf) -> Result<Self, Self::Error> {
-        /// returns the path for the group the file belongs to.
-        /// an error is returned if the file does not belong to dotfiles
-        pub fn to_group_path(file_path: &path::PathBuf) -> Result<path::PathBuf, String> {
-            let dotfiles_dir = get_dotfiles_path(get_dotfile_profile_from_path(file_path))?;
-            let configs_dir = dotfiles_dir.join("Configs");
-            let hooks_dir = dotfiles_dir.join("Hooks");
-            let secrets_dir = dotfiles_dir.join("Secrets");
+        let dotfiles_dir = get_dotfiles_path(get_dotfile_profile_from_path(&value))?;
+        let configs_dir = dotfiles_dir.join("Configs");
+        let hooks_dir = dotfiles_dir.join("Hooks");
+        let secrets_dir = dotfiles_dir.join("Secrets");
 
-            let dotfile_root_dir = if file_path.starts_with(&configs_dir) {
-                configs_dir
-            } else if file_path.starts_with(&hooks_dir) {
-                hooks_dir
-            } else if file_path.starts_with(&secrets_dir) {
-                secrets_dir
-            } else {
-                return Err("path does not belong to dotfiles.".into());
+        let dotfile_root_dir = if value.starts_with(&configs_dir) {
+            configs_dir
+        } else if value.starts_with(&hooks_dir) {
+            hooks_dir
+        } else if value.starts_with(&secrets_dir) {
+            secrets_dir
+        } else {
+            return Err("path does not belong to dotfiles.".into());
+        };
+
+        let group_path = if *value != dotfile_root_dir {
+            let Component::Normal(group_relpath) = value
+                .strip_prefix(&dotfile_root_dir)
+                .unwrap()
+                .components()
+                .next()
+                .unwrap()
+            else {
+                return Err(t!("errors.failed_to_get_group_relative_to_dotfiles_dir").into_owned());
             };
 
-            let group = if *file_path == dotfile_root_dir {
-                dotfile_root_dir
-            } else {
-                let Component::Normal(group_relpath) = file_path
-                    .strip_prefix(&dotfile_root_dir)
-                    .unwrap()
-                    .components()
-                    .next()
-                    .unwrap()
-                else {
-                    return Err(
-                        t!("errors.failed_to_get_group_relative_to_dotfiles_dir").into_owned()
-                    );
-                };
-
-                dotfile_root_dir.join(group_relpath)
-            };
-
-            Ok(group)
-        }
-
-        let group_path = to_group_path(&value)?;
+            dotfile_root_dir.join(group_relpath)
+        } else {
+            return Err("path does not belong to dotfiles.".into());
+        };
 
         Ok(Dotfile {
             group_name: group_path.file_name().unwrap().to_str().unwrap().into(),
@@ -200,7 +190,7 @@ fn platform_is_under_wsl() -> bool {
         }
     }
 
-    let Ok(wsl_interop_exists) =  std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop") else {
+    let Ok(wsl_interop_exists) = std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop") else {
         return false;
     };
 
@@ -510,10 +500,10 @@ mod tests {
 
         let root_dotfile =
             super::Dotfile::try_from(dotfiles_dir.join("Root").join("^bin")).unwrap();
-        assert!(root_dotfile.targets_root());
+        assert!(root_dotfile.needs_root_privilege());
 
         let nonroot_dotfile = super::Dotfile::try_from(dotfiles_dir.join("Zsh")).unwrap();
-        assert!(!nonroot_dotfile.targets_root());
+        assert!(!nonroot_dotfile.needs_root_privilege());
     }
 
     #[test]
