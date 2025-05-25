@@ -260,13 +260,14 @@ Conditional groups are entirely ignored on unsupported systems.
 
 Example:
 
-```sh
+```
 Configs
 ├── config
-├── config_unix # deployed on any unix-like system
-├── config_linux # linux only files
-├── config_macos # macos only files
-└── config_windows # windows only files
+├── config_unix # deployed on any unix system
+├── config_linux # only on linux
+├── config_macos # only on macos
+├── config_windows # only on windows
+└── config_wsl # only on Windows Subsystem for Linux (WSL)
 ```
 
 The groups that are supported on the target system will be treated as being a part of the original `config` group. One only needs to reference it to have all of the valid ones included as well.
