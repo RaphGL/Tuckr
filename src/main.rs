@@ -32,15 +32,29 @@ const fn tuckr_color_styles() -> clap::builder::Styles {
 }
 
 #[derive(Parser)]
-#[command(about, author, version, propagate_version = true, styles = tuckr_color_styles())]
-struct Cli {
+pub struct Context {
     /// Choose which dotfile profile to use
     #[arg(short, long)]
-    profile: Option<String>,
+    pub profile: Option<String>,
 
     /// No filesystem operations. Only print what would happen
     #[arg(short = 'n', long)]
-    dry_run: bool,
+    pub dry_run: bool,
+}
+
+// this is used by the tests to provide a default context
+// this could be improved but its enough for now
+#[cfg(test)]
+static TEST_CTX: Context = Context {
+    profile: None,
+    dry_run: false,
+};
+
+#[derive(Parser)]
+#[command(about, author, version, propagate_version = true, styles = tuckr_color_styles())]
+struct Cli {
+    #[command(flatten)]
+    ctx: Context,
 
     #[command(subcommand)]
     command: Command,
@@ -207,19 +221,10 @@ fn main() -> ExitCode {
             assume_yes,
             only_files,
         } => hooks::set_cmd(
-            cli.profile,
-            cli.dry_run,
-            only_files,
-            &groups,
-            &exclude,
-            force,
-            adopt,
-            assume_yes,
+            &cli.ctx, only_files, &groups, &exclude, force, adopt, assume_yes,
         ),
 
-        Command::Unset { groups, exclude } => {
-            hooks::unset_cmd(cli.profile, cli.dry_run, &groups, &exclude)
-        }
+        Command::Unset { groups, exclude } => hooks::unset_cmd(&cli.ctx, &groups, &exclude),
 
         Command::Add {
             groups,
@@ -229,46 +234,36 @@ fn main() -> ExitCode {
             assume_yes,
             only_files,
         } => symlinks::add_cmd(
-            cli.profile,
-            cli.dry_run,
-            only_files,
-            &groups,
-            &exclude,
-            force,
-            adopt,
-            assume_yes,
+            &cli.ctx, only_files, &groups, &exclude, force, adopt, assume_yes,
         ),
 
-        Command::Rm { groups, exclude } => {
-            symlinks::remove_cmd(cli.profile, cli.dry_run, &groups, &exclude)
-        }
-        Command::Status { groups } => symlinks::status_cmd(cli.profile, groups),
-        Command::Encrypt { group, dotfiles } => {
-            secrets::encrypt_cmd(cli.profile, cli.dry_run, &group, &dotfiles)
-        }
-        Command::Decrypt { groups, exclude } => {
-            secrets::decrypt_cmd(cli.profile, cli.dry_run, &groups, &exclude)
-        }
-        Command::Init => fileops::init_cmd(cli.profile, cli.dry_run),
+        Command::Rm { groups, exclude } => symlinks::remove_cmd(&cli.ctx, &groups, &exclude),
+
+        Command::Status { groups } => symlinks::status_cmd(&cli.ctx, groups),
+
+        Command::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&cli.ctx, &group, &dotfiles),
+
+        Command::Decrypt { groups, exclude } => secrets::decrypt_cmd(&cli.ctx, &groups, &exclude),
+
+        Command::Init => fileops::init_cmd(&cli.ctx),
 
         Command::Ls(ls_type) => match ls_type {
             ListType::Profiles => fileops::ls_profiles_cmd(),
-            ListType::Secrets => fileops::ls_secrets_cmd(cli.profile),
-            ListType::Hooks => fileops::ls_hooks_cmd(cli.profile),
+            ListType::Secrets => fileops::ls_secrets_cmd(&cli.ctx),
+            ListType::Hooks => fileops::ls_hooks_cmd(&cli.ctx),
         },
 
         Command::Push {
             group,
             files,
             assume_yes,
-        } => fileops::push_cmd(cli.profile, cli.dry_run, group, &files, assume_yes),
-        Command::Pop { groups, assume_yes } => {
-            fileops::pop_cmd(cli.profile, cli.dry_run, &groups, assume_yes)
-        }
-        Command::GroupIs { files } => fileops::groupis_cmd(cli.profile, &files),
-        Command::FromStow { stow_path } => {
-            fileops::from_stow_cmd(cli.profile, cli.dry_run, stow_path)
-        }
+        } => fileops::push_cmd(&cli.ctx, group, &files, assume_yes),
+
+        Command::Pop { groups, assume_yes } => fileops::pop_cmd(&cli.ctx, &groups, assume_yes),
+
+        Command::GroupIs { files } => fileops::groupis_cmd(&cli.ctx, &files),
+
+        Command::FromStow { stow_path } => fileops::from_stow_cmd(&cli.ctx, stow_path),
     };
 
     match exit_code {

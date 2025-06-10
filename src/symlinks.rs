@@ -10,6 +10,7 @@
 //! This information is retrieved by walking through dotfiles/Configs and checking whether their
 //! $TUCKR_TARGET equivalents are pointing to them and categorizing them accordingly.
 
+use crate::Context;
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
 use crate::fileops;
 use enumflags2::{BitFlags, make_bitflags};
@@ -584,8 +585,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
 /// Adds symlinks
 #[allow(clippy::too_many_arguments)]
 pub fn add_cmd(
-    profile: Option<String>,
-    dry_run: bool,
+    ctx: &Context,
     only_files: bool,
     groups: &[String],
     exclude: &[String],
@@ -617,7 +617,7 @@ pub fn add_cmd(
         }
     }
 
-    foreach_group(profile.clone(), groups, exclude, true, |sym, group| {
+    foreach_group(ctx.profile.clone(), groups, exclude, true, |sym, group| {
         let remove_files_and_decide_if_adopt = |status_group: &HashCache, adopt: bool| {
             let group = status_group.get(group);
             if let Some(group_files) = group {
@@ -626,7 +626,7 @@ pub fn add_cmd(
 
                     let deleted_file = if adopt { &file.path } else { &target_file };
 
-                    if dry_run {
+                    if ctx.dry_run {
                         eprintln!(
                             "{}",
                             t!("dry-run.removing_x", x = deleted_file.display()).red()
@@ -638,7 +638,7 @@ pub fn add_cmd(
                     }
 
                     if adopt {
-                        if dry_run {
+                        if ctx.dry_run {
                             eprintln!(
                                 "{}",
                                 t!(
@@ -668,10 +668,10 @@ pub fn add_cmd(
             remove_files_and_decide_if_adopt(&sym.not_symlinked, true);
         }
 
-        sym.add(dry_run, only_files, group)
+        sym.add(ctx.dry_run, only_files, group)
     })?;
 
-    let post_add_sym = SymlinkHandler::try_new(profile.clone())?;
+    let post_add_sym = SymlinkHandler::try_new(ctx.profile.clone())?;
     let potential_conflicts = post_add_sym.get_conflicts_in_cache();
 
     if !potential_conflicts.is_empty() {
@@ -693,21 +693,16 @@ pub fn add_cmd(
                 )
                 .yellow(),
             );
-            return print_groups_status(profile, &post_add_sym, groups.into());
+            return print_groups_status(ctx.profile.clone(), &post_add_sym, groups.into());
         }
     }
     Ok(())
 }
 
 /// Removes symlinks
-pub fn remove_cmd(
-    profile: Option<String>,
-    dry_run: bool,
-    groups: &[String],
-    exclude: &[String],
-) -> Result<(), ExitCode> {
-    foreach_group(profile, groups, exclude, false, |sym, p| {
-        sym.remove(dry_run, p)
+pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    foreach_group(ctx.profile.clone(), groups, exclude, false, |sym, p| {
+        sym.remove(ctx.dry_run, p)
     })?;
     Ok(())
 }
@@ -1002,8 +997,8 @@ fn print_groups_status(
 }
 
 /// Prints symlinking status
-pub fn status_cmd(profile: Option<String>, groups: Option<Vec<String>>) -> Result<(), ExitCode> {
-    let sym = SymlinkHandler::try_new(profile.clone())?;
+pub fn status_cmd(ctx: &Context, groups: Option<Vec<String>>) -> Result<(), ExitCode> {
+    let sym = SymlinkHandler::try_new(ctx.profile.clone())?;
 
     if sym.is_empty() {
         println!("{}", t!("errors.no_x_setup_yet", x = "dotfiles").yellow());
@@ -1032,7 +1027,7 @@ pub fn status_cmd(profile: Option<String>, groups: Option<Vec<String>>) -> Resul
                 })
                 .collect();
 
-            let ret = print_groups_status(profile, &sym, groups);
+            let ret = print_groups_status(ctx.profile.clone(), &sym, groups);
 
             if !invalid_group_errs.is_empty() {
                 for err in invalid_group_errs {
@@ -1059,6 +1054,7 @@ mod tests {
 
     use owo_colors::OwoColorize;
 
+    use crate::TEST_CTX;
     use crate::dotfiles::{self, Dotfile};
 
     use super::SymlinkHandler;
@@ -1072,7 +1068,7 @@ mod tests {
 
     impl Test {
         fn start() -> Self {
-            crate::fileops::init_cmd(None, false).unwrap();
+            crate::fileops::init_cmd(&TEST_CTX).unwrap();
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
             let new_config_dir = group_dir.join(".config");
@@ -1113,7 +1109,7 @@ mod tests {
             }
 
             if dotfiles_dir.exists() {
-                _ = super::remove_cmd(None, false, &["*".to_string()], &[]);
+                _ = super::remove_cmd(&TEST_CTX, &["*".to_string()], &[]);
                 fs::remove_dir_all(dotfiles_dir).unwrap();
             }
         }
@@ -1129,8 +1125,7 @@ mod tests {
 
         assert!(!sym.symlinked.contains_key("Group1"));
         super::add_cmd(
-            None,
-            false,
+            &TEST_CTX,
             false,
             &["Group1".to_string()],
             &[],
@@ -1148,8 +1143,7 @@ mod tests {
         let _test = Test::start();
 
         super::add_cmd(
-            None,
-            false,
+            &TEST_CTX,
             false,
             &["Group1".to_string()],
             &[],
@@ -1166,7 +1160,7 @@ mod tests {
 
         assert!(!sym.not_symlinked.contains_key("Group1"));
 
-        super::remove_cmd(None, false, &["Group1".to_string()], &[]).unwrap();
+        super::remove_cmd(&TEST_CTX, &["Group1".to_string()], &[]).unwrap();
         let sym = SymlinkHandler::try_new(None).unwrap();
         assert!(sym.not_symlinked.contains_key("Group1"));
     }

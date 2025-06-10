@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::Context;
 use crate::dotfiles::{self, ReturnCode};
 use crate::symlinks;
 use owo_colors::OwoColorize;
@@ -139,11 +140,11 @@ impl Iterator for DirWalk {
 }
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
-pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> {
+pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
     let dotfiles_dir = if cfg!(test) {
         dotfiles::get_dotfiles_path(None).unwrap()
     } else {
-        let dotfiles_dir_name = match profile {
+        let dotfiles_dir_name = match ctx.profile.as_ref() {
             Some(profile) => "dotfiles_".to_string() + profile.as_str(),
             None => "dotfiles".to_string(),
         };
@@ -155,7 +156,7 @@ pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> 
         dotfiles_dir.join("Hooks"),
         dotfiles_dir.join("Secrets"),
     ] {
-        if dry_run {
+        if ctx.dry_run {
             eprintln!(
                 "{}",
                 t!("dry-run.creating_dir", dir = dir.display()).green(),
@@ -179,13 +180,12 @@ pub fn init_cmd(profile: Option<String>, dry_run: bool) -> Result<(), ExitCode> 
 }
 
 pub fn push_cmd(
-    profile: Option<String>,
-    dry_run: bool,
+    ctx: &Context,
     group: String,
     files: &[String],
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir.join("Configs").join(group),
         Err(e) => {
             eprintln!("{e}");
@@ -261,7 +261,13 @@ pub fn push_cmd(
 
         if file.is_file() {
             let target_dir = target_file.parent().unwrap();
-            push_file(dry_run, target_dir, &target_file, &file, &mut created_dirs);
+            push_file(
+                ctx.dry_run,
+                target_dir,
+                &target_file,
+                &file,
+                &mut created_dirs,
+            );
             continue;
         }
 
@@ -282,7 +288,7 @@ pub fn push_cmd(
             let target_parent_file = target_file.parent().unwrap();
 
             push_file(
-                dry_run,
+                ctx.dry_run,
                 target_parent_file,
                 target_file.as_path(),
                 file.as_path(),
@@ -298,13 +304,8 @@ pub fn push_cmd(
     }
 }
 
-pub fn pop_cmd(
-    profile: Option<String>,
-    dry_run: bool,
-    groups: &[String],
-    assume_yes: bool,
-) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
+pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir.join("Configs"),
         Err(e) => {
             eprintln!("{e}");
@@ -352,7 +353,7 @@ pub fn pop_cmd(
     }
 
     for group_path in valid_groups {
-        if dry_run {
+        if ctx.dry_run {
             eprintln!(
                 "{}",
                 t!("dry-run.removing_x", x = group_path.display()).red()
@@ -361,15 +362,15 @@ pub fn pop_cmd(
         }
 
         let dotfile = dotfiles::Dotfile::try_from(group_path.clone()).unwrap();
-        symlinks::remove_cmd(profile.clone(), dry_run, &[dotfile.group_name], &[])?;
+        symlinks::remove_cmd(ctx, &[dotfile.group_name], &[])?;
         fs::remove_dir_all(&group_path).unwrap();
     }
 
     Ok(())
 }
 
-pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
-    let dir = match dotfiles::get_dotfiles_path(profile) {
+pub fn ls_hooks_cmd(ctx: &Context) -> Result<(), ExitCode> {
+    let dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir.join("Hooks"),
         Err(err) => {
             eprintln!("{err}");
@@ -455,8 +456,8 @@ pub fn ls_hooks_cmd(profile: Option<String>) -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn ls_secrets_cmd(profile: Option<String>) -> Result<(), ExitCode> {
-    let secrets_dir = dotfiles::get_dotfiles_path(profile)
+pub fn ls_secrets_cmd(ctx: &Context) -> Result<(), ExitCode> {
+    let secrets_dir = dotfiles::get_dotfiles_path(ctx.profile.clone())
         .unwrap()
         .join("Secrets");
 
@@ -525,8 +526,8 @@ pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
     Ok(())
 }
 
-pub fn groupis_cmd(profile: Option<String>, files: &[String]) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
+pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(path) => path,
         Err(e) => {
             eprintln!("{e}");
@@ -612,11 +613,7 @@ fn get_user_confirmation(msg: &str) -> bool {
 
 // TODO: translate messages
 // TODO: add colors to the dry run messages
-pub fn from_stow_cmd(
-    profile: Option<String>,
-    dry_run: bool,
-    stow_path: Option<String>,
-) -> Result<(), ExitCode> {
+pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), ExitCode> {
     println!("By running this command a copy of the stow dotfiles repo is created and converted to tuckr.
         This operation is non-destructive, if you have a previous config it will be kept with a `_old` suffix.
 
@@ -637,19 +634,19 @@ pub fn from_stow_cmd(
         return Ok(());
     }
 
-    let temp_profile = Some(match profile.as_ref() {
+    let temp_profile = Some(match ctx.profile.as_ref() {
         Some(profile) => format!("{profile}_incomplete_conversion"),
         None => "incomplete_conversion".into(),
     });
 
-    init_cmd(temp_profile.clone(), dry_run)?;
+    init_cmd(ctx)?;
 
     let stow_path = match stow_path {
         Some(path) => PathBuf::from(path).canonicalize().unwrap(),
         None => std::env::current_dir().unwrap(),
     };
 
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile.clone()) {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir,
         Err(err) => {
             eprintln!("{err}");
@@ -671,7 +668,7 @@ pub fn from_stow_cmd(
     let new_configs_dir = new_dotfiles_dir.join("Configs");
 
     for file in DirWalk::new(&stow_path) {
-        if dry_run && file.as_os_str().to_str().unwrap().contains("dot-") {
+        if ctx.dry_run && file.as_os_str().to_str().unwrap().contains("dot-") {
             eprintln!("Converting `dot-` to `.` in file path `{}`", file.display());
         }
 
@@ -692,14 +689,14 @@ pub fn from_stow_cmd(
         let tuckr_path = new_configs_dir.join(final_stem);
 
         if file.is_dir() {
-            if dry_run {
+            if ctx.dry_run {
                 eprintln!("Creating directory `{}`", tuckr_path.display());
             }
             fs::create_dir_all(tuckr_path).unwrap();
             continue;
         }
 
-        if dry_run {
+        if ctx.dry_run {
             eprintln!(
                 "Copying file `{}` to `{}`",
                 file.display(),
@@ -715,7 +712,7 @@ pub fn from_stow_cmd(
         let mut old_dotfiles = dotfiles_dir.clone();
         old_dotfiles.set_file_name(format!("{}_old", old_dirname));
 
-        if dry_run {
+        if ctx.dry_run {
             eprintln!(
                 "Moving previous dofiles (`{}`) to `{}`",
                 dotfiles_dir.display(),
@@ -725,7 +722,7 @@ pub fn from_stow_cmd(
             fs::rename(&dotfiles_dir, old_dotfiles).unwrap();
         }
 
-        if dry_run {
+        if ctx.dry_run {
             eprintln!("Moving converted dotfiles to `{}`", dotfiles_dir.display());
         } else {
             fs::rename(new_dotfiles_dir, dotfiles_dir).unwrap();
@@ -740,6 +737,7 @@ pub fn from_stow_cmd(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::TEST_CTX;
 
     #[must_use = "must be used before every test is conducted"]
     struct FileopsTest {
@@ -794,8 +792,7 @@ mod tests {
         assert!(!pushed_file.exists());
 
         super::push_cmd(
-            None,
-            false,
+            &TEST_CTX,
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
             true,
@@ -809,8 +806,7 @@ mod tests {
 
         file.write("something something".as_bytes()).unwrap();
         super::push_cmd(
-            None,
-            false,
+            &TEST_CTX,
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
             true,
@@ -849,8 +845,7 @@ mod tests {
         assert!(!group_dir.exists());
 
         super::push_cmd(
-            None,
-            false,
+            &TEST_CTX,
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
             true,
@@ -876,8 +871,7 @@ mod tests {
             .join(dotfiles::get_target_basepath(&ft.target_dir).unwrap());
 
         super::push_cmd(
-            None,
-            false,
+            &TEST_CTX,
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
             true,
@@ -885,7 +879,7 @@ mod tests {
         .unwrap();
 
         assert!(group_dir.exists());
-        super::pop_cmd(None, false, &["test".into()], true).unwrap();
+        super::pop_cmd(&TEST_CTX, &["test".into()], true).unwrap();
         assert!(!group_dir.exists());
     }
 

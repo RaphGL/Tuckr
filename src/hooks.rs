@@ -6,6 +6,7 @@
 //! 2. Dotfiles are symlinked
 //! 3. Post setup scripts are run
 
+use crate::Context;
 use crate::dotfiles::{self, ReturnCode};
 use crate::symlinks;
 use owo_colors::OwoColorize;
@@ -70,13 +71,8 @@ impl Iterator for DeployStages {
 }
 
 /// Runs hooks of type PreHook or PostHook
-fn run_set_hook(
-    profile: Option<String>,
-    dry_run: bool,
-    group: &str,
-    hook_type: DeployStep,
-) -> Result<(), ExitCode> {
-    let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
+fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("{e}");
@@ -123,7 +119,7 @@ fn run_set_hook(
             _ => (),
         }
 
-        if dry_run {
+        if ctx.dry_run {
             continue;
         }
 
@@ -148,7 +144,7 @@ fn run_set_hook(
 }
 
 macro_rules! get_hooks_dir_if_exists_or_run_cmd {
-    ($profile:ident, $groups:ident, $cmd:expr) => {{
+    ($profile:expr, $groups:expr, $cmd:expr) => {{
         if let Some(invalid_groups) =
             dotfiles::check_invalid_groups($profile.clone(), dotfiles::DotfileType::Hooks, $groups)
         {
@@ -182,8 +178,7 @@ macro_rules! get_hooks_dir_if_exists_or_run_cmd {
 /// Runs hooks for specified groups and symlinks them
 #[allow(clippy::too_many_arguments)]
 pub fn set_cmd(
-    profile: Option<String>,
-    dry_run: bool,
+    ctx: &Context,
     only_files: bool,
     groups: &[String],
     exclude: &[String],
@@ -191,14 +186,12 @@ pub fn set_cmd(
     adopt: bool,
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
+    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(ctx.profile.clone(), groups, {
         println!(
             "{}",
             t!("info.no_hooks_exist_running_cmd", cmd = "tuckr add").yellow()
         );
-        symlinks::add_cmd(
-            profile, dry_run, only_files, groups, exclude, force, adopt, assume_yes,
-        )
+        symlinks::add_cmd(ctx, only_files, groups, exclude, force, adopt, assume_yes)
     });
 
     let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
@@ -211,12 +204,12 @@ pub fn set_cmd(
                 DeployStep::Initialize => return Ok(()),
 
                 DeployStep::PreHook => {
-                    run_set_hook(profile.clone(), dry_run, &group, step)?;
+                    run_set_hook(ctx, &group, step)?;
                 }
 
                 DeployStep::Symlink => {
                     if dotfiles::check_invalid_groups(
-                        profile.clone(),
+                        ctx.profile.clone(),
                         dotfiles::DotfileType::Configs,
                         &[&group],
                     )
@@ -230,8 +223,7 @@ pub fn set_cmd(
                         group.yellow().to_string().as_str(),
                     );
                     symlinks::add_cmd(
-                        profile.clone(),
-                        dry_run,
+                        ctx,
                         only_files,
                         &[group.clone()],
                         exclude,
@@ -241,7 +233,7 @@ pub fn set_cmd(
                     )?;
                 }
 
-                DeployStep::PostHook => run_set_hook(profile.clone(), dry_run, &group, step)?,
+                DeployStep::PostHook => run_set_hook(ctx, &group, step)?,
             }
         }
 
@@ -261,7 +253,7 @@ pub fn set_cmd(
 
         add_group_dotfiles(hooks_dir)?;
 
-        let configs_dir = dotfiles::get_dotfiles_path(profile.clone())
+        let configs_dir = dotfiles::get_dotfiles_path(ctx.profile.clone())
             .unwrap()
             .join("Configs");
 
@@ -330,23 +322,18 @@ pub fn set_cmd(
 }
 
 /// Runs cleanup hooks for groups and then removes all their symlinks
-pub fn unset_cmd(
-    profile: Option<String>,
-    dry_run: bool,
-    groups: &[String],
-    exclude: &[String],
-) -> Result<(), ExitCode> {
-    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(profile, groups, {
+pub fn unset_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(ctx.profile, groups, {
         println!(
             "{}",
             t!("info.no_hooks_exist_running_cmd", cmd = "tuckr rm").yellow()
         );
-        symlinks::remove_cmd(profile, dry_run, groups, exclude)
+        symlinks::remove_cmd(ctx, groups, exclude)
     });
 
     let wildcard = String::from("*");
     if groups.contains(&wildcard) {
-        return symlinks::remove_cmd(profile, dry_run, &[wildcard], exclude);
+        return symlinks::remove_cmd(ctx, &[wildcard], exclude);
     }
 
     for group in groups {
@@ -359,7 +346,7 @@ pub fn unset_cmd(
             if filename.starts_with("rm") {
                 print_info_box("Running cleanup hook", group.yellow().to_string().as_str());
 
-                if dry_run {
+                if ctx.dry_run {
                     continue;
                 }
 
@@ -388,7 +375,7 @@ pub fn unset_cmd(
             group.yellow().to_string().as_str(),
         );
 
-        symlinks::remove_cmd(profile.clone(), dry_run, &[group.to_owned()], exclude)?;
+        symlinks::remove_cmd(ctx, &[group.to_owned()], exclude)?;
     }
 
     Ok(())

@@ -2,6 +2,7 @@
 //!
 //! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
 
+use crate::Context;
 use crate::dotfiles::{self, Dotfile, ReturnCode};
 use crate::fileops::DirWalk;
 use chacha20poly1305::{AeadCore, KeyInit, XChaCha20Poly1305, aead, aead::Aead};
@@ -79,12 +80,7 @@ impl SecretsHandler {
 }
 
 /// Encrypts secrets
-pub fn encrypt_cmd(
-    profile: Option<String>,
-    dry_run: bool,
-    group: &str,
-    dotfiles: &[String],
-) -> Result<(), ExitCode> {
+pub fn encrypt_cmd(ctx: &Context, group: &str, dotfiles: &[String]) -> Result<(), ExitCode> {
     {
         let mut invalid_dotfiles = false;
         for dotfile in dotfiles {
@@ -99,7 +95,7 @@ pub fn encrypt_cmd(
         }
     }
 
-    let handler = SecretsHandler::try_new(profile)?;
+    let handler = SecretsHandler::try_new(ctx.profile.clone())?;
 
     let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
     if !dest_dir.exists() {
@@ -118,7 +114,7 @@ pub fn encrypt_cmd(
         let target_file = dotfile.strip_prefix(&target_dir).unwrap();
 
         let encrypted_file_path = dest_dir.join(target_file);
-        if dry_run {
+        if ctx.dry_run {
             eprintln!(
                 "{}",
                 t!(
@@ -171,16 +167,11 @@ pub fn encrypt_cmd(
 }
 
 /// Decrypts secrets
-pub fn decrypt_cmd(
-    profile: Option<String>,
-    dry_run: bool,
-    groups: &[String],
-    exclude: &[String],
-) -> Result<(), ExitCode> {
-    let handler = SecretsHandler::try_new(profile.clone())?;
+pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
+    let handler = SecretsHandler::try_new(ctx.profile.clone())?;
 
     if let Some(invalid_groups) =
-        dotfiles::check_invalid_groups(profile, dotfiles::DotfileType::Secrets, groups)
+        dotfiles::check_invalid_groups(ctx.profile.clone(), dotfiles::DotfileType::Secrets, groups)
     {
         for group in invalid_groups {
             eprintln!("{}", t!("errors.no_group", group = group).red());
@@ -210,7 +201,7 @@ pub fn decrypt_cmd(
             let base_secret_path = secret.strip_prefix(&group_dir).unwrap();
             let decrypted_dest = target_dir.join(base_secret_path);
 
-            if dry_run {
+            if ctx.dry_run {
                 eprintln!(
                     "{}",
                     t!(
