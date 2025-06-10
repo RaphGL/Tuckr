@@ -43,6 +43,7 @@ pub fn get_group_priority<T: AsRef<str>>(group: T) -> usize {
         "unix" | "windows" => 1,
         "wsl" => 3,
         _ if !group_ends_with_target_name(group) => 0,
+        _ if target.starts_with('#') => 4,
         _ => 2,
     }
 }
