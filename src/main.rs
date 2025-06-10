@@ -40,15 +40,24 @@ pub struct Context {
     /// No filesystem operations. Only print what would happen
     #[arg(short = 'n', long)]
     pub dry_run: bool,
+
+    /// Enable custom targets
+    #[arg(short = 't', long = "targets", use_value_delimiter = true)]
+    pub custom_targets: Vec<String>,
 }
 
-// this is used by the tests to provide a default context
-// this could be improved but its enough for now
+// we should never even be creating our own context since this is user provided context
+// but this is useful for running unit tests so...
 #[cfg(test)]
-static TEST_CTX: Context = Context {
-    profile: None,
-    dry_run: false,
-};
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            profile: None,
+            dry_run: false,
+            custom_targets: vec!["custom".into(), "laptop".into()],
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(about, author, version, propagate_version = true, styles = tuckr_color_styles())]
@@ -208,7 +217,19 @@ enum ListType {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = {
+        // custom targets can be set permanently through env vars or set temporarily through the cli
+        // so we need to append env var targets before running
+        let mut cli = Cli::parse();
+        if let Ok(custom_targets) = std::env::var("TUCKR_CUSTOM_TARGETS") {
+            let mut custom_targets: Vec<_> =
+                custom_targets.split(',').map(|t| t.to_string()).collect();
+            cli.ctx.custom_targets.append(&mut custom_targets);
+            cli.ctx.custom_targets.sort();
+            cli.ctx.custom_targets.dedup();
+        }
+        cli
+    };
 
     rust_i18n::set_locale(sys_locale::get_locale().unwrap_or_default().as_str());
 

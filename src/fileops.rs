@@ -737,7 +737,6 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TEST_CTX;
 
     #[must_use = "must be used before every test is conducted"]
     struct FileopsTest {
@@ -792,7 +791,7 @@ mod tests {
         assert!(!pushed_file.exists());
 
         super::push_cmd(
-            &TEST_CTX,
+            &Context::default(),
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
             true,
@@ -806,7 +805,7 @@ mod tests {
 
         file.write("something something".as_bytes()).unwrap();
         super::push_cmd(
-            &TEST_CTX,
+            &Context::default(),
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
             true,
@@ -845,7 +844,7 @@ mod tests {
         assert!(!group_dir.exists());
 
         super::push_cmd(
-            &TEST_CTX,
+            &Context::default(),
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
             true,
@@ -871,7 +870,7 @@ mod tests {
             .join(dotfiles::get_target_basepath(&ft.target_dir).unwrap());
 
         super::push_cmd(
-            &TEST_CTX,
+            &Context::default(),
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
             true,
@@ -879,7 +878,7 @@ mod tests {
         .unwrap();
 
         assert!(group_dir.exists());
-        super::pop_cmd(&TEST_CTX, &["test".into()], true).unwrap();
+        super::pop_cmd(&Context::default(), &["test".into()], true).unwrap();
         assert!(!group_dir.exists());
     }
 

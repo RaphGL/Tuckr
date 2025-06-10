@@ -195,7 +195,8 @@ pub fn set_cmd(
     });
 
     let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
-        if !dotfiles::group_is_valid_target(&group) || exclude.contains(&group) {
+        if !dotfiles::group_is_valid_target(&group, &ctx.custom_targets) || exclude.contains(&group)
+        {
             return Ok(());
         }
 

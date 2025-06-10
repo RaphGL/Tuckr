@@ -188,7 +188,7 @@ pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resu
     };
 
     let decrypt_group = |group: Dotfile| -> Result<(), ExitCode> {
-        if exclude.contains(&group.group_name) || !group.is_valid_target() {
+        if exclude.contains(&group.group_name) || !group.is_valid_target(&ctx.custom_targets) {
             return Ok(());
         }
 

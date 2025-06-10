@@ -110,17 +110,18 @@ enum SymlinkType {
 type HashCache = HashMap<String, HashSet<Dotfile>>;
 
 /// Handles dotfile symlinking and their current status
-struct SymlinkHandler {
+struct SymlinkHandler<'a> {
+    ctx: &'a Context,
     dotfiles_dir: PathBuf,    // path to the dotfiles directory
     symlinked: HashCache,     // dotfiles that have been symlinked from Dotfiles/Configs
     not_symlinked: HashCache, // dotfiles that haven't been symlinked to $TUCKR_TARGET yet
     not_owned: HashCache, // dotfiles that are symlinks but points somewhere outside of their respective Dotfiles/Configs's group dir
 }
 
-impl SymlinkHandler {
+impl<'a> SymlinkHandler<'a> {
     /// Initializes SymlinkHandler and fills it dotfiles' status information
-    fn try_new(profile: Option<String>) -> Result<Self, ExitCode> {
-        let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
+    fn try_new(ctx: &'a Context) -> Result<Self, ExitCode> {
+        let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
             Ok(dir) => dir,
             Err(e) => {
                 eprintln!("{e}");
@@ -134,6 +135,7 @@ impl SymlinkHandler {
         }
 
         let symlinker = SymlinkHandler {
+            ctx,
             dotfiles_dir,
             symlinked: HashCache::new(),
             not_symlinked: HashCache::new(),
@@ -295,7 +297,7 @@ impl SymlinkHandler {
                 // any file in this group is in the same target so just pick any file to check
                 let file = files.iter().next().unwrap();
 
-                group.starts_with(target_group) && file.is_valid_target()
+                group.starts_with(target_group) && file.is_valid_target(&self.ctx.custom_targets)
             })
             .map(|(group, _)| group.clone())
             .collect();
@@ -355,7 +357,9 @@ impl SymlinkHandler {
         // mark group as conflicting if at least one value already exists in $TUCKR_TARGET
         for files in self.not_symlinked.values() {
             for file in files {
-                if file.to_target_path().unwrap().exists() && file.is_valid_target() {
+                if file.to_target_path().unwrap().exists()
+                    && file.is_valid_target(&self.ctx.custom_targets)
+                {
                     conflicts.entry(file.group_name.clone()).or_default();
                     let curr_entry = conflicts.get_mut(&file.group_name).unwrap();
                     curr_entry.insert(file.clone());
@@ -495,20 +499,21 @@ impl SymlinkHandler {
 /// iterates over each group in the dotfiles and calls a function F giving it the SymlinkHandler
 /// instance and the name of the group that's being handled
 fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
-    profile: Option<String>,
+    ctx: &Context,
     groups: &[String],
     exclude: &[String],
     symlinked: bool,
     func: F,
 ) -> Result<(), ExitCode> {
     // loads the runtime information needed to carry out actions
-    let sym = SymlinkHandler::try_new(profile.clone())?;
+    let sym = SymlinkHandler::try_new(ctx)?;
 
     let groups = {
         // detect if user provided an invalid group
         // note: a group only is invalid only if the group itself or one of its related conditional groups don't exist
         let valid_groups =
-            match dotfiles::check_invalid_groups(profile.clone(), DotfileType::Configs, groups) {
+            match dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, groups)
+            {
                 Some(invalid_groups) => {
                     let mut valid_groups = Vec::new();
                     let mut groups_checked_as_invalid = Vec::new();
@@ -560,7 +565,7 @@ fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
                 continue;
             }
 
-            if !dotfiles::group_is_valid_target(group) {
+            if !dotfiles::group_is_valid_target(group, &ctx.custom_targets) {
                 continue;
             }
 
@@ -617,7 +622,7 @@ pub fn add_cmd(
         }
     }
 
-    foreach_group(ctx.profile.clone(), groups, exclude, true, |sym, group| {
+    foreach_group(ctx, groups, exclude, true, |sym, group| {
         let remove_files_and_decide_if_adopt = |status_group: &HashCache, adopt: bool| {
             let group = status_group.get(group);
             if let Some(group_files) = group {
@@ -671,7 +676,7 @@ pub fn add_cmd(
         sym.add(ctx.dry_run, only_files, group)
     })?;
 
-    let post_add_sym = SymlinkHandler::try_new(ctx.profile.clone())?;
+    let post_add_sym = SymlinkHandler::try_new(ctx)?;
     let potential_conflicts = post_add_sym.get_conflicts_in_cache();
 
     if !potential_conflicts.is_empty() {
@@ -693,7 +698,7 @@ pub fn add_cmd(
                 )
                 .yellow(),
             );
-            return print_groups_status(ctx.profile.clone(), &post_add_sym, groups.into());
+            return print_groups_status(ctx, &post_add_sym, groups.into());
         }
     }
     Ok(())
@@ -701,7 +706,7 @@ pub fn add_cmd(
 
 /// Removes symlinks
 pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    foreach_group(ctx.profile.clone(), groups, exclude, false, |sym, p| {
+    foreach_group(ctx, groups, exclude, false, |sym, p| {
         sym.remove(ctx.dry_run, p)
     })?;
     Ok(())
@@ -842,7 +847,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 }
 
 fn print_groups_status(
-    profile: Option<String>,
+    ctx: &Context,
     sym: &SymlinkHandler,
     groups: Vec<String>,
 ) -> Result<(), ExitCode> {
@@ -897,7 +902,7 @@ fn print_groups_status(
         let mut unsupported = groups
             .iter()
             .map(|group| Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
-            .filter(|group| !group.is_valid_target())
+            .filter(|group| !group.is_valid_target(&ctx.custom_targets))
             .map(|group| group.group_name)
             .collect::<Vec<_>>();
 
@@ -973,7 +978,8 @@ fn print_groups_status(
         println!();
     }
 
-    let invalid_groups = dotfiles::check_invalid_groups(profile, DotfileType::Configs, &groups);
+    let invalid_groups =
+        dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, &groups);
     if let Some(invalid_groups) = &invalid_groups {
         eprintln!("{}:", t!("errors.following_groups_dont_exist"));
         for group in invalid_groups {
@@ -998,7 +1004,7 @@ fn print_groups_status(
 
 /// Prints symlinking status
 pub fn status_cmd(ctx: &Context, groups: Option<Vec<String>>) -> Result<(), ExitCode> {
-    let sym = SymlinkHandler::try_new(ctx.profile.clone())?;
+    let sym = SymlinkHandler::try_new(ctx)?;
 
     if sym.is_empty() {
         println!("{}", t!("errors.no_x_setup_yet", x = "dotfiles").yellow());
@@ -1027,7 +1033,7 @@ pub fn status_cmd(ctx: &Context, groups: Option<Vec<String>>) -> Result<(), Exit
                 })
                 .collect();
 
-            let ret = print_groups_status(ctx.profile.clone(), &sym, groups);
+            let ret = print_groups_status(ctx, &sym, groups);
 
             if !invalid_group_errs.is_empty() {
                 for err in invalid_group_errs {
@@ -1054,10 +1060,9 @@ mod tests {
 
     use owo_colors::OwoColorize;
 
-    use crate::TEST_CTX;
-    use crate::dotfiles::{self, Dotfile};
-
     use super::SymlinkHandler;
+    use crate::Context;
+    use crate::dotfiles::{self, Dotfile};
 
     /// note: every new file or group that is added to the test ought to be added to the filepaths array in Self::start().
     /// this ensures that the tests never fail with weird random panics
@@ -1068,7 +1073,7 @@ mod tests {
 
     impl Test {
         fn start() -> Self {
-            crate::fileops::init_cmd(&TEST_CTX).unwrap();
+            crate::fileops::init_cmd(&Context::default()).unwrap();
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
             let new_config_dir = group_dir.join(".config");
@@ -1109,7 +1114,7 @@ mod tests {
             }
 
             if dotfiles_dir.exists() {
-                _ = super::remove_cmd(&TEST_CTX, &["*".to_string()], &[]);
+                _ = super::remove_cmd(&Context::default(), &["*".to_string()], &[]);
                 fs::remove_dir_all(dotfiles_dir).unwrap();
             }
         }
@@ -1118,14 +1123,17 @@ mod tests {
     fn test_adding_symlink() {
         let _test = Test::start();
 
-        let sym = SymlinkHandler::try_new(None).unwrap();
+        let mut ctx = Context::default();
+        ctx.profile = None;
+
+        let sym = SymlinkHandler::try_new(&ctx).unwrap();
         assert!(
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
 
         assert!(!sym.symlinked.contains_key("Group1"));
         super::add_cmd(
-            &TEST_CTX,
+            &Context::default(),
             false,
             &["Group1".to_string()],
             &[],
@@ -1135,7 +1143,7 @@ mod tests {
         )
         .unwrap();
 
-        let sym = SymlinkHandler::try_new(None).unwrap();
+        let sym = SymlinkHandler::try_new(&ctx).unwrap();
         assert!(sym.symlinked.contains_key("Group1"));
     }
 
@@ -1143,7 +1151,7 @@ mod tests {
         let _test = Test::start();
 
         super::add_cmd(
-            &TEST_CTX,
+            &Context::default(),
             false,
             &["Group1".to_string()],
             &[],
@@ -1153,15 +1161,17 @@ mod tests {
         )
         .unwrap();
 
-        let sym = SymlinkHandler::try_new(None).unwrap();
+        let ctx = Context::default();
+
+        let sym = SymlinkHandler::try_new(&ctx).unwrap();
         assert!(
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
 
         assert!(!sym.not_symlinked.contains_key("Group1"));
 
-        super::remove_cmd(&TEST_CTX, &["Group1".to_string()], &[]).unwrap();
-        let sym = SymlinkHandler::try_new(None).unwrap();
+        super::remove_cmd(&Context::default(), &["Group1".to_string()], &[]).unwrap();
+        let sym = SymlinkHandler::try_new(&ctx).unwrap();
         assert!(sym.not_symlinked.contains_key("Group1"));
     }
 

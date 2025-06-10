@@ -33,7 +33,7 @@ pub const VALID_TARGETS: &[&str] = &[
 
 /// Returns the priority number for the group
 /// A higher number means a higher priority
-pub fn get_group_priority(group: impl AsRef<str>) -> usize {
+pub fn get_group_priority<T: AsRef<str>>(group: T) -> usize {
     let group = group.as_ref();
     let target = group.split('_').next_back().unwrap_or(group);
 
@@ -160,7 +160,12 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
 // returns true if group ends with a valid target platform suffix
 pub fn group_ends_with_target_name(group: &str) -> bool {
-    VALID_TARGETS.iter().any(|target| group.ends_with(target))
+    let Some(potential_target) = group.split('_').last() else {
+        return false;
+    };
+
+    // a custom target would look like my_group_#target
+    potential_target.starts_with('#') || VALID_TARGETS.iter().any(|target| group.ends_with(target))
 }
 
 pub fn group_without_target(group: &str) -> &str {
@@ -201,13 +206,27 @@ fn platform_is_under_wsl() -> bool {
 /// Checks if a group should be linked on current platform. For unconditional
 /// groups, this function returns true; for conditional groups, this function
 /// returns true when group suffix matches current target_os or target_family.
-pub fn group_is_valid_target(group: &str) -> bool {
+// TODO update function to be aware of custom targets
+pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) -> bool {
     // Gets the current OS and OS family
     let current_target_os = format!("_{}", env::consts::OS);
     let current_target_family = format!("_{}", env::consts::FAMILY);
 
     // returns true if a group has no suffix or its suffix matches the current OS
     if group_ends_with_target_name(group) {
+        let target = group
+            .split('_')
+            .last()
+            .expect("a group with target name should always have a `_`");
+
+        // custom target syntax: group_#target
+        if target.starts_with('#') {
+            let target = &target[1..];
+            if custom_targets.iter().any(|t| t.as_ref() == target) {
+                return true;
+            }
+        }
+
         group.ends_with(&current_target_os)
             || group.ends_with(&current_target_family)
             || (group.ends_with("_wsl") && platform_is_under_wsl())
@@ -218,8 +237,8 @@ pub fn group_is_valid_target(group: &str) -> bool {
 
 impl Dotfile {
     /// Returns true if the target can be used by the current platform
-    pub fn is_valid_target(&self) -> bool {
-        group_is_valid_target(self.group_name.as_str())
+    pub fn is_valid_target(&self, custom_targets: &[impl AsRef<str>]) -> bool {
+        group_is_valid_target(self.group_name.as_str(), custom_targets)
     }
 
     /// Checks whether the current groups is needs root privileges to modify the target path
@@ -525,10 +544,12 @@ mod tests {
             (new_group("group_unix"), std::env::consts::FAMILY == "unix"),
             (new_group("group_something"), true),
             (new_group("some_random_group"), true),
+            (new_group("custom_target_group_#set_target"), true),
+            (new_group("custom_target_group_#unset_target"), true),
         ];
 
         for (dotfile, expected) in target_tests {
-            assert_eq!(dotfile.is_valid_target(), expected);
+            assert_eq!(dotfile.is_valid_target(&["set_target"]), expected);
         }
     }
 
