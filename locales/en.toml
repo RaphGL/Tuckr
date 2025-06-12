@@ -45,6 +45,7 @@ no_x_setup_yet = "No %{x} have been setup yet"
 not_a_tuckr_dotfile = "`%{file}` is not a tuckr dotfile."
 wrong_password = "Wrong password."
 no_configs_dir_in_dotfiles = "There is no Configs directory in dotfiles (%{dotfiles})"
+could_not_read_enc = "Could not read the encrypted dotfile at %{path}"
 
 [dry-run]
 ignoring_x_already_exists = "ignoring `%{x}` as it already exists"
