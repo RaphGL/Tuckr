@@ -485,17 +485,14 @@ pub fn ls_secrets_cmd(ctx: &Context) -> Result<(), ExitCode> {
 pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
     let home_dir = dirs::home_dir().unwrap();
     let config_dir = dirs::config_dir().unwrap();
-    let custom_target_dir = std::env::var("TUCKR_TARGET");
+    let custom_dotfiles_dir = std::env::var("TUCKR_HOME");
 
     let profiles = {
         let mut available_profiles = HashSet::new();
 
-        let dirs = {
-            let mut dirs = vec![home_dir, config_dir];
-            if let Ok(target) = custom_target_dir {
-                dirs.push(target.into());
-            }
-            dirs
+        let dirs = match custom_dotfiles_dir {
+            Ok(target) => &[PathBuf::from(target)],
+            Err(_) => &[home_dir, config_dir][..],
         };
 
         for dir in dirs {
