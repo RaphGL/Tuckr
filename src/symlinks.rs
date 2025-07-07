@@ -13,7 +13,7 @@
 use crate::Context;
 use crate::dotfiles::{self, Dotfile, DotfileType, ReturnCode};
 use crate::fileops;
-use enumflags2::{BitFlags, make_bitflags};
+use enumflags2::BitFlags;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
@@ -293,11 +293,9 @@ impl<'a> SymlinkHandler<'a> {
 
         let cond_groups: Vec<String> = cache
             .iter()
-            .filter(|(group, files)| {
-                // any file in this group is in the same target so just pick any file to check
-                let file = files.iter().next().unwrap();
-
-                group.starts_with(target_group) && file.is_valid_target(&self.ctx.custom_targets)
+            .filter(|(group, _)| {
+                dotfiles::group_without_target(group) == target_group
+                    && dotfiles::group_is_valid_target(group, &self.ctx.custom_targets)
             })
             .map(|(group, _)| group.clone())
             .collect();
@@ -851,52 +849,33 @@ fn print_groups_status(
     sym: &SymlinkHandler,
     groups: Vec<String>,
 ) -> Result<(), ExitCode> {
-    let get_related_groups =
-        |sym: &SymlinkHandler, not_symlinked_groups: Option<&Vec<String>>| -> Vec<String> {
-            let mut related_groups = Vec::new();
+    // TODO: this logic is a bit confusing
+    // we should refactor this into something simpler
+    // potentially we could use sym.get_related_conditional_groups
+    fn get_related_groups(
+        sym: &SymlinkHandler,
+        symlink_types: BitFlags<SymlinkType>,
+        groups: &[String],
+    ) -> Vec<String> {
+        let mut related_groups = Vec::new();
+        for group in groups {
+            let Some(mut cond_groups) = sym.get_related_conditional_groups(&group, symlink_types)
+            else {
+                continue;
+            };
 
-            let symlinked = not_symlinked_groups.is_some();
+            related_groups.append(&mut cond_groups);
+        }
 
-            // merges conditional groups into their base group
-            // eg: `dotfile_unix` gets merged into the `dotfile` group
-            for base_group in &groups {
-                let Some(related_cond_groups) = sym.get_related_conditional_groups(
-                    base_group,
-                    if symlinked {
-                        SymlinkType::Symlinked.into()
-                    } else {
-                        make_bitflags!(SymlinkType::{NotSymlinked | NotOwned})
-                    },
-                ) else {
-                    continue;
-                };
+        related_groups
+    }
 
-                for group in related_cond_groups {
-                    match not_symlinked_groups {
-                        Some(not_symlinked) => {
-                            if not_symlinked.contains(&group) {
-                                continue;
-                            }
-                        }
-
-                        None => {
-                            if !sym.not_symlinked.contains_key(&group) {
-                                continue;
-                            }
-                        }
-                    }
-
-                    related_groups.push(group);
-                }
-            }
-
-            related_groups.sort();
-            related_groups.dedup();
-            related_groups
-        };
-
-    let not_symlinked = get_related_groups(sym, None);
-    let symlinked = get_related_groups(sym, Some(&not_symlinked));
+    let not_symlinked = get_related_groups(
+        sym,
+        enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
+        &groups,
+    );
+    let symlinked: Vec<_> = get_related_groups(sym, SymlinkType::Symlinked.into(), &groups);
 
     let unsupported = {
         let mut unsupported = groups
@@ -914,7 +893,9 @@ fn print_groups_status(
     let file_conflicts: HashCache = sym
         .get_conflicts_in_cache()
         .into_iter()
-        .filter(|(g, _)| groups.contains(g))
+        .filter(|(g, _)| {
+            groups.contains(g) || groups.contains(&dotfiles::group_without_target(g).to_string())
+        })
         .collect();
 
     if !file_conflicts.is_empty() || !not_symlinked.is_empty() {
