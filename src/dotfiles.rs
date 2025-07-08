@@ -161,7 +161,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
 // returns true if group ends with a valid target platform suffix
 pub fn group_ends_with_target_name(group: &str) -> bool {
-    let Some(potential_target) = group.split('_').last() else {
+    let Some(potential_target) = group.split('_').next_back() else {
         return false;
     };
 
@@ -207,7 +207,6 @@ fn platform_is_under_wsl() -> bool {
 /// Checks if a group should be linked on current platform. For unconditional
 /// groups, this function returns true; for conditional groups, this function
 /// returns true when group suffix matches current target_os or target_family.
-// TODO update function to be aware of custom targets
 pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) -> bool {
     // Gets the current OS and OS family
     let current_target_os = format!("_{}", env::consts::OS);
@@ -217,12 +216,11 @@ pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) ->
     if group_ends_with_target_name(group) {
         let target = group
             .split('_')
-            .last()
+            .next_back()
             .expect("a group with target name should always have a `_`");
 
         // custom target syntax: group_#target
-        if target.starts_with('#') {
-            let target = &target[1..];
+        if let Some(target) = target.strip_prefix(target) {
             if custom_targets.iter().any(|t| t.as_ref() == target) {
                 return true;
             }

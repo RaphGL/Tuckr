@@ -700,7 +700,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
     if dotfiles_dir.exists() {
         let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
         let mut old_dotfiles = dotfiles_dir.clone();
-        old_dotfiles.set_file_name(format!("{}_old", old_dirname));
+        old_dotfiles.set_file_name(format!("{old_dirname}_old"));
 
         if ctx.dry_run {
             eprintln!(

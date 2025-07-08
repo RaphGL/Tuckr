@@ -89,7 +89,7 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
         }
 
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             eprintln!(
                 "{}",
                 t!("errors.failed_to_link_file", file = f.to_str().unwrap())
@@ -856,7 +856,7 @@ fn print_groups_status(
     ) -> Vec<String> {
         let mut related_groups = Vec::new();
         for group in groups {
-            let Some(mut cond_groups) = sym.get_related_conditional_groups(&group, symlink_types)
+            let Some(mut cond_groups) = sym.get_related_conditional_groups(group, symlink_types)
             else {
                 continue;
             };
