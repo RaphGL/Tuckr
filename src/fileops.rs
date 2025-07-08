@@ -335,12 +335,8 @@ pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(),
         for group in groups {
             println!("\t{}", group.yellow());
         }
-        print!("\n{} ", t!("warn.want_to_proceed"));
-        std::io::stdout().flush().unwrap();
-        let mut confirmation = String::new();
-        std::io::stdin().read_line(&mut confirmation).unwrap();
-        let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
-        if !confirmed {
+
+        if !get_user_confirmation(t!("warn.want_to_proceed").to_string().as_str()) {
             return Ok(());
         }
     }
@@ -592,13 +588,13 @@ pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
 
 // TODO: eventually make every user confirmation in tuckr use this function
 // TODO: adhere to local specific yes and no variants
-fn get_user_confirmation(msg: &str) -> bool {
+pub fn get_user_confirmation(msg: &str) -> bool {
     let mut answer = String::new();
     print!("{msg} (y/N) ");
     _ = std::io::stdout().flush();
     std::io::stdin().read_line(&mut answer).unwrap();
 
-    matches!(answer.trim().to_lowercase().as_str(), "y" | "Y")
+    matches!(answer.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
 // TODO: translate messages

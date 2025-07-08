@@ -19,8 +19,8 @@ no_hooks_exist_running_cmd = "Não existem hooks. A executar `%{cmd}`"
 hooks_finished = "Os hooks já acabaram de executar. Aqui está o resumo:"
 
 [warn]
-want_to_override = "Quer substituí-lo? (y/N)"
-want_to_proceed = "Quer continuar? (y/N)"
+want_to_override = "Quer substituí-lo?"
+want_to_proceed = "Quer continuar?"
 
 [errors]
 failed_to_symlink_x = "Falhou a linkar o grupo `%{groupname}`: %{err_msg}"

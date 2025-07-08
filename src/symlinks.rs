@@ -596,27 +596,15 @@ pub fn add_cmd(
     adopt: bool,
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    if !assume_yes {
-        if force {
-            print!("Are you sure you want to override conflicts? (N/y) ");
-        } else if adopt {
-            print!("Are you sure you want to adopt conflicts? (N/y) ");
-        }
+    if !assume_yes && (force || adopt) {
+        let confirmed = fileops::get_user_confirmation(if force {
+            "Are you sure you want to override conflicts?"
+        } else {
+            "Are you sure you want to adopt conflicts?"
+        });
 
-        if force || adopt {
-            std::io::stdout()
-                .flush()
-                .expect("Could not print to stdout");
-
-            let mut answer = String::new();
-            std::io::stdin()
-                .read_line(&mut answer)
-                .expect("Could not read from stdin");
-
-            match answer.trim().to_lowercase().as_str() {
-                "y" | "yes" => (),
-                _ => return Ok(()),
-            }
+        if !confirmed {
+            return Ok(());
         }
     }
 
