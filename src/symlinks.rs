@@ -286,9 +286,11 @@ impl<'a> SymlinkHandler<'a> {
         target_group: &str,
         cache: &HashCache,
     ) -> Option<Vec<String>> {
-        if dotfiles::group_ends_with_target_name(target_group) && !cache.contains_key(target_group)
-        {
-            return None;
+        if dotfiles::group_ends_with_target_name(target_group) {
+            return match cache.contains_key(target_group) {
+                true => Some(vec![target_group.to_string()]),
+                false => None,
+            };
         }
 
         let cond_groups: Vec<String> = cache
