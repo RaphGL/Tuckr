@@ -208,19 +208,12 @@ pub fn push_cmd(
         let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
 
         if target_file.exists() && !assume_yes {
-            print!(
-                "{} {}. {} ",
+            let confirmation_msg = format!(
+                "`{}` {}.",
                 target_file.to_str().unwrap(),
                 t!("errors.already_exists"),
-                t!("warn.want_to_override")
             );
-
-            std::io::stdout().flush().unwrap();
-            let mut confirmation = String::new();
-            std::io::stdin().read_line(&mut confirmation).unwrap();
-
-            let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
-            if !confirmed {
+            if !get_user_confirmation(&confirmation_msg) {
                 continue;
             }
         }

@@ -849,9 +849,6 @@ fn print_groups_status(
     sym: &SymlinkHandler,
     groups: Vec<String>,
 ) -> Result<(), ExitCode> {
-    // TODO: this logic is a bit confusing
-    // we should refactor this into something simpler
-    // potentially we could use sym.get_related_conditional_groups
     fn get_related_groups(
         sym: &SymlinkHandler,
         symlink_types: BitFlags<SymlinkType>,
@@ -1045,8 +1042,8 @@ mod tests {
     use crate::Context;
     use crate::dotfiles::{self, Dotfile};
 
-    /// note: every new file or group that is added to the test ought to be added to the filepaths array in Self::start().
-    /// this ensures that the tests never fail with weird random panics
+    /// this ensures that the tests never
+    // use crate::Context; fail with weird random panics
     #[must_use = "must be initialized before every test"]
     struct Test {
         files_used: Vec<path::PathBuf>,
