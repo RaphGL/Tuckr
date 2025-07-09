@@ -18,7 +18,6 @@ use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use tabled::{Table, Tabled};
@@ -491,102 +490,6 @@ impl<'a> SymlinkHandler<'a> {
     }
 }
 
-/// groups: the groups that will be iterated
-///
-/// exclude: the groups that will be ignored
-///
-/// symlinked: whether it should be applied to symlinked or non symlinked groups
-/// iterates over each group in the dotfiles and calls a function F giving it the SymlinkHandler
-/// instance and the name of the group that's being handled
-fn foreach_group<F: Fn(&SymlinkHandler, &String)>(
-    ctx: &Context,
-    groups: &[String],
-    exclude: &[String],
-    symlinked: bool,
-    func: F,
-) -> Result<(), ExitCode> {
-    // loads the runtime information needed to carry out actions
-    let sym = SymlinkHandler::try_new(ctx)?;
-
-    let groups = {
-        // detect if user provided an invalid group
-        // note: a group only is invalid only if the group itself or one of its related conditional groups don't exist
-        let valid_groups =
-            match dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, groups)
-            {
-                Some(invalid_groups) => {
-                    let mut valid_groups = Vec::new();
-                    let mut groups_checked_as_invalid = Vec::new();
-
-                    for group in invalid_groups {
-                        let valid_related_groups = sym.get_related_conditional_groups(
-                            &group,
-                            enumflags2::make_bitflags!(SymlinkType::{
-                                Symlinked|
-                                NotSymlinked|
-                                NotOwned
-                            }),
-                        );
-
-                        match valid_related_groups {
-                            Some(mut valid_related_groups) => {
-                                valid_groups.append(&mut valid_related_groups)
-                            }
-                            None => groups_checked_as_invalid.push(group.clone()),
-                        }
-                    }
-
-                    for group in groups_checked_as_invalid {
-                        eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
-                    }
-
-                    valid_groups
-                }
-
-                None => groups.to_vec(),
-            };
-
-        if valid_groups.is_empty() {
-            return Err(ReturnCode::NoSetupFolder.into());
-        }
-
-        valid_groups
-    };
-
-    if groups.contains(&"*".to_string()) {
-        let symgroups = if symlinked {
-            &sym.not_symlinked
-        } else {
-            &sym.symlinked
-        };
-
-        for group in symgroups.keys() {
-            if exclude.contains(group) {
-                continue;
-            }
-
-            if !dotfiles::group_is_valid_target(group, &ctx.custom_targets) {
-                continue;
-            }
-
-            // do something with the group name
-            // passing the sym context
-            func(&sym, group);
-        }
-
-        return Ok(());
-    }
-
-    for group in groups {
-        if exclude.contains(&group) {
-            continue;
-        }
-        func(&sym, &group);
-    }
-
-    Ok(())
-}
-
 /// Adds symlinks
 #[allow(clippy::too_many_arguments)]
 pub fn add_cmd(
@@ -610,59 +513,99 @@ pub fn add_cmd(
         }
     }
 
-    foreach_group(ctx, groups, exclude, true, |sym, group| {
-        let remove_files_and_decide_if_adopt = |status_group: &HashCache, adopt: bool| {
+    let sym = SymlinkHandler::try_new(ctx)?;
+
+    let add_group = |group: &String| {
+        if exclude.contains(group) {
+            return;
+        }
+
+        fn remove_files_and_decide_if_adopt(
+            group: &str,
+            status_group: &HashCache,
+            adopt: bool,
+            dry_run: bool,
+        ) {
             let group = status_group.get(group);
-            if let Some(group_files) = group {
-                for file in group_files {
-                    let target_file = file.to_target_path().unwrap();
+            let Some(group_files) = group else { return };
 
-                    let deleted_file = if adopt { &file.path } else { &target_file };
+            for file in group_files {
+                let target_file = file.to_target_path().unwrap();
 
-                    if ctx.dry_run {
+                let deleted_file = if adopt { &file.path } else { &target_file };
+
+                if dry_run {
+                    eprintln!(
+                        "{}",
+                        t!("dry-run.removing_x", x = deleted_file.display()).red()
+                    );
+                } else if target_file.is_dir() {
+                    fs::remove_dir_all(deleted_file).unwrap();
+                } else if target_file.is_file() {
+                    fs::remove_file(deleted_file).unwrap();
+                }
+
+                if adopt {
+                    if dry_run {
                         eprintln!(
                             "{}",
-                            t!("dry-run.removing_x", x = deleted_file.display()).red()
+                            t!(
+                                "dry-run.moving_x_to_y",
+                                x = target_file.display(),
+                                y = file.path.display()
+                            )
+                            .yellow()
                         );
-                    } else if target_file.is_dir() {
-                        fs::remove_dir_all(deleted_file).unwrap();
-                    } else if target_file.is_file() {
-                        fs::remove_file(deleted_file).unwrap();
-                    }
-
-                    if adopt {
-                        if ctx.dry_run {
-                            eprintln!(
-                                "{}",
-                                t!(
-                                    "dry-run.moving_x_to_y",
-                                    x = target_file.display(),
-                                    y = file.path.display()
-                                )
-                                .yellow()
-                            );
-                        } else {
-                            fs::rename(target_file, &file.path).unwrap();
-                        }
+                    } else {
+                        fs::rename(target_file, &file.path).unwrap();
                     }
                 }
             }
-        };
+        }
 
         // Symlink dotfile by force
         if force {
-            remove_files_and_decide_if_adopt(&sym.not_owned, false);
-            remove_files_and_decide_if_adopt(&sym.not_symlinked, false);
+            remove_files_and_decide_if_adopt(group, &sym.not_owned, false, ctx.dry_run);
+            remove_files_and_decide_if_adopt(group, &sym.not_symlinked, false, ctx.dry_run);
         }
 
         // Discard dotfile and adopt the conflicting dotfile
         if adopt {
-            remove_files_and_decide_if_adopt(&sym.not_owned, true);
-            remove_files_and_decide_if_adopt(&sym.not_symlinked, true);
+            remove_files_and_decide_if_adopt(group, &sym.not_owned, true, ctx.dry_run);
+            remove_files_and_decide_if_adopt(group, &sym.not_symlinked, true, ctx.dry_run);
         }
 
         sym.add(ctx.dry_run, only_files, group)
-    })?;
+    };
+
+    if groups.contains(&"*".to_string()) {
+        for group in sym.not_symlinked.keys() {
+            if dotfiles::group_is_valid_target(group, &ctx.custom_targets) {
+                add_group(group);
+            }
+        }
+    } else {
+        let groups = {
+            let mut related_groups = Vec::new();
+
+            for group in groups {
+                match sym.get_related_conditional_groups(
+                    group,
+                    SymlinkType::NotSymlinked | SymlinkType::NotOwned,
+                ) {
+                    Some(mut related) => related_groups.append(&mut related),
+                    None => {
+                        eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
+                        return Err(ReturnCode::NoSetupFolder.into());
+                    }
+                }
+            }
+
+            related_groups
+        };
+
+        groups.iter().for_each(add_group);
+    }
 
     let post_add_sym = SymlinkHandler::try_new(ctx)?;
     let potential_conflicts = post_add_sym.get_conflicts_in_cache();
@@ -694,9 +637,48 @@ pub fn add_cmd(
 
 /// Removes symlinks
 pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    foreach_group(ctx, groups, exclude, false, |sym, p| {
-        sym.remove(ctx.dry_run, p)
-    })?;
+    let sym = SymlinkHandler::try_new(ctx)?;
+
+    // remove command should not care about whether a group is a valid target
+    // if it's been added, removing it should always be possible
+    if groups.contains(&"*".to_string()) {
+        for group in sym.symlinked.keys() {
+            if exclude.contains(group) {
+                continue;
+            }
+            sym.remove(ctx.dry_run, group);
+        }
+        return Ok(());
+    }
+
+    if let Some(invalid_groups) =
+        dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, groups)
+    {
+        for group in invalid_groups {
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
+        }
+
+        return Err(ReturnCode::NoSetupFolder.into());
+    };
+
+    let related_groups: Vec<_> = sym
+        .symlinked
+        .keys()
+        .filter(|g| {
+            groups.contains(g)
+                || groups
+                    .iter()
+                    .any(|group| dotfiles::group_without_target(g) == group)
+        })
+        .collect();
+
+    for group in related_groups {
+        if exclude.contains(group) {
+            continue;
+        }
+        sym.remove(ctx.dry_run, group);
+    }
+
     Ok(())
 }
 
