@@ -721,7 +721,13 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
         let mut not_symlinked: Vec<_> = not_symlinked
             .iter()
-            .map(|group| dotfiles::group_without_target(group))
+            .filter_map(|group| {
+                if dotfiles::group_is_valid_target(group, &sym.ctx.custom_targets) {
+                    Some(dotfiles::group_without_target(group))
+                } else {
+                    None
+                }
+            })
             .collect();
 
         symlinked.sort();
