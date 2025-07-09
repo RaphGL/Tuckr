@@ -515,6 +515,16 @@ pub fn add_cmd(
 
     let sym = SymlinkHandler::try_new(ctx)?;
 
+    if let Some(invalid_groups) =
+        dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, groups)
+    {
+        for group in invalid_groups {
+            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
+        }
+
+        return Err(ReturnCode::NoSetupFolder.into());
+    };
+
     let add_group = |group: &String| {
         if exclude.contains(group) {
             return;
@@ -589,16 +599,14 @@ pub fn add_cmd(
             let mut related_groups = Vec::new();
 
             for group in groups {
-                match sym.get_related_conditional_groups(
+                let Some(mut related) = sym.get_related_conditional_groups(
                     group,
                     SymlinkType::NotSymlinked | SymlinkType::NotOwned,
-                ) {
-                    Some(mut related) => related_groups.append(&mut related),
-                    None => {
-                        eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
-                        return Err(ReturnCode::NoSetupFolder.into());
-                    }
-                }
+                ) else {
+                    continue;
+                };
+
+                related_groups.append(&mut related);
             }
 
             related_groups

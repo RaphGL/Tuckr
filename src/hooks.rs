@@ -209,13 +209,11 @@ pub fn set_cmd(
                 }
 
                 DeployStep::Symlink => {
-                    if dotfiles::check_invalid_groups(
+                    if !dotfiles::dotfile_contains(
                         ctx.profile.clone(),
                         dotfiles::DotfileType::Configs,
-                        &[&group],
-                    )
-                    .is_some()
-                    {
+                        &group,
+                    ) {
                         continue;
                     }
 
