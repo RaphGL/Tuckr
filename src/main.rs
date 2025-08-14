@@ -76,6 +76,10 @@ enum Command {
     Status {
         #[arg(value_name = "group")]
         groups: Option<Vec<String>>,
+
+        #[arg(long)]
+                    /// Output status in JSON format
+            json: bool,
     },
 
     /// Deploy dotfiles for the supplied groups (alias: a)
@@ -260,7 +264,7 @@ fn main() -> ExitCode {
 
         Command::Rm { groups, exclude } => symlinks::remove_cmd(&cli.ctx, &groups, &exclude),
 
-        Command::Status { groups } => symlinks::status_cmd(&cli.ctx, groups),
+        Command::Status { groups, json } => symlinks::status_cmd(&cli.ctx, groups, json),
 
         Command::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&cli.ctx, &group, &dotfiles),
 

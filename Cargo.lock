@@ -1019,6 +1019,8 @@ dependencies = [
  "owo-colors",
  "rpassword",
  "rust-i18n",
+ "serde",
+ "serde_json",
  "sha2",
  "sys-locale",
  "tabled",
