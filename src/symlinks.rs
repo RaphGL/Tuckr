@@ -661,7 +661,7 @@ pub fn add_cmd(
                 )
                 .yellow(),
             );
-            return print_groups_status(ctx, &post_add_sym, groups.into());
+            return print_groups_status(ctx, &post_add_sym, groups.into(), false);
         }
     }
     Ok(())
@@ -714,7 +714,67 @@ pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resul
     Ok(())
 }
 
-fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
+fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode> {
+    if json {
+        let (symlinked, mut not_symlinked) = {
+            let mut not_symlinked: Vec<_> = sym.not_symlinked.keys().map(|g| g.as_str()).collect();
+            let mut symlinked: Vec<_> = sym
+                .symlinked
+                .keys()
+                .filter_map(|group| {
+                    if sym.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into()).is_none() {
+                        Some(dotfiles::group_without_target(group))
+                    } else {
+                        not_symlinked.push(group);
+                        None
+                    }
+                })
+                .collect();
+            symlinked.sort();
+            symlinked.dedup();
+            not_symlinked.sort();
+            not_symlinked.dedup();
+            (symlinked, not_symlinked)
+        };
+
+        let conflicts_cache = sym.get_conflicts_in_cache();
+        let conflicts: HashMap<_, _> = conflicts_cache
+            .iter()
+            .map(|(group, files)| {
+                let details: Vec<ConflictDetail> = files.iter().map(|f| {
+                    let source_path = f.path.to_str().unwrap().to_string();
+                    let target_path_buf = f.to_target_path().unwrap();
+                    let target_path = target_path_buf.to_str().unwrap().to_string();
+
+                    let reason = if !target_path_buf.is_symlink() {
+                        "already exists".to_string()
+                    } else {
+                        let linked_path = fs::read_link(&target_path_buf).unwrap();
+                        if Dotfile::try_from(linked_path).is_err() {
+                            "symlinks elsewhere".to_string()
+                        } else {
+                            // Symlink points to another dotfile within the repo
+                            "already exists".to_string() // Consistent with current tuckr behavior
+                        }
+                    };
+                    ConflictDetail { source_path, target_path, reason }
+                }).collect();
+                (group.as_str(), details)
+            })
+            .collect();
+
+        // Filter out groups that are in conflicts from not_symlinked
+        not_symlinked.retain(|g| !conflicts.contains_key(*g));
+
+        let status = JsonStatus {
+            symlinked,
+            not_symlinked,
+            conflicts,
+        };
+        println!("{}", serde_json::to_string_pretty(&status).unwrap());
+        return Ok(())
+    }
+
     #[derive(Tabled, Debug)]
     struct SymlinkRow<'a> {
         #[tabled(rename = "Symlinked")]
@@ -729,11 +789,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     // will be marked as not_symlinked only
 
     let (symlinked, not_symlinked) = {
-        let mut not_symlinked: Vec<_> = sym
-            .not_symlinked
-            .keys()
-            .map(|group| group.as_str())
-            .collect();
+        let mut not_symlinked: Vec<_> = sym.not_symlinked.keys().map(|group| group.as_str()).collect();
 
         let mut symlinked: Vec<_> = sym
             .symlinked
@@ -780,7 +836,7 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
 
         longest
             .iter()
-            .zip(shortest.iter().chain(std::iter::repeat(&"")))
+            .zip(shortest.iter().chain(std::iter::repeat(&"" )))
             .map(|(longest, shortest)| SymlinkRow {
                 symlinked: if symlinked_is_longest {
                     longest
@@ -804,7 +860,13 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     // --- Creates all the tables and prints them ---
     use tabled::col;
     use tabled::settings::{
-        Alignment, Margin, Modify, Style, format::Format, object::Columns, object::Rows,
+        Alignment,
+        Margin,
+        Modify,
+        Style,
+        format::Format,
+        object::Columns,
+        object::Rows,
     };
 
     let mut sym_table = Table::new(status_rows);
@@ -854,35 +916,100 @@ fn print_global_status(sym: &SymlinkHandler) -> Result<(), ExitCode> {
     }
 }
 
-fn get_related_groups(
-    sym: &SymlinkHandler,
-    symlink_types: BitFlags<SymlinkType>,
-    groups: &[String],
-) -> Vec<String> {
-    let mut related_groups = Vec::new();
-    for group in groups {
-        let Some(mut cond_groups) = sym.get_related_conditional_groups(group, symlink_types)
-        else {
-            continue;
-        };
-
-        related_groups.append(&mut cond_groups);
-    }
-
-    related_groups
-}
-
 fn print_groups_status(
     ctx: &Context,
     sym: &SymlinkHandler,
     groups: Vec<String>,
+    json: bool,
 ) -> Result<(), ExitCode> {
-    let not_symlinked = get_related_groups(
-        sym,
-        enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
-        &groups,
-    );
-    let symlinked: Vec<_> = get_related_groups(sym, SymlinkType::Symlinked.into(), &groups);
+    if json {
+            let mut not_symlinked: Vec<_> = groups
+                .iter()
+                .filter_map(|g| {
+                    sym.get_related_conditional_groups(
+                        g,
+                        enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
+                    )
+                })
+                .flatten()
+                .collect();
+
+            let symlinked: Vec<_> = groups
+                .iter()
+                .filter_map(|g| sym.get_related_conditional_groups(g, SymlinkType::Symlinked.into()))
+                .flatten()
+                .collect();
+
+            let unsupported: Vec<_> = groups
+                .iter()
+                .map(|group| Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
+                .filter(|group| !group.is_valid_target(&ctx.custom_targets))
+                .map(|group| group.group_name)
+                .collect();
+
+            let conflicts: HashMap<_, _> = sym
+                .get_conflicts_in_cache()
+                .into_iter()
+                .filter(|(g, _)| {
+                    groups.contains(g) || groups.contains(&dotfiles::group_without_target(g).to_string())
+                })
+                .map(|(group, files)| {
+                    let details: Vec<ConflictDetail> = files.iter().map(|f| {
+                        let source_path = f.path.to_str().unwrap().to_string();
+                        let target_path_buf = f.to_target_path().unwrap();
+                        let target_path = target_path_buf.to_str().unwrap().to_string();
+
+                        let reason = if !target_path_buf.is_symlink() {
+                            "already exists".to_string()
+                        } else {
+                            let linked_path = fs::read_link(&target_path_buf).unwrap();
+                            if Dotfile::try_from(linked_path).is_err() {
+                                "symlinks elsewhere".to_string()
+                            } else {
+                                // Symlink points to another dotfile within the repo
+                                "already exists".to_string() // Consistent with current tuckr behavior
+                            }
+                        };
+                        ConflictDetail { source_path, target_path, reason }
+                    }).collect();
+                    (group, details)
+                })
+                .collect();
+
+            // Filter out groups that are in conflicts from not_symlinked
+            not_symlinked.retain(|g| !conflicts.contains_key(g));
+
+            let non_existent =
+                dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, &groups)
+                    .unwrap_or_default();
+
+            let status = JsonGroupStatus {
+                symlinked,
+                not_symlinked,
+                unsupported,
+                conflicts,
+                non_existent,
+            };
+            println!("{}", serde_json::to_string_pretty(&status).unwrap());
+            return Ok(())
+    }
+
+    let not_symlinked: Vec<_> = groups
+        .iter()
+        .filter_map(|g| {
+            sym.get_related_conditional_groups(
+                g,
+                enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
+            )
+        })
+        .flatten()
+        .collect();
+
+    let symlinked: Vec<_> = groups
+        .iter()
+        .filter_map(|g| sym.get_related_conditional_groups(g, SymlinkType::Symlinked.into()))
+        .flatten()
+        .collect();
 
     let unsupported = {
         let mut unsupported = groups
@@ -1006,137 +1133,6 @@ pub fn status_cmd(ctx: &Context, groups: Option<Vec<String>>, json: bool) -> Res
         return Err(ReturnCode::NoSetupFolder.into());
     }
 
-    if json {
-        // 如果传入了 groups 参数
-        if let Some(groups) = groups {
-            let mut not_symlinked = get_related_groups(
-                &sym,
-                enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
-                &groups,
-            );
-            let symlinked = get_related_groups(
-                &sym,
-                SymlinkType::Symlinked.into(),
-                &groups,
-            );
-
-            let unsupported: Vec<_> = groups
-                .iter()
-                .map(|group| {
-                    Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap()
-                })
-                .filter(|group| !group.is_valid_target(&ctx.custom_targets))
-                .map(|group| group.group_name)
-                .collect();
-
-            let conflicts: HashMap<_, _> = sym
-                .get_conflicts_in_cache()
-                .into_iter()
-                .filter(|(g, _)| {
-                    groups.contains(g)
-                        || groups.contains(&dotfiles::group_without_target(g).to_string())
-                })
-                .map(|(group, files)| {
-                    let details: Vec<ConflictDetail> = files.iter().map(|f| {
-                        let source_path = f.path.to_str().unwrap().to_string();
-                        let target_path_buf = f.to_target_path().unwrap();
-                        let target_path = target_path_buf.to_str().unwrap().to_string();
-
-                        let reason = if !target_path_buf.is_symlink() {
-                            "already exists".to_string()
-                        } else {
-                            let linked_path = fs::read_link(&target_path_buf).unwrap();
-                            if Dotfile::try_from(linked_path).is_err() {
-                                "symlinks elsewhere".to_string()
-                            } else {
-                                // Symlink points to another dotfile within the repo
-                                "already exists".to_string() // Consistent with current tuckr behavior
-                            }
-                        };
-                        ConflictDetail { source_path, target_path, reason }
-                    }).collect();
-                    (group, details)
-                })
-                .collect();
-
-            // Filter out groups that are in conflicts from not_symlinked
-            not_symlinked.retain(|g| !conflicts.contains_key(g));
-
-            let non_existent =
-                dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, &groups)
-                    .unwrap_or_default();
-
-            let status = JsonGroupStatus {
-                symlinked,
-                not_symlinked,
-                unsupported,
-                conflicts,
-                non_existent,
-            };
-            println!("{}", serde_json::to_string_pretty(&status).unwrap());
-        } else {
-            // 全局 JSON 输出
-            let (symlinked, mut not_symlinked) = {
-                let mut not_symlinked: Vec<_> = sym.not_symlinked.keys().map(|g| g.as_str()).collect();
-                let mut symlinked: Vec<_> = sym
-                    .symlinked
-                    .keys()
-                    .filter_map(|group| {
-                        if sym.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into()).is_none() {
-                            Some(dotfiles::group_without_target(group))
-                        } else {
-                            not_symlinked.push(group);
-                            None
-                        }
-                    })
-                    .collect();
-                symlinked.sort();
-                symlinked.dedup();
-                not_symlinked.sort();
-                not_symlinked.dedup();
-                (symlinked, not_symlinked)
-            };
-
-            let conflicts_cache = sym.get_conflicts_in_cache();
-            let conflicts: HashMap<_, _> = conflicts_cache
-                .iter()
-                .map(|(group, files)| {
-                    let details: Vec<ConflictDetail> = files.iter().map(|f| {
-                        let source_path = f.path.to_str().unwrap().to_string();
-                        let target_path_buf = f.to_target_path().unwrap();
-                        let target_path = target_path_buf.to_str().unwrap().to_string();
-
-                        let reason = if !target_path_buf.is_symlink() {
-                            "already exists".to_string()
-                        } else {
-                            let linked_path = fs::read_link(&target_path_buf).unwrap();
-                            if Dotfile::try_from(linked_path).is_err() {
-                                "symlinks elsewhere".to_string()
-                            } else {
-                                // Symlink points to another dotfile within the repo
-                                "already exists".to_string() // Consistent with current tuckr behavior
-                            }
-                        };
-                        ConflictDetail { source_path, target_path, reason }
-                    }).collect();
-                    (group.as_str(), details)
-                })
-                .collect();
-
-            // Filter out groups that are in conflicts from not_symlinked
-            not_symlinked.retain(|g| !conflicts.contains_key(*g));
-
-            let status = JsonStatus {
-                symlinked,
-                not_symlinked,
-                conflicts,
-            };
-            println!("{}", serde_json::to_string_pretty(&status).unwrap());
-        }
-        return Ok(());
-    }
-
-    // 原本的逻辑
     match groups {
         Some(groups) => {
             let mut invalid_group_errs = Vec::new();
@@ -1152,7 +1148,7 @@ pub fn status_cmd(ctx: &Context, groups: Option<Vec<String>>, json: bool) -> Res
                 })
                 .collect();
 
-            let ret = print_groups_status(ctx, &sym, groups);
+            let ret = print_groups_status(ctx, &sym, groups, json);
 
             if !invalid_group_errs.is_empty() {
                 for err in invalid_group_errs {
@@ -1160,13 +1156,11 @@ pub fn status_cmd(ctx: &Context, groups: Option<Vec<String>>, json: bool) -> Res
                 }
             }
 
-            return ret;
+            ret
         }
 
-        None => print_global_status(&sym)?,
+        None => print_global_status(&sym, json),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
