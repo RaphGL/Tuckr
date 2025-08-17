@@ -78,8 +78,8 @@ enum Command {
         groups: Option<Vec<String>>,
 
         #[arg(long)]
-                    /// Output status in JSON format
-            json: bool,
+        /// Output status in JSON format
+        json: bool,
     },
 
     /// Deploy dotfiles for the supplied groups (alias: a)

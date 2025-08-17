@@ -16,8 +16,8 @@ use crate::fileops;
 use enumflags2::BitFlags;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
-use std::collections::{HashMap, HashSet};
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -722,7 +722,10 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
                 .symlinked
                 .keys()
                 .filter_map(|group| {
-                    if sym.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into()).is_none() {
+                    if sym
+                        .get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
+                        .is_none()
+                    {
                         Some(dotfiles::group_without_target(group))
                     } else {
                         not_symlinked.push(group);
@@ -741,24 +744,33 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
         let conflicts: HashMap<_, _> = conflicts_cache
             .iter()
             .map(|(group, files)| {
-                let details: Vec<ConflictDetail> = files.iter().map(|f| {
-                    let source_path = f.path.to_str().unwrap().to_string();
-                    let target_path_buf = f.to_target_path().unwrap();
-                    let target_path = target_path_buf.to_str().unwrap().to_string();
+                let details: Vec<ConflictDetail> = files
+                    .iter()
+                    .map(|f| {
+                        let source_path = f.path.to_str().unwrap().to_string();
+                        let target_path_buf = f.to_target_path().unwrap();
+                        let target_path = target_path_buf.to_str().unwrap().to_string();
 
-                    let reason = if !target_path_buf.is_symlink() {
-                        "already exists".to_string()
-                    } else {
-                        let linked_path = fs::read_link(&target_path_buf).unwrap();
-                        if Dotfile::try_from(linked_path).is_err() {
-                            "symlinks elsewhere".to_string()
+                        //  NOTE: Do not i18n these strings. They are part of the JSON API
+                        // and changing them would break scripts that parse the output.
+                        let reason = if !target_path_buf.is_symlink() {
+                            "already exists".to_string()
                         } else {
-                            // Symlink points to another dotfile within the repo
-                            "already exists".to_string() // Consistent with current tuckr behavior
+                            let linked_path = fs::read_link(&target_path_buf).unwrap();
+                            if Dotfile::try_from(linked_path).is_err() {
+                                "symlinks elsewhere".to_string()
+                            } else {
+                                // Symlink points to another dotfile within the repo
+                                "already exists".to_string() // Consistent with current tuckr behavior
+                            }
+                        };
+                        ConflictDetail {
+                            source_path,
+                            target_path,
+                            reason,
                         }
-                    };
-                    ConflictDetail { source_path, target_path, reason }
-                }).collect();
+                    })
+                    .collect();
                 (group.as_str(), details)
             })
             .collect();
@@ -772,7 +784,7 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
             conflicts,
         };
         println!("{}", serde_json::to_string_pretty(&status).unwrap());
-        return Ok(())
+        return Ok(());
     }
 
     #[derive(Tabled, Debug)]
@@ -789,7 +801,11 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
     // will be marked as not_symlinked only
 
     let (symlinked, not_symlinked) = {
-        let mut not_symlinked: Vec<_> = sym.not_symlinked.keys().map(|group| group.as_str()).collect();
+        let mut not_symlinked: Vec<_> = sym
+            .not_symlinked
+            .keys()
+            .map(|group| group.as_str())
+            .collect();
 
         let mut symlinked: Vec<_> = sym
             .symlinked
@@ -836,7 +852,7 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
 
         longest
             .iter()
-            .zip(shortest.iter().chain(std::iter::repeat(&"" )))
+            .zip(shortest.iter().chain(std::iter::repeat(&"")))
             .map(|(longest, shortest)| SymlinkRow {
                 symlinked: if symlinked_is_longest {
                     longest
@@ -860,13 +876,7 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
     // --- Creates all the tables and prints them ---
     use tabled::col;
     use tabled::settings::{
-        Alignment,
-        Margin,
-        Modify,
-        Style,
-        format::Format,
-        object::Columns,
-        object::Rows,
+        Alignment, Margin, Modify, Style, format::Format, object::Columns, object::Rows,
     };
 
     let mut sym_table = Table::new(status_rows);
@@ -923,42 +933,47 @@ fn print_groups_status(
     json: bool,
 ) -> Result<(), ExitCode> {
     if json {
-            let mut not_symlinked: Vec<_> = groups
-                .iter()
-                .filter_map(|g| {
-                    sym.get_related_conditional_groups(
-                        g,
-                        enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
-                    )
-                })
-                .flatten()
-                .collect();
+        let mut not_symlinked: Vec<_> = groups
+            .iter()
+            .filter_map(|g| {
+                sym.get_related_conditional_groups(
+                    g,
+                    enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
+                )
+            })
+            .flatten()
+            .collect();
 
-            let symlinked: Vec<_> = groups
-                .iter()
-                .filter_map(|g| sym.get_related_conditional_groups(g, SymlinkType::Symlinked.into()))
-                .flatten()
-                .collect();
+        let symlinked: Vec<_> = groups
+            .iter()
+            .filter_map(|g| sym.get_related_conditional_groups(g, SymlinkType::Symlinked.into()))
+            .flatten()
+            .collect();
 
-            let unsupported: Vec<_> = groups
-                .iter()
-                .map(|group| Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
-                .filter(|group| !group.is_valid_target(&ctx.custom_targets))
-                .map(|group| group.group_name)
-                .collect();
+        let unsupported: Vec<_> = groups
+            .iter()
+            .map(|group| Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
+            .filter(|group| !group.is_valid_target(&ctx.custom_targets))
+            .map(|group| group.group_name)
+            .collect();
 
-            let conflicts: HashMap<_, _> = sym
-                .get_conflicts_in_cache()
-                .into_iter()
-                .filter(|(g, _)| {
-                    groups.contains(g) || groups.contains(&dotfiles::group_without_target(g).to_string())
-                })
-                .map(|(group, files)| {
-                    let details: Vec<ConflictDetail> = files.iter().map(|f| {
+        let conflicts: HashMap<_, _> = sym
+            .get_conflicts_in_cache()
+            .into_iter()
+            .filter(|(g, _)| {
+                groups.contains(g)
+                    || groups.contains(&dotfiles::group_without_target(g).to_string())
+            })
+            .map(|(group, files)| {
+                let details: Vec<ConflictDetail> = files
+                    .iter()
+                    .map(|f| {
                         let source_path = f.path.to_str().unwrap().to_string();
                         let target_path_buf = f.to_target_path().unwrap();
                         let target_path = target_path_buf.to_str().unwrap().to_string();
 
+                        // NOTE: Do not i18n these strings. They are part of the JSON API
+                        // and changing them would break scripts that parse the output.
                         let reason = if !target_path_buf.is_symlink() {
                             "already exists".to_string()
                         } else {
@@ -970,28 +985,33 @@ fn print_groups_status(
                                 "already exists".to_string() // Consistent with current tuckr behavior
                             }
                         };
-                        ConflictDetail { source_path, target_path, reason }
-                    }).collect();
-                    (group, details)
-                })
-                .collect();
+                        ConflictDetail {
+                            source_path,
+                            target_path,
+                            reason,
+                        }
+                    })
+                    .collect();
+                (group, details)
+            })
+            .collect();
 
-            // Filter out groups that are in conflicts from not_symlinked
-            not_symlinked.retain(|g| !conflicts.contains_key(g));
+        // Filter out groups that are in conflicts from not_symlinked
+        not_symlinked.retain(|g| !conflicts.contains_key(g));
 
-            let non_existent =
-                dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, &groups)
-                    .unwrap_or_default();
+        let non_existent =
+            dotfiles::check_invalid_groups(ctx.profile.clone(), DotfileType::Configs, &groups)
+                .unwrap_or_default();
 
-            let status = JsonGroupStatus {
-                symlinked,
-                not_symlinked,
-                unsupported,
-                conflicts,
-                non_existent,
-            };
-            println!("{}", serde_json::to_string_pretty(&status).unwrap());
-            return Ok(())
+        let status = JsonGroupStatus {
+            symlinked,
+            not_symlinked,
+            unsupported,
+            conflicts,
+            non_existent,
+        };
+        println!("{}", serde_json::to_string_pretty(&status).unwrap());
+        return Ok(());
     }
 
     let not_symlinked: Vec<_> = groups
