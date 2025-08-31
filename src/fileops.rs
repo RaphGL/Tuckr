@@ -141,15 +141,15 @@ impl Iterator for DirWalk {
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
-    let dotfiles_dir = if cfg!(test) {
-        dotfiles::get_dotfiles_path(None).unwrap()
+    let dotfiles_dir = dotfiles::get_dotfiles_path(if cfg!(test) {
+        None
     } else {
-        let dotfiles_dir_name = match ctx.profile.as_ref() {
-            Some(profile) => "dotfiles_".to_string() + profile.as_str(),
-            None => "dotfiles".to_string(),
-        };
-        dirs::config_dir().unwrap().join(dotfiles_dir_name)
-    };
+        ctx.profile.clone()
+    })
+    .map_err(|err| {
+        eprintln!("{err}");
+        ExitCode::from(ReturnCode::CouldntFindDotfiles)
+    })?;
 
     for dir in [
         dotfiles_dir.join("Configs"),
