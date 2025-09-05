@@ -183,10 +183,12 @@ pub fn push_cmd(
     ctx: &Context,
     group: String,
     files: &[String],
+    add: bool,
+    only_files: bool,
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
-        Ok(dir) => dir.join("Configs").join(group),
+        Ok(dir) => dir.join("Configs").join(&group),
         Err(e) => {
             eprintln!("{e}");
             return Err(ReturnCode::CouldntFindDotfiles.into());
@@ -291,10 +293,14 @@ pub fn push_cmd(
     }
 
     if any_file_failed {
-        Err(ReturnCode::NoSuchFileOrDir.into())
-    } else {
-        Ok(())
+        return Err(ReturnCode::NoSuchFileOrDir.into());
     }
+
+    if add {
+        return symlinks::add_cmd(ctx, only_files, &[group], &[], false, false, assume_yes);
+    }
+
+    Ok(())
 }
 
 pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(), ExitCode> {
@@ -780,6 +786,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
+            false,
+            false,
             true,
         )
         .unwrap();
@@ -794,6 +802,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
+            false,
+            false,
             true,
         )
         .unwrap();
@@ -833,6 +843,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
+            false,
+            false,
             true,
         )
         .unwrap();
@@ -859,6 +871,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
+            false,
+            false,
             true,
         )
         .unwrap();
