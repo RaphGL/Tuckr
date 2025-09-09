@@ -381,7 +381,7 @@ pub fn ls_hooks_cmd(ctx: &Context) -> Result<(), ExitCode> {
     if !dir.is_dir() {
         eprintln!(
             "{}",
-            format!("`{}` has to be a directory not a file", dir.display()).red()
+            t!("errors.not_a_dir", directory = dir.display()).red()
         );
         return Err(ReturnCode::NoSetupFolder.into());
     }

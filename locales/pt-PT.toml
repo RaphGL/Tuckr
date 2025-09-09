@@ -45,6 +45,12 @@ no_x_setup_yet = "Ainda nenhum %{x} foi configurado"
 not_a_tuckr_dotfile = "`%{file}` não é um ficheiro do tuckr."
 wrong_password = "Palavra-passe errada."
 
+# group name validation
+path_is_not_dotfiles = "`%{path}` não pertence aos dotfiles"
+group_contains_invalid_char = " o grupo `%{group}` tem um caracter inválido: `%{char}`"
+group_name_is_invalid = "`%{group}` é um nome inválido para um grupo"
+group_contains_control_chars = "o grupo `%{group}` contém caracteres de controlo"
+
 [dry-run]
 ignoring_x_already_exists = "A ignorar `%{x}` porque ele já existe"
 symlinking_x_to_y = "A fazer o symlink do `%{x}` para `%{y}`"

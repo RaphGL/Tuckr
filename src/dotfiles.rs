@@ -132,7 +132,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
         } else if value.starts_with(&secrets_dir) {
             secrets_dir
         } else {
-            return Err("path does not belong to dotfiles.".into());
+            return Err(t!("errors.path_is_not_dotfiles", path = value.display()).into_owned());
         };
 
         let group_path = if *value != dotfile_root_dir {
@@ -148,7 +148,11 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
             dotfile_root_dir.join(group_relpath)
         } else {
-            return Err("path does not belong to dotfiles.".into());
+            return Err(t!(
+                "errors.path_is_not_dotfiles",
+                path = dotfile_root_dir.display()
+            )
+            .into());
         };
 
         Ok(Dotfile {
@@ -459,9 +463,12 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
 
     let last_char = group.chars().next_back().unwrap();
     if group.len() > 1 && (last_char.is_whitespace() || last_char == '.') {
-        return Err(format!(
-            "group `{group}` ends with a `{last_char}` which is invalid on Windows",
-        ));
+        return Err(t!(
+            "errors.group_contains_invalid_char",
+            group = group,
+            char = last_char
+        )
+        .into_owned());
     }
 
     for char in group.chars() {
@@ -469,13 +476,16 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
             char,
             '/' | '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*' | '\0'
         ) {
-            return Err(format!(
-                "group `{group}` contains invalid character `{char}`"
-            ));
+            return Err(t!(
+                "errors.group_contains_invalid_char",
+                group = group,
+                char = char
+            )
+            .into_owned());
         }
 
         if char.is_control() {
-            return Err(format!("group `{group}` contains control characters"));
+            return Err(t!("errors.group_contains_control_chars", group = group).into_owned());
         }
     }
 
@@ -483,12 +493,12 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
         // Windows invalid file names
         "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6"
         | "COM7" | "COM8" | "COM9" | "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6"
-        | "LPT7" | "LPT8" | "LPT9" => Err(format!("group `{group}` is an invalid name on Windows")),
+        | "LPT7" | "LPT8" | "LPT9" => {
+            Err(t!("errors.group_name_is_invalid", group = group).into_owned())
+        }
 
         // Unix invalid file names
-        "." | ".." => Err(format!(
-            "group `{group}` is an invalid name on Unix-like systems"
-        )),
+        "." | ".." => Err(t!("errors.group_name_is_invalid", group = group).into_owned()),
 
         _ => Ok(()),
     }
