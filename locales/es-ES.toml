@@ -2,6 +2,9 @@
 symlinked = "Enlazado"
 not_symlinked = "No Enlazado"
 
+[confirmation]
+yes = "sí"
+
 [info]
 password = "Contraseña"
 learn_more_about_conflicts = "Para aprender más sobre los dotfiles que están en conflicto ejecute: `%{cmd}`"

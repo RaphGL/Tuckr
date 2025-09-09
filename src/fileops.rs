@@ -592,15 +592,29 @@ pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
     Ok(())
 }
 
-// TODO: eventually make every user confirmation in tuckr use this function
-// TODO: adhere to local specific yes and no variants
 pub fn get_user_confirmation(msg: &str) -> bool {
     let mut answer = String::new();
     print!("{msg} (y/N) ");
     _ = std::io::stdout().flush();
     std::io::stdin().read_line(&mut answer).unwrap();
+    let answer = answer.trim().to_lowercase();
 
-    matches!(answer.trim().to_lowercase().as_str(), "y" | "yes")
+    let yes = t!("confirmation.yes").to_string().to_lowercase();
+
+    let Some(yes_first_char) = yes.chars().next() else {
+        return false;
+    };
+
+    if answer == yes {
+        true
+    } else if answer.len() == 1 {
+        let Some(answer_char) = answer.chars().next() else {
+            return false;
+        };
+        yes_first_char == answer_char
+    } else {
+        false
+    }
 }
 
 // TODO: translate messages
@@ -622,7 +636,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
 
     let used_dot_prefix = get_user_confirmation("Did you use `--dotfiles` with Stow?");
 
-    if !get_user_confirmation("Do you want to continue?") {
+    if !get_user_confirmation(t!("warn.want_to_proceed").into_owned().as_ref()) {
         return Ok(());
     }
 
