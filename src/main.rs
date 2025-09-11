@@ -77,8 +77,8 @@ enum Command {
         #[arg(value_name = "group")]
         groups: Option<Vec<String>>,
 
-        #[arg(long)]
         /// Output status in JSON format
+        #[arg(long)]
         json: bool,
     },
 

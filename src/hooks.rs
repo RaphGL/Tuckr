@@ -145,10 +145,12 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
 
 macro_rules! get_hooks_dir_if_exists_or_run_cmd {
     ($profile:expr, $groups:expr, $cmd:expr) => {{
-        if let Some(invalid_groups) =
-            dotfiles::check_invalid_groups($profile.clone(), dotfiles::DotfileType::Hooks, $groups)
-        {
-            if dotfiles::check_invalid_groups(
+        if let Some(invalid_groups) = dotfiles::get_nonexistent_groups(
+            $profile.clone(),
+            dotfiles::DotfileType::Hooks,
+            $groups,
+        ) {
+            if dotfiles::get_nonexistent_groups(
                 $profile.clone(),
                 dotfiles::DotfileType::Configs,
                 $groups,

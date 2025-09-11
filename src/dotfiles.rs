@@ -430,7 +430,7 @@ pub fn dotfile_contains(profile: Option<String>, dtype: DotfileType, group: &str
 }
 
 /// Returns all groups in the slice that don't have a corresponding directory in dotfiles/{Configs,Hooks,Secrets}
-pub fn check_invalid_groups(
+pub fn get_nonexistent_groups(
     profile: Option<String>,
     dtype: DotfileType,
     groups: &[impl AsRef<str>],
