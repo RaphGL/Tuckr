@@ -224,10 +224,10 @@ pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) ->
             .expect("a group with target name should always have a `_`");
 
         // custom target syntax: group_#target
-        if let Some(target) = target.strip_prefix(target) {
-            if custom_targets.iter().any(|t| t.as_ref() == target) {
-                return true;
-            }
+        if let Some(target) = target.strip_prefix(target)
+            && custom_targets.iter().any(|t| t.as_ref() == target)
+        {
+            return true;
         }
 
         group.ends_with(&current_target_os)
@@ -345,10 +345,10 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
         None => "dotfiles".into(),
     };
 
-    if let Ok(dir) = std::env::var("TUCKR_HOME") {
-        if !dir.is_empty() {
-            return Ok(PathBuf::from(dir).join(dotfiles_dir));
-        }
+    if let Ok(dir) = std::env::var("TUCKR_HOME")
+        && !dir.is_empty()
+    {
+        return Ok(PathBuf::from(dir).join(dotfiles_dir));
     }
 
     let (home_dotfiles, config_dotfiles) = {
@@ -401,10 +401,10 @@ pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
         unsafe { std::env::remove_var("TUCKR_TARGET") };
     }
 
-    if let Ok(dir) = std::env::var("TUCKR_TARGET") {
-        if !dir.is_empty() {
-            return Ok(dir.into());
-        }
+    if let Ok(dir) = std::env::var("TUCKR_TARGET")
+        && !dir.is_empty()
+    {
+        return Ok(dir.into());
     }
 
     dirs::home_dir().ok_or("No destination directory was found.".into())

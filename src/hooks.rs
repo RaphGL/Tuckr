@@ -9,6 +9,7 @@
 use crate::Context;
 use crate::dotfiles::{self, ReturnCode};
 use crate::symlinks;
+use core::slice;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::fs;
@@ -226,7 +227,7 @@ pub fn set_cmd(
                     symlinks::add_cmd(
                         ctx,
                         only_files,
-                        &[group.clone()],
+                        slice::from_ref(&group),
                         exclude,
                         force,
                         adopt,

@@ -1,8 +1,5 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
-
-use owo_colors::OwoColorize;
 
 #[derive(Debug, Clone)]
 struct FileNode<'a> {
@@ -34,10 +31,10 @@ impl<'a> Iterator for FileTreeIterator<'a> {
         let node_idx = stack.pop()?;
         let node = &self.tree.nodes[node_idx];
 
-        if let Some(node) = node {
-            if let Some(ref children) = node.children {
-                stack.extend_from_slice(children);
-            }
+        if let Some(node) = node
+            && let Some(ref children) = node.children
+        {
+            stack.extend_from_slice(children);
         }
 
         Some((node_idx, node))
@@ -95,10 +92,10 @@ impl<'a> FileTree<'a> {
                 None => continue,
             };
 
-            if let Some(ref path_node) = self.paths[node.path_idx] {
-                if path_node == value {
-                    return Some(idx);
-                }
+            if let Some(ref path_node) = self.paths[node.path_idx]
+                && path_node == value
+            {
+                return Some(idx);
             }
         }
 
@@ -196,16 +193,16 @@ impl<'a> FileTree<'a> {
     fn remove_idx(&mut self, idx: usize) -> Option<PathBuf> {
         let node = self.nodes.get(idx)?.clone()?;
 
-        if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx] {
-            if let Some(ref children) = parent_node.children {
-                let children: Vec<_> = children.iter().filter(|v| **v != idx).copied().collect();
+        if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx]
+            && let Some(ref children) = parent_node.children
+        {
+            let children: Vec<_> = children.iter().filter(|v| **v != idx).copied().collect();
 
-                parent_node.children = if children.is_empty() {
-                    None
-                } else {
-                    Some(children)
-                };
-            }
+            parent_node.children = if children.is_empty() {
+                None
+            } else {
+                Some(children)
+            };
         }
 
         self.nodes[idx] = None;
@@ -301,20 +298,6 @@ impl<'a> FileTree<'a> {
 
         !has_items
     }
-}
-
-pub fn tree_cmd() -> Result<(), ExitCode> {
-    let root = Path::new("/home/raph/.config");
-    let mut tree = FileTree::new(&root);
-    tree.insert(Some("group1"), &Path::new("/home/raph/.config/test/test2"));
-    tree.insert(
-        Some("group1"),
-        &Path::new("/home/raph/.config/test/test2/test3"),
-    );
-    tree.insert(Some("group1"), &Path::new("/home/raph/.config/test/test1"));
-    tree.remove_path(&Path::new("/home/raph/.config/test/test2"));
-
-    Ok(())
 }
 
 #[cfg(test)]
