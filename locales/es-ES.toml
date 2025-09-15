@@ -2,6 +2,9 @@
 symlinked = "Enlazado"
 not_symlinked = "No Enlazado"
 
+[confirmation]
+yes = "sí"
+
 [info]
 password = "Contraseña"
 learn_more_about_conflicts = "Para aprender más sobre los dotfiles que están en conflicto ejecute: `%{cmd}`"
@@ -19,8 +22,8 @@ no_hooks_exist_running_cmd = "No hay hooks. Ejecutando `%{cmd}`"
 hooks_finished = "Los hooks han acabado de ejecutar. Aquí está el resumen:"
 
 [warn]
-want_to_override = "Quiere sustituirlos? (y/N)"
-want_to_proceed = "Quiere continuar? (y/N)"
+want_to_override = "Quiere sustituirlos?"
+want_to_proceed = "Quiere continuar?"
 
 [errors]
 failed_to_symlink_x = "Ha fallado mientras estaba enlazando el grupo `%{groupname}`: %{err_msg}"
@@ -45,6 +48,12 @@ no_x_setup_yet = "Ningun %{x} ha sido configurado hasta ahora"
 not_a_tuckr_dotfile = "`%{file}` no es un fichero que pertenece a tuckr."
 wrong_password = "Contraseña incorrecta."
 no_configs_dir_in_dotfiles = "No hay un directório llamado Configs en dotfiles (%{dotfiles})"
+
+# group name validation
+path_is_not_dotfiles = "`%{path}` no pertenece a los dotfiles"
+group_contains_invalid_char = " el grupo `%{group}` tiene un caracter inválido: `%{char}`"
+group_name_is_invalid = "`%{group}` es un nombre inválido para un grupo"
+group_contains_control_chars = "el grupo `%{group}` contiene caracteres de control"
 
 [dry-run]
 ignoring_x_already_exists = "Ignorando `%{x}` porque ya existe"

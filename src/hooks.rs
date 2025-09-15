@@ -9,6 +9,7 @@
 use crate::Context;
 use crate::dotfiles::{self, ReturnCode};
 use crate::symlinks;
+use core::slice;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::fs;
@@ -145,10 +146,12 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
 
 macro_rules! get_hooks_dir_if_exists_or_run_cmd {
     ($profile:expr, $groups:expr, $cmd:expr) => {{
-        if let Some(invalid_groups) =
-            dotfiles::check_invalid_groups($profile.clone(), dotfiles::DotfileType::Hooks, $groups)
-        {
-            if dotfiles::check_invalid_groups(
+        if let Some(invalid_groups) = dotfiles::get_nonexistent_groups(
+            $profile.clone(),
+            dotfiles::DotfileType::Hooks,
+            $groups,
+        ) {
+            if dotfiles::get_nonexistent_groups(
                 $profile.clone(),
                 dotfiles::DotfileType::Configs,
                 $groups,
@@ -209,13 +212,11 @@ pub fn set_cmd(
                 }
 
                 DeployStep::Symlink => {
-                    if dotfiles::check_invalid_groups(
+                    if !dotfiles::dotfile_contains(
                         ctx.profile.clone(),
                         dotfiles::DotfileType::Configs,
-                        &[&group],
-                    )
-                    .is_some()
-                    {
+                        &group,
+                    ) {
                         continue;
                     }
 
@@ -226,7 +227,7 @@ pub fn set_cmd(
                     symlinks::add_cmd(
                         ctx,
                         only_files,
-                        &[group.clone()],
+                        slice::from_ref(&group),
                         exclude,
                         force,
                         adopt,

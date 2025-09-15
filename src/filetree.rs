@@ -31,10 +31,10 @@ impl<'a> Iterator for FileTreeIterator<'a> {
         let node_idx = stack.pop()?;
         let node = &self.tree.nodes[node_idx];
 
-        if let Some(node) = node {
-            if let Some(ref children) = node.children {
-                stack.extend_from_slice(children);
-            }
+        if let Some(node) = node
+            && let Some(ref children) = node.children
+        {
+            stack.extend_from_slice(children);
         }
 
         Some((node_idx, node))
@@ -92,10 +92,10 @@ impl<'a> FileTree<'a> {
                 None => continue,
             };
 
-            if let Some(ref path_node) = self.paths[node.path_idx] {
-                if path_node == value {
-                    return Some(idx);
-                }
+            if let Some(ref path_node) = self.paths[node.path_idx]
+                && path_node == value
+            {
+                return Some(idx);
             }
         }
 
@@ -193,16 +193,16 @@ impl<'a> FileTree<'a> {
     fn remove_idx(&mut self, idx: usize) -> Option<PathBuf> {
         let node = self.nodes.get(idx)?.clone()?;
 
-        if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx] {
-            if let Some(ref children) = parent_node.children {
-                let children: Vec<_> = children.iter().filter(|v| **v != idx).copied().collect();
+        if let Some(ref mut parent_node) = self.nodes[node.parent_node_idx]
+            && let Some(ref children) = parent_node.children
+        {
+            let children: Vec<_> = children.iter().filter(|v| **v != idx).copied().collect();
 
-                parent_node.children = if children.is_empty() {
-                    None
-                } else {
-                    Some(children)
-                };
-            }
+            parent_node.children = if children.is_empty() {
+                None
+            } else {
+                Some(children)
+            };
         }
 
         self.nodes[idx] = None;
@@ -236,14 +236,21 @@ impl<'a> FileTree<'a> {
         while let Some(node) = self.nodes.get(curr_idx)? {
             let parent_idx = node.parent_node_idx;
 
-            let parent = self.nodes[parent_idx].clone().unwrap();
+            let parent = self.nodes[parent_idx].as_ref().unwrap();
             if parent.group.is_some() {
                 break;
             }
 
-            let children = parent.children.expect("parent should always have children");
+            let children = parent
+                .children
+                .as_ref()
+                .expect("parent should always have children");
 
             if children.len() == 1 {
+                println!(
+                    "removign: {:?}",
+                    self.paths[self.nodes[node.parent_node_idx].clone().unwrap().path_idx]
+                );
                 self.remove_idx(node.parent_node_idx);
             }
 

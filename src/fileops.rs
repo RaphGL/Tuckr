@@ -141,15 +141,15 @@ impl Iterator for DirWalk {
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
-    let dotfiles_dir = if cfg!(test) {
-        dotfiles::get_dotfiles_path(None).unwrap()
+    let dotfiles_dir = dotfiles::get_dotfiles_path(if cfg!(test) {
+        None
     } else {
-        let dotfiles_dir_name = match ctx.profile.as_ref() {
-            Some(profile) => "dotfiles_".to_string() + profile.as_str(),
-            None => "dotfiles".to_string(),
-        };
-        dirs::config_dir().unwrap().join(dotfiles_dir_name)
-    };
+        ctx.profile.clone()
+    })
+    .map_err(|err| {
+        eprintln!("{err}");
+        ExitCode::from(ReturnCode::CouldntFindDotfiles)
+    })?;
 
     for dir in [
         dotfiles_dir.join("Configs"),
@@ -183,10 +183,12 @@ pub fn push_cmd(
     ctx: &Context,
     group: String,
     files: &[String],
+    add: bool,
+    only_files: bool,
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
-        Ok(dir) => dir.join("Configs").join(group),
+        Ok(dir) => dir.join("Configs").join(&group),
         Err(e) => {
             eprintln!("{e}");
             return Err(ReturnCode::CouldntFindDotfiles.into());
@@ -208,19 +210,12 @@ pub fn push_cmd(
         let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
 
         if target_file.exists() && !assume_yes {
-            print!(
-                "{} {}. {} ",
+            let confirmation_msg = format!(
+                "`{}` {}.",
                 target_file.to_str().unwrap(),
                 t!("errors.already_exists"),
-                t!("warn.want_to_override")
             );
-
-            std::io::stdout().flush().unwrap();
-            let mut confirmation = String::new();
-            std::io::stdin().read_line(&mut confirmation).unwrap();
-
-            let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
-            if !confirmed {
+            if !get_user_confirmation(&confirmation_msg) {
                 continue;
             }
         }
@@ -298,10 +293,14 @@ pub fn push_cmd(
     }
 
     if any_file_failed {
-        Err(ReturnCode::NoSuchFileOrDir.into())
-    } else {
-        Ok(())
+        return Err(ReturnCode::NoSuchFileOrDir.into());
     }
+
+    if add {
+        return symlinks::add_cmd(ctx, only_files, &[group], &[], false, false, assume_yes);
+    }
+
+    Ok(())
 }
 
 pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(), ExitCode> {
@@ -342,12 +341,8 @@ pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(),
         for group in groups {
             println!("\t{}", group.yellow());
         }
-        print!("\n{} ", t!("warn.want_to_proceed"));
-        std::io::stdout().flush().unwrap();
-        let mut confirmation = String::new();
-        std::io::stdin().read_line(&mut confirmation).unwrap();
-        let confirmed = matches!(confirmation.trim().to_lowercase().as_str(), "y" | "yes");
-        if !confirmed {
+
+        if !get_user_confirmation(t!("warn.want_to_proceed").to_string().as_str()) {
             return Ok(());
         }
     }
@@ -386,7 +381,7 @@ pub fn ls_hooks_cmd(ctx: &Context) -> Result<(), ExitCode> {
     if !dir.is_dir() {
         eprintln!(
             "{}",
-            format!("`{}` has to be a directory not a file", dir.display()).red()
+            t!("errors.not_a_dir", directory = dir.display()).red()
         );
         return Err(ReturnCode::NoSetupFolder.into());
     }
@@ -485,17 +480,14 @@ pub fn ls_secrets_cmd(ctx: &Context) -> Result<(), ExitCode> {
 pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
     let home_dir = dirs::home_dir().unwrap();
     let config_dir = dirs::config_dir().unwrap();
-    let custom_target_dir = std::env::var("TUCKR_TARGET");
+    let custom_dotfiles_dir = std::env::var("TUCKR_HOME");
 
     let profiles = {
         let mut available_profiles = HashSet::new();
 
-        let dirs = {
-            let mut dirs = vec![home_dir, config_dir];
-            if let Ok(target) = custom_target_dir {
-                dirs.push(target.into());
-            }
-            dirs
+        let dirs = match custom_dotfiles_dir {
+            Ok(target) => &[PathBuf::from(target)],
+            Err(_) => &[home_dir, config_dir][..],
         };
 
         for dir in dirs {
@@ -600,15 +592,29 @@ pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
     Ok(())
 }
 
-// TODO: eventually make every user confirmation in tuckr use this function
-// TODO: adhere to local specific yes and no variants
-fn get_user_confirmation(msg: &str) -> bool {
+pub fn get_user_confirmation(msg: &str) -> bool {
     let mut answer = String::new();
     print!("{msg} (y/N) ");
     _ = std::io::stdout().flush();
     std::io::stdin().read_line(&mut answer).unwrap();
+    let answer = answer.trim().to_lowercase();
 
-    matches!(answer.trim().to_lowercase().as_str(), "y" | "Y")
+    let yes = t!("confirmation.yes").to_string().to_lowercase();
+
+    let Some(yes_first_char) = yes.chars().next() else {
+        return false;
+    };
+
+    if answer == yes {
+        true
+    } else if answer.len() == 1 {
+        let Some(answer_char) = answer.chars().next() else {
+            return false;
+        };
+        yes_first_char == answer_char
+    } else {
+        false
+    }
 }
 
 // TODO: translate messages
@@ -630,7 +636,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
 
     let used_dot_prefix = get_user_confirmation("Did you use `--dotfiles` with Stow?");
 
-    if !get_user_confirmation("Do you want to continue?") {
+    if !get_user_confirmation(t!("warn.want_to_proceed").into_owned().as_ref()) {
         return Ok(());
     }
 
@@ -710,7 +716,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
     if dotfiles_dir.exists() {
         let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
         let mut old_dotfiles = dotfiles_dir.clone();
-        old_dotfiles.set_file_name(format!("{}_old", old_dirname));
+        old_dotfiles.set_file_name(format!("{old_dirname}_old"));
 
         if ctx.dry_run {
             eprintln!(
@@ -794,6 +800,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
+            false,
+            false,
             true,
         )
         .unwrap();
@@ -808,6 +816,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[file_path.to_str().unwrap().to_string()],
+            false,
+            false,
             true,
         )
         .unwrap();
@@ -847,6 +857,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
+            false,
+            false,
             true,
         )
         .unwrap();
@@ -873,6 +885,8 @@ mod tests {
             &Context::default(),
             "test".into(),
             &[ft.target_dir.to_str().unwrap().to_owned()],
+            false,
+            false,
             true,
         )
         .unwrap();

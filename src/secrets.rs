@@ -151,9 +151,11 @@ pub fn decrypt_cmd(
     let identity = age::scrypt::Identity::new(passphrase);
     let dotfiles_dir = get_dotfiles_dir(ctx)?;
 
-    if let Some(invalid_groups) =
-        dotfiles::check_invalid_groups(ctx.profile.clone(), dotfiles::DotfileType::Secrets, groups)
-    {
+    if let Some(invalid_groups) = dotfiles::get_nonexistent_groups(
+        ctx.profile.clone(),
+        dotfiles::DotfileType::Secrets,
+        groups,
+    ) {
         for group in invalid_groups {
             eprintln!("{}", t!("errors.no_group", group = group).red());
         }

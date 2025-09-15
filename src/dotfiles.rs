@@ -134,7 +134,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
         } else if value.starts_with(&secrets_dir) {
             secrets_dir
         } else {
-            return Err("path does not belong to dotfiles.".into());
+            return Err(t!("errors.path_is_not_dotfiles", path = value.display()).into_owned());
         };
 
         let group_path = if *value != dotfile_root_dir {
@@ -150,7 +150,11 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
             dotfile_root_dir.join(group_relpath)
         } else {
-            return Err("path does not belong to dotfiles.".into());
+            return Err(t!(
+                "errors.path_is_not_dotfiles",
+                path = dotfile_root_dir.display()
+            )
+            .into());
         };
 
         Ok(Dotfile {
@@ -163,7 +167,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
 // returns true if group ends with a valid target platform suffix
 pub fn group_ends_with_target_name(group: &str) -> bool {
-    let Some(potential_target) = group.split('_').last() else {
+    let Some(potential_target) = group.split('_').next_back() else {
         return false;
     };
 
@@ -209,7 +213,6 @@ fn platform_is_under_wsl() -> bool {
 /// Checks if a group should be linked on current platform. For unconditional
 /// groups, this function returns true; for conditional groups, this function
 /// returns true when group suffix matches current target_os or target_family.
-// TODO update function to be aware of custom targets
 pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) -> bool {
     // Gets the current OS and OS family
     let current_target_os = format!("_{}", env::consts::OS);
@@ -219,15 +222,14 @@ pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) ->
     if group_ends_with_target_name(group) {
         let target = group
             .split('_')
-            .last()
+            .next_back()
             .expect("a group with target name should always have a `_`");
 
         // custom target syntax: group_#target
-        if target.starts_with('#') {
-            let target = &target[1..];
-            if custom_targets.iter().any(|t| t.as_ref() == target) {
-                return true;
-            }
+        if let Some(target) = target.strip_prefix(target)
+            && custom_targets.iter().any(|t| t.as_ref() == target)
+        {
+            return true;
         }
 
         group.ends_with(&current_target_os)
@@ -345,10 +347,10 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
         None => "dotfiles".into(),
     };
 
-    if let Ok(dir) = std::env::var("TUCKR_HOME") {
-        if !dir.is_empty() {
-            return Ok(PathBuf::from(dir).join(dotfiles_dir));
-        }
+    if let Ok(dir) = std::env::var("TUCKR_HOME")
+        && !dir.is_empty()
+    {
+        return Ok(PathBuf::from(dir).join(dotfiles_dir));
     }
 
     let (home_dotfiles, config_dotfiles) = {
@@ -401,10 +403,10 @@ pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
         unsafe { std::env::remove_var("TUCKR_TARGET") };
     }
 
-    if let Ok(dir) = std::env::var("TUCKR_TARGET") {
-        if !dir.is_empty() {
-            return Ok(dir.into());
-        }
+    if let Ok(dir) = std::env::var("TUCKR_TARGET")
+        && !dir.is_empty()
+    {
+        return Ok(dir.into());
     }
 
     dirs::home_dir().ok_or("No destination directory was found.".into())
@@ -434,7 +436,7 @@ pub fn dotfile_contains(profile: Option<String>, dtype: DotfileType, group: &str
 }
 
 /// Returns all groups in the slice that don't have a corresponding directory in dotfiles/{Configs,Hooks,Secrets}
-pub fn check_invalid_groups(
+pub fn get_nonexistent_groups(
     profile: Option<String>,
     dtype: DotfileType,
     groups: &[impl AsRef<str>],
@@ -463,9 +465,12 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
 
     let last_char = group.chars().next_back().unwrap();
     if group.len() > 1 && (last_char.is_whitespace() || last_char == '.') {
-        return Err(format!(
-            "group `{group}` ends with a `{last_char}` which is invalid on Windows",
-        ));
+        return Err(t!(
+            "errors.group_contains_invalid_char",
+            group = group,
+            char = last_char
+        )
+        .into_owned());
     }
 
     for char in group.chars() {
@@ -473,13 +478,16 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
             char,
             '/' | '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*' | '\0'
         ) {
-            return Err(format!(
-                "group `{group}` contains invalid character `{char}`"
-            ));
+            return Err(t!(
+                "errors.group_contains_invalid_char",
+                group = group,
+                char = char
+            )
+            .into_owned());
         }
 
         if char.is_control() {
-            return Err(format!("group `{group}` contains control characters"));
+            return Err(t!("errors.group_contains_control_chars", group = group).into_owned());
         }
     }
 
@@ -487,12 +495,12 @@ pub fn is_valid_groupname(group: impl AsRef<str>) -> Result<(), String> {
         // Windows invalid file names
         "CON" | "PRN" | "AUX" | "NUL" | "COM1" | "COM2" | "COM3" | "COM4" | "COM5" | "COM6"
         | "COM7" | "COM8" | "COM9" | "LPT1" | "LPT2" | "LPT3" | "LPT4" | "LPT5" | "LPT6"
-        | "LPT7" | "LPT8" | "LPT9" => Err(format!("group `{group}` is an invalid name on Windows")),
+        | "LPT7" | "LPT8" | "LPT9" => {
+            Err(t!("errors.group_name_is_invalid", group = group).into_owned())
+        }
 
         // Unix invalid file names
-        "." | ".." => Err(format!(
-            "group `{group}` is an invalid name on Unix-like systems"
-        )),
+        "." | ".." => Err(t!("errors.group_name_is_invalid", group = group).into_owned()),
 
         _ => Ok(()),
     }

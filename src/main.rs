@@ -76,6 +76,10 @@ enum Command {
     Status {
         #[arg(value_name = "group")]
         groups: Option<Vec<String>>,
+
+        /// Output status in JSON format
+        #[arg(long)]
+        json: bool,
     },
 
     /// Deploy dotfiles for the supplied groups (alias: a)
@@ -154,7 +158,9 @@ enum Command {
     /// Encrypt files and move them to dotfiles/Secrets (alias: e)
     #[command(alias = "e")]
     Encrypt {
+        #[arg(required = true)]
         group: String,
+
         #[arg(required = true, value_name = "FILE")]
         dotfiles: Vec<String>,
     },
@@ -164,6 +170,7 @@ enum Command {
     Decrypt {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
+
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
     },
@@ -171,10 +178,21 @@ enum Command {
     /// Copy files into groups
     Push {
         group: String,
-        #[arg(short = 'y', long)]
-        assume_yes: bool,
+
+        /// Files that are going to be moved into group
         #[arg(required = true)]
         files: Vec<String>,
+
+        /// Automatically answer yes on every prompt
+        #[arg(short = 'y', long)]
+        assume_yes: bool,
+
+        #[arg(long)]
+        only_files: bool,
+
+        /// Symlink flags after pushing them
+        #[arg(short = 'a', long)]
+        add: bool,
     },
 
     /// Remove groups from dotfiles/Configs
@@ -260,7 +278,7 @@ fn main() -> ExitCode {
 
         Command::Rm { groups, exclude } => symlinks::remove_cmd(&cli.ctx, &groups, &exclude),
 
-        Command::Status { groups } => symlinks::status_cmd(&cli.ctx, groups),
+        Command::Status { groups, json } => symlinks::status_cmd(&cli.ctx, groups, json),
 
         Command::Encrypt { group, dotfiles } => secrets::encrypt_cmd(&cli.ctx, &group, &dotfiles),
 
@@ -278,7 +296,9 @@ fn main() -> ExitCode {
             group,
             files,
             assume_yes,
-        } => fileops::push_cmd(&cli.ctx, group, &files, assume_yes),
+            only_files,
+            add,
+        } => fileops::push_cmd(&cli.ctx, group, &files, add, only_files, assume_yes),
 
         Command::Pop { groups, assume_yes } => fileops::pop_cmd(&cli.ctx, &groups, assume_yes),
 
