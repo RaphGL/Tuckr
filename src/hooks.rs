@@ -144,7 +144,15 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
     Ok(())
 }
 
-fn get_nonexistent_hooks() {}
+fn all_hooks_are_nonexistent(profile: Option<String>, groups: &[String]) -> bool {
+    let Some(nonexistent_groups) =
+        dotfiles::get_nonexistent_groups(profile.clone(), dotfiles::DotfileType::Hooks, groups)
+    else {
+        return false;
+    };
+
+    nonexistent_groups.len() == groups.len()
+}
 
 macro_rules! get_hooks_dir_if_exists_or_run_cmd {
     ($profile:expr, $groups:expr, $cmd:expr) => {{
@@ -191,13 +199,21 @@ pub fn set_cmd(
     adopt: bool,
     assume_yes: bool,
 ) -> Result<(), ExitCode> {
-    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(ctx.profile.clone(), groups, {
+    if all_hooks_are_nonexistent(ctx.profile.clone(), groups) {
         println!(
             "{}",
             t!("info.no_hooks_exist_running_cmd", cmd = "tuckr add").yellow()
         );
-        symlinks::add_cmd(ctx, only_files, groups, exclude, force, adopt, assume_yes)
-    });
+        return symlinks::add_cmd(ctx, only_files, groups, exclude, force, adopt, assume_yes);
+    }
+
+    let hooks_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
+        Ok(dir) => dir.join("Hooks"),
+        Err(err) => {
+            eprintln!("{}", err.red());
+            return Err(ReturnCode::NoSetupFolder.into());
+        }
+    };
 
     let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
         if !dotfiles::group_is_valid_target(&group, &ctx.custom_targets) || exclude.contains(&group)
@@ -327,13 +343,21 @@ pub fn set_cmd(
 
 /// Runs cleanup hooks for groups and then removes all their symlinks
 pub fn unset_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    let hooks_dir = get_hooks_dir_if_exists_or_run_cmd!(ctx.profile, groups, {
+    if all_hooks_are_nonexistent(ctx.profile.clone(), groups) {
         println!(
             "{}",
             t!("info.no_hooks_exist_running_cmd", cmd = "tuckr rm").yellow()
         );
-        symlinks::remove_cmd(ctx, groups, exclude)
-    });
+        return symlinks::remove_cmd(ctx, groups, exclude);
+    }
+
+    let hooks_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
+        Ok(dir) => dir.join("Hooks"),
+        Err(err) => {
+            eprintln!("{}", err.red());
+            return Err(ReturnCode::NoSetupFolder.into());
+        }
+    };
 
     let wildcard = String::from("*");
     if groups.contains(&wildcard) {
