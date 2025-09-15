@@ -144,9 +144,11 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
     Ok(())
 }
 
+fn get_nonexistent_hooks() {}
+
 macro_rules! get_hooks_dir_if_exists_or_run_cmd {
     ($profile:expr, $groups:expr, $cmd:expr) => {{
-        if let Some(invalid_groups) = dotfiles::get_nonexistent_groups(
+        if let Some(nonexistent_groups) = dotfiles::get_nonexistent_groups(
             $profile.clone(),
             dotfiles::DotfileType::Hooks,
             $groups,
@@ -158,7 +160,7 @@ macro_rules! get_hooks_dir_if_exists_or_run_cmd {
             )
             .is_some()
             {
-                for group in invalid_groups {
+                for group in nonexistent_groups {
                     println!("{}", t!("errors.x_doesnt_exist", x = group).red());
                 }
 

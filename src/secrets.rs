@@ -170,12 +170,12 @@ pub fn encrypt_cmd(ctx: &Context, group: &str, dotfiles: &[String]) -> Result<()
 pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
     let handler = SecretsHandler::try_new(ctx.profile.clone())?;
 
-    if let Some(invalid_groups) = dotfiles::get_nonexistent_groups(
+    if let Some(nonexistent_groups) = dotfiles::get_nonexistent_groups(
         ctx.profile.clone(),
         dotfiles::DotfileType::Secrets,
         groups,
     ) {
-        for group in invalid_groups {
+        for group in nonexistent_groups {
             eprintln!("{}", t!("errors.no_group", group = group).red());
         }
         return Err(ReturnCode::DecryptionFailed.into());

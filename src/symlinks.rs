@@ -516,10 +516,10 @@ pub fn add_cmd(
 
     let sym = SymlinkHandler::try_new(ctx)?;
 
-    if let Some(invalid_groups) =
+    if let Some(nonexistent_groups) =
         dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, groups)
     {
-        for group in invalid_groups {
+        for group in nonexistent_groups {
             eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
         }
 
@@ -660,10 +660,10 @@ pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resul
         return Ok(());
     }
 
-    if let Some(invalid_groups) =
+    if let Some(nonexistent_groups) =
         dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, groups)
     {
-        for group in invalid_groups {
+        for group in nonexistent_groups {
             eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
         }
 
@@ -912,7 +912,7 @@ fn print_groups_status(
         })
         .collect();
 
-    let invalid_groups =
+    let nonexistent_groups =
         dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, &groups);
 
     if json {
@@ -954,7 +954,7 @@ fn print_groups_status(
             not_symlinked,
             unsupported,
             conflicts,
-            nonexistent: match invalid_groups {
+            nonexistent: match nonexistent_groups {
                 Some(ref groups) => groups.clone(),
                 None => Default::default(),
             },
@@ -1023,9 +1023,9 @@ fn print_groups_status(
             println!();
         }
 
-        if let Some(invalid_groups) = &invalid_groups {
+        if let Some(ref nonexistent_groups) = nonexistent_groups {
             eprintln!("{}:", t!("errors.following_groups_dont_exist"));
-            for group in invalid_groups {
+            for group in nonexistent_groups {
                 eprintln!("\t{}", group.red());
             }
             println!();
@@ -1039,7 +1039,7 @@ fn print_groups_status(
         }
     }
 
-    if invalid_groups.is_none() {
+    if nonexistent_groups.is_none() {
         return Err(ReturnCode::NoSetupFolder.into());
     }
 

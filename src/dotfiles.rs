@@ -439,19 +439,19 @@ pub fn get_nonexistent_groups(
     dtype: DotfileType,
     groups: &[impl AsRef<str>],
 ) -> Option<Vec<String>> {
-    let mut invalid_groups = Vec::new();
+    let mut nonexistent_groups = Vec::new();
     for group in groups {
         let group = group.as_ref();
         if !dotfiles::dotfile_contains(profile.clone(), dtype, group) && group != "*" {
-            invalid_groups.push(group.into());
+            nonexistent_groups.push(group.into());
         }
     }
 
-    if invalid_groups.is_empty() {
+    if nonexistent_groups.is_empty() {
         return None;
     }
 
-    Some(invalid_groups)
+    Some(nonexistent_groups)
 }
 
 /// Returns true if the group's name is valid on all platforms
