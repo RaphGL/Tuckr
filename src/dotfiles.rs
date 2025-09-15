@@ -81,6 +81,8 @@ pub enum ReturnCode {
     EncryptionFailed = 5,
     /// Failed to decrypt referenced file
     DecryptionFailed = 6,
+    /// Failed to read encrypted referenced file
+    EncryptedReadFailed = 7,
 }
 
 impl From<ReturnCode> for process::ExitCode {
