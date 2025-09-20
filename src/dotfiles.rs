@@ -389,10 +389,24 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
     }
 }
 
-/// removes the $HOME from path
+/// Returns a "tuckr-ized version" of the given target path on the system.
+///
+/// This requires the given target to be a canonical file system path.
+///
+/// * If the target exists within the `dotfiles_target_dir` (usually $HOME),
+///   then the prefix will be removed.
+/// * Otherwise, if the target exists within the outer system (eg a file like
+///   `/etc/crontab`, it modifies the value to use root targetting, ie
+///   `^etc/crontab`).
+/// * I don't know how this should work on Windows, where there is no single
+///   file system root.
 pub fn get_target_basepath(target: &path::Path) -> Option<PathBuf> {
     let target_dir = get_dotfiles_target_dir_path().ok()?;
-    Some(target.strip_prefix(target_dir).ok()?.into())
+    Some(target.strip_prefix(target_dir).unwrap_or_else(|_| {
+        // TODO: Figure out what to do with root component of path, and then
+        // replace the leading component with a version with an added `^`
+        target
+    }).into())
 }
 
 pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
