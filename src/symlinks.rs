@@ -510,6 +510,8 @@ pub fn add_cmd(
         });
 
         if !confirmed {
+            // NITPICK: If the user says no, it's probably better to give a
+            // non-zero exit status.
             return Ok(());
         }
     }

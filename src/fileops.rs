@@ -179,6 +179,8 @@ pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
     Ok(())
 }
 
+/// Push the given files into the given group, essentially adopting them into
+/// the dotfiles.
 pub fn push_cmd(
     ctx: &Context,
     group: String,
@@ -266,6 +268,9 @@ pub fn push_cmd(
             continue;
         }
 
+        // BUG? Should we skip adopting directories if the `only_files` option
+        // is set? Currently, it is only passed to the `add` command, and not
+        // used here, which is probably not what the user expects.
         for f in DirWalk::new(file) {
             if f.is_dir() {
                 continue;
@@ -296,6 +301,8 @@ pub fn push_cmd(
         return Err(ReturnCode::NoSuchFileOrDir.into());
     }
 
+    // BUG? Since `--force` is `false`, this will fail to overwrite all the
+    // pushed files, right?
     if add {
         return symlinks::add_cmd(ctx, only_files, &[group], &[], false, false, assume_yes);
     }
@@ -303,6 +310,8 @@ pub fn push_cmd(
     Ok(())
 }
 
+/// Remove the given group from the dotfiles, and clean up any symlinks that
+/// point to that group.
 pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir.join("Configs"),
@@ -356,6 +365,10 @@ pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(),
             continue;
         }
 
+        // BUG? I'd have expected "pop" to be the opposite of "push", in that
+        // it removes the file from the dotfiles, but restores it to its
+        // original location (ie replaces the symlink with the original file,
+        // before removing the file from the dotfiles).
         let dotfile = dotfiles::Dotfile::try_from(group_path.clone()).unwrap();
         symlinks::remove_cmd(ctx, &[dotfile.group_name], &[])?;
         fs::remove_dir_all(&group_path).unwrap();
