@@ -179,6 +179,8 @@ pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
     Ok(())
 }
 
+/// Push the given files into the given group, essentially adopting them into
+/// the dotfiles.
 pub fn push_cmd(
     ctx: &Context,
     group: String,
@@ -303,6 +305,8 @@ pub fn push_cmd(
     Ok(())
 }
 
+/// Remove the given group from the dotfiles, and clean up any symlinks that
+/// point to that group.
 pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir.join("Configs"),
