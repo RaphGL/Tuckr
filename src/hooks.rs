@@ -86,6 +86,7 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
     if !group_dir.exists() {
         return Ok(());
     }
+    std::env::set_current_dir(&group_dir).unwrap();
 
     let Ok(group_dir) = fs::read_dir(group_dir) else {
         eprintln!("{}", t!("errors.could_not_read_hooks").red());
@@ -152,40 +153,6 @@ fn all_hooks_are_nonexistent(profile: Option<String>, groups: &[String]) -> bool
     };
 
     nonexistent_groups.len() == groups.len()
-}
-
-macro_rules! get_hooks_dir_if_exists_or_run_cmd {
-    ($profile:expr, $groups:expr, $cmd:expr) => {{
-        if let Some(nonexistent_groups) = dotfiles::get_nonexistent_groups(
-            $profile.clone(),
-            dotfiles::DotfileType::Hooks,
-            $groups,
-        ) {
-            if dotfiles::get_nonexistent_groups(
-                $profile.clone(),
-                dotfiles::DotfileType::Configs,
-                $groups,
-            )
-            .is_some()
-            {
-                for group in nonexistent_groups {
-                    println!("{}", t!("errors.x_doesnt_exist", x = group).red());
-                }
-
-                return Err(ReturnCode::NoSuchFileOrDir.into());
-            } else {
-                return $cmd;
-            }
-        }
-
-        match dotfiles::get_dotfiles_path($profile.clone()) {
-            Ok(dir) => dir.join("Hooks"),
-            Err(err) => {
-                eprintln!("{}", err.red());
-                return Err(ReturnCode::NoSetupFolder.into());
-            }
-        }
-    }};
 }
 
 /// Runs hooks for specified groups and symlinks them
@@ -366,6 +333,7 @@ pub fn unset_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result
 
     for group in groups {
         let group_dir = hooks_dir.join(group);
+        std::env::set_current_dir(&group_dir).unwrap();
 
         for file in group_dir.read_dir().unwrap() {
             let file = file.unwrap().path();
