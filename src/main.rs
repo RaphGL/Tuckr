@@ -248,8 +248,9 @@ enum Command {
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Symlink flags after pushing them. This is the equivalent to running
-        /// `tuckr add` after pushing the files.
+        /// Symlink files after pushing them into the dotfiles repository.
+        /// This is the equivalent to running `tuckr add [group]` manually
+        /// after this command.
         #[arg(short = 'a', long)]
         add: bool,
 
