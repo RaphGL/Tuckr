@@ -41,14 +41,15 @@ pub struct Context {
     #[arg(short, long)]
     pub profile: Option<String>,
 
-    /// No filesystem operations. Only print what would happen
+    /// No filesystem operations. Only print what would happen.
     #[arg(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Select custom deploy targets to use when deploying dotfiles.
+    /// Select custom targets to use when deploying dotfiles.
     ///
-    /// The group directories matching these targets will be preferred when
-    /// managing symbolic links.
+    /// When a custom target is selected, config files, hooks and secrets from
+    /// groups matching that target will be preferred over less-specific
+    /// groups.
     #[arg(short = 't', long = "targets", use_value_delimiter = true)]
     pub custom_targets: Vec<String>,
 }
@@ -91,7 +92,7 @@ enum Command {
         json: bool,
     },
 
-    /// Deploy dotfiles for the supplied groups (alias: a)
+    /// Deploy dotfiles for the supplied groups (alias: a).
     ///
     /// Each file within the dotfiles groups will be linked to its
     /// corresponding location on the system, effectively "installing" those
@@ -113,7 +114,7 @@ enum Command {
         #[arg(short, long)]
         force: bool,
 
-        /// Adopt conflicting dotfiles
+        /// Adopt conflicting dotfiles.
         ///
         /// If a file exists on the system and in the dotfiles repository, the
         /// version from the system will be used to overwrite the version
@@ -121,20 +122,19 @@ enum Command {
         #[arg(short, long)]
         adopt: bool,
 
-        /// Automatically answer yes on every prompt
+        /// Automatically answer yes on every prompt.
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Only add files and ignore directories
+        /// Only add files and ignore directories.
         #[arg(long)]
         only_files: bool,
     },
 
-    /// Remove dotfiles for the supplied groups
+    /// Remove dotfiles for the supplied groups.
     ///
-    /// For each link in the system that points to a file for the given
-    /// dotfiles groups, the symbolic link will be removed, effectively
-    /// "uninstalling" those groups' files.
+    /// This removes the symbolic links on the system which point to files
+    /// within the given groups.
     Rm {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
@@ -144,28 +144,36 @@ enum Command {
         exclude: Vec<String>,
     },
 
-    /// Add groups and run their setup hooks
+    /// Add groups and run their setup hooks.
     Set {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        /// Exclude certain groups from being added and hooked
+        /// Exclude certain groups from being added and hooked.
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
 
-        /// Override conflicting dotfiles
+        /// Override conflicting dotfiles.
+        ///
+        /// If a file exists on the system and in the dotfiles repository, the
+        /// version from the dotfiles repository will be used to overwrite the
+        /// version on the system.
         #[arg(short, long)]
         force: bool,
 
-        /// Adopt conflicting dotfiles
+        /// Adopt conflicting dotfiles.
+        ///
+        /// If a file exists on the system and in the dotfiles repository, the
+        /// version from the system will be used to overwrite the version
+        /// in the dotfiles repository.
         #[arg(short, long)]
         adopt: bool,
 
-        /// Automatically answer yes to stdin prompts
+        /// Automatically answer yes to stdin prompts.
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Only add files and ignore directories
+        /// Only add files and ignore directories.
         #[arg(long)]
         only_files: bool,
     },
@@ -203,8 +211,8 @@ enum Command {
     /// Copy the given files into the given group, creating the group if it
     /// doesn't already exist.
     ///
-    /// For each given file on the system, add it to the given group within the
-    /// dotfiles repository.
+    /// For each file given as a parameter, copy it to the given group within
+    /// the dotfiles repository.
     Push {
         /// The group to move files into
         group: String,
