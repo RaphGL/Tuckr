@@ -126,7 +126,18 @@ enum Command {
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Only add files and ignore directories.
+        /// Recursively create symbolic links to files, instead of to the first
+        /// un-created directory.
+        ///
+        /// This allows you to have different groups place files within the
+        /// same location, even if that location does not already exist on the
+        /// system.
+        ///
+        /// For example, if group `a` contains `bin/foo` and group `b` contains
+        /// `bin/bar`, and `~/bin` does not already exist on the system, then
+        /// failure to specify this option would cause a conflict as both
+        /// groups would try to create the `~/bin` directory as a symbolic
+        /// link.
         #[arg(long)]
         only_files: bool,
     },
@@ -173,7 +184,18 @@ enum Command {
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Only add files and ignore directories.
+        /// Recursively create symbolic links to files, instead of to the first
+        /// un-created directory.
+        ///
+        /// This allows you to have different groups place files within the
+        /// same location, even if that location does not already exist on the
+        /// system.
+        ///
+        /// For example, if group `a` contains `bin/foo` and group `b` contains
+        /// `bin/bar`, and `~/bin` does not already exist on the system, then
+        /// failure to specify this option would cause a conflict as both
+        /// groups would try to create the `~/bin` directory as a symbolic
+        /// link.
         #[arg(long)]
         only_files: bool,
     },
@@ -226,14 +248,27 @@ enum Command {
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Only add files, not directories.
-        #[arg(long)]
-        only_files: bool,
-
         /// Symlink flags after pushing them. This is the equivalent to running
         /// `tuckr add` after pushing the files.
         #[arg(short = 'a', long)]
         add: bool,
+
+        /// Recursively create symbolic links to files, instead of to the first
+        /// un-created directory when adding dotfiles.
+        ///
+        /// This option only takes effect when the `--add` flag is also used.
+        ///
+        /// This allows you to have different groups place files within the
+        /// same location, even if that location does not already exist on the
+        /// system.
+        ///
+        /// For example, if group `a` contains `bin/foo` and group `b` contains
+        /// `bin/bar`, and `~/bin` does not already exist on the system, then
+        /// failure to specify this option would cause a conflict as both
+        /// groups would try to create the `~/bin` directory as a symbolic
+        /// link.
+        #[arg(long)]
+        only_files: bool,
     },
 
     /// Delete the given groups from the dotfiles, cleaning up any left-over
@@ -244,6 +279,8 @@ enum Command {
     #[command(arg_required_else_help = true)]
     Pop {
         groups: Vec<String>,
+
+        /// Automatically answer yes on every prompt.
         #[arg(short = 'y', long)]
         assume_yes: bool,
     },
