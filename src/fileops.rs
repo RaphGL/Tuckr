@@ -347,7 +347,7 @@ pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(),
         }
 
         if !get_user_confirmation(t!("warn.want_to_proceed").to_string().as_str()) {
-            return Ok(());
+            return Err(ExitCode::FAILURE);
         }
     }
 
@@ -641,7 +641,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
     let used_dot_prefix = get_user_confirmation("Did you use `--dotfiles` with Stow?");
 
     if !get_user_confirmation(t!("warn.want_to_proceed").into_owned().as_ref()) {
-        return Ok(());
+        return Err(ExitCode::FAILURE);
     }
 
     let temp_profile = Some(match ctx.profile.as_ref() {
