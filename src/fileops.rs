@@ -225,11 +225,24 @@ pub fn push_cmd(
         #[inline]
         fn push_file(
             dry_run: bool,
-            target_parent_dir: &Path,
+            add: bool,
             target_file: &Path,
             file: &Path,
             created_dirs: &mut HashSet<PathBuf>,
         ) {
+            let target_parent_dir = target_file.parent().unwrap();
+
+            if file.is_symlink() {
+                let file_symlink = file.read_link().unwrap();
+                if file_symlink == target_file {
+                    eprintln!(
+                        "Skipping `{}`: cannot push a symlink that links to itself",
+                        file.display()
+                    );
+                    return;
+                }
+            }
+
             if dry_run {
                 if !target_parent_dir.exists() && !created_dirs.contains(target_parent_dir) {
                     eprintln!(
@@ -252,19 +265,17 @@ pub fn push_cmd(
                 if !target_parent_dir.exists() {
                     fs::create_dir_all(target_parent_dir).unwrap();
                 }
-                fs::copy(file, target_file).unwrap();
+
+                if add {
+                    fs::rename(file, target_file).unwrap();
+                } else {
+                    fs::copy(file, target_file).unwrap();
+                }
             }
         }
 
         if file.is_file() {
-            let target_dir = target_file.parent().unwrap();
-            push_file(
-                ctx.dry_run,
-                target_dir,
-                &target_file,
-                &file,
-                &mut created_dirs,
-            );
+            push_file(ctx.dry_run, add, &target_file, &file, &mut created_dirs);
             continue;
         }
 
@@ -280,13 +291,11 @@ pub fn push_cmd(
             }
 
             let file = path::absolute(f).unwrap();
-
             let target_file = dotfiles_dir.join(dotfiles::get_target_basepath(&file).unwrap());
-            let target_parent_file = target_file.parent().unwrap();
 
             push_file(
                 ctx.dry_run,
-                target_parent_file,
+                add,
                 target_file.as_path(),
                 file.as_path(),
                 &mut created_dirs,
