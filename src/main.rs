@@ -230,7 +230,7 @@ enum Command {
         exclude: Vec<String>,
     },
 
-    /// Copy the given files into the given group, creating the group if it
+    /// Copy the given files into a group, creating the group if it
     /// doesn't already exist.
     ///
     /// For each file given as a parameter, copy it to the given group within
@@ -274,12 +274,13 @@ enum Command {
 
     /// Delete the given groups from the dotfiles, cleaning up any left-over
     /// symbolic links.
-    ///
-    /// Note that this will remove the files on the system, rather than
-    /// restoring them to their original non-symlinked state.
     #[command(arg_required_else_help = true)]
     Pop {
         groups: Vec<String>,
+
+        /// Delete groups instead of popping them out dotfiles
+        #[arg(short, long)]
+        delete: bool,
 
         /// Automatically answer yes on every prompt.
         #[arg(short = 'y', long)]
@@ -383,7 +384,11 @@ fn main() -> ExitCode {
             add,
         } => fileops::push_cmd(&cli.ctx, group, &files, add, only_files, assume_yes),
 
-        Command::Pop { groups, assume_yes } => fileops::pop_cmd(&cli.ctx, &groups, assume_yes),
+        Command::Pop {
+            groups,
+            delete,
+            assume_yes,
+        } => fileops::pop_cmd(&cli.ctx, &groups, delete, assume_yes),
 
         Command::GroupIs { files } => fileops::groupis_cmd(&cli.ctx, &files),
 

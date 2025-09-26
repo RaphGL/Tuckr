@@ -316,7 +316,12 @@ pub fn push_cmd(
 
 /// Remove the given group from the dotfiles, and clean up any symlinks that
 /// point to that group.
-pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(), ExitCode> {
+pub fn pop_cmd(
+    ctx: &Context,
+    groups: &[String],
+    delete: bool,
+    assume_yes: bool,
+) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir.join("Configs"),
         Err(e) => {
@@ -371,7 +376,22 @@ pub fn pop_cmd(ctx: &Context, groups: &[String], assume_yes: bool) -> Result<(),
 
         let dotfile = dotfiles::Dotfile::try_from(group_path.clone()).unwrap();
         symlinks::remove_cmd(ctx, &[dotfile.group_name], &[])?;
-        fs::remove_dir_all(&group_path).unwrap();
+
+        if delete {
+            fs::remove_dir_all(group_path).unwrap();
+            continue;
+        }
+
+        // if not delete then we move all dotfiles back to $HOME when popping the group
+        for file in DirWalk::new(&group_path) {
+            let orig_path = dotfiles::Dotfile::try_from(file.clone())
+                .unwrap()
+                .to_target_path()
+                .unwrap();
+
+            fs::rename(file, orig_path).unwrap();
+        }
+        fs::remove_dir(group_path).expect("directory should be empty at this point");
     }
 
     Ok(())
@@ -905,7 +925,7 @@ mod tests {
         .unwrap();
 
         assert!(group_dir.exists());
-        super::pop_cmd(&Context::default(), &["test".into()], true).unwrap();
+        super::pop_cmd(&Context::default(), &["test".into()], true, true).unwrap();
         assert!(!group_dir.exists());
     }
 
