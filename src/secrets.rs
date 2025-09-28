@@ -1,82 +1,58 @@
 //! Manages encrypted files
 //!
-//! Encrypts files into dotfiles/Secrets using the chacha20poly1305 algorithm
+//! Encrypts files into dotfiles/Secrets using the age library
 
 use crate::Context;
 use crate::dotfiles::{self, Dotfile, ReturnCode};
 use crate::fileops::DirWalk;
-use chacha20poly1305::{AeadCore, KeyInit, XChaCha20Poly1305, aead, aead::Aead};
 use owo_colors::OwoColorize;
 use rust_i18n::t;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-struct SecretsHandler {
-    dotfiles_dir: PathBuf,
-    key: chacha20poly1305::Key,
-    nonce: chacha20poly1305::XNonce,
-}
+use age::secrecy::SecretString;
 
-impl SecretsHandler {
-    fn try_new(profile: Option<String>) -> Result<Self, ExitCode> {
-        let dotfiles_dir = match dotfiles::get_dotfiles_path(profile) {
+fn get_dotfiles_dir(ctx: &Context) -> Result<PathBuf, ExitCode> {
+        let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
             Ok(path) => path,
             Err(e) => {
                 eprintln!("{e}");
                 return Err(ReturnCode::CouldntFindDotfiles.into());
             }
         };
+        Ok(dotfiles_dir)
+}
 
-        // makes a hash of the password so that it can fit on the 256 bit buffer used by the
-        // algorithm
+fn read_passphrase()-> Result<SecretString, ExitCode>{
         let input_key = rpassword::prompt_password(format!("{}: ", t!("info.password"))).unwrap();
-        let input_hash = Sha256::digest(input_key);
+        Ok(SecretString::from(input_key))
+}
+fn encrypt(recipient: &age::scrypt::Recipient, dotfile: &Path) -> Result<Vec<u8>, ExitCode> {
+    let Ok(dotfile) = fs::read(dotfile) else {
+        eprintln!(
+            "{}",
+            t!("errors.x_doesnt_exist", x = dotfile.display()).red()
+        );
+        return Err(ReturnCode::NoSuchFileOrDir.into());
+    };
 
-        Ok(SecretsHandler {
-            dotfiles_dir,
-            key: input_hash,
-            nonce: XChaCha20Poly1305::generate_nonce(&mut aead::OsRng),
-        })
-    }
+    age::encrypt(recipient, &dotfile).map_err(|e|{
+        eprintln!("{}", e.red());
+        ReturnCode::EncryptionFailed.into()
+    })
+}
 
-    /// takes a path to a file and returns its encrypted content
-    fn encrypt(&self, dotfile: &Path) -> Result<Vec<u8>, ExitCode> {
-        let cipher = XChaCha20Poly1305::new(&self.key);
-        let Ok(dotfile) = fs::read(dotfile) else {
-            eprintln!(
-                "{}",
-                t!("errors.x_doesnt_exist", x = dotfile.display()).red()
-            );
-            return Err(ReturnCode::NoSuchFileOrDir.into());
-        };
+fn decrypt(identity: &age::scrypt::Identity, dotfile: &Path) -> Result<Vec<u8>, ExitCode> {
+    let Ok(dotfile) = fs::read(dotfile) else {
+            eprintln!("{}", t!("errors.could_not_read_enc", path = dotfile.display()).red());
+            return Err(ReturnCode::EncryptedReadFailed.into())
+    };
 
-        match cipher.encrypt(&self.nonce, dotfile.as_slice()) {
-            Ok(f) => Ok(f),
-            Err(e) => {
-                eprintln!("{}", e.red());
-                Err(ReturnCode::EncryptionFailed.into())
-            }
-        }
-    }
-
-    /// takes a path to a file and returns its decrypted content
-    fn decrypt(&self, dotfile: &str) -> Result<Vec<u8>, ExitCode> {
-        let cipher = XChaCha20Poly1305::new(&self.key);
-        let dotfile = fs::read(dotfile).expect("Couldn't read dotfile");
-
-        // extracts the nonce from the first 24 bytes in the file
-        let (nonce, contents) = dotfile.split_at(24);
-
-        match cipher.decrypt(nonce.into(), contents) {
-            Ok(f) => Ok(f),
-            Err(_) => {
-                eprintln!("{}", t!("errors.wrong_password").red());
-                Err(ReturnCode::DecryptionFailed.into())
-            }
-        }
-    }
+    age::decrypt(identity, &dotfile).map_err(|_|{
+        eprintln!("{}", t!("errors.wrong_password").red());
+        ReturnCode::DecryptionFailed.into()
+    })
 }
 
 /// Encrypts secrets
@@ -95,9 +71,11 @@ pub fn encrypt_cmd(ctx: &Context, group: &str, dotfiles: &[String]) -> Result<()
         }
     }
 
-    let handler = SecretsHandler::try_new(ctx.profile.clone())?;
+    //let handler = SecretsHandler::try_new(profile)?;
+    let passphrase = read_passphrase()?;
+    let recipient = age::scrypt::Recipient::new(passphrase);
 
-    let dest_dir = handler.dotfiles_dir.join("Secrets").join(group);
+    let dest_dir = get_dotfiles_dir(ctx)?.join("Secrets").join(group);
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).unwrap();
     }
@@ -133,10 +111,7 @@ pub fn encrypt_cmd(ctx: &Context, group: &str, dotfiles: &[String]) -> Result<()
             tf
         };
 
-        let mut encrypted = handler.encrypt(dotfile)?;
-        let mut encrypted_file = handler.nonce.to_vec();
-        // appends a 24 byte nonce to the beginning of the file
-        encrypted_file.append(&mut encrypted);
+        let encrypted_file = encrypt(&recipient, dotfile)?;
 
         // makes sure all parent directories of the dotfile are created
         fs::create_dir_all(dest_dir.join(dir_path)).unwrap();
@@ -167,8 +142,14 @@ pub fn encrypt_cmd(ctx: &Context, group: &str, dotfiles: &[String]) -> Result<()
 }
 
 /// Decrypts secrets
-pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result<(), ExitCode> {
-    let handler = SecretsHandler::try_new(ctx.profile.clone())?;
+pub fn decrypt_cmd(
+    ctx: &Context,
+    groups: &[String],
+    exclude: &[String],
+) -> Result<(), ExitCode> {
+    let passphrase = read_passphrase()?;
+    let identity = age::scrypt::Identity::new(passphrase);
+    let dotfiles_dir = get_dotfiles_dir(ctx)?;
 
     if let Some(nonexistent_groups) = dotfiles::get_nonexistent_groups(
         ctx.profile.clone(),
@@ -194,7 +175,7 @@ pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resu
             return Ok(());
         }
 
-        let group_dir = handler.dotfiles_dir.join("Secrets").join(&group.group_path);
+        let group_dir = dotfiles_dir.join("Secrets").join(&group.group_path);
         for secret in DirWalk::new(&group_dir) {
             if secret.is_dir() {
                 continue;
@@ -219,7 +200,7 @@ pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resu
             let decrypted_parent_dir = decrypted_dest.parent().unwrap();
             fs::create_dir_all(decrypted_parent_dir).unwrap();
 
-            let decrypted = handler.decrypt(secret.to_str().unwrap())?;
+            let decrypted = decrypt(&identity, &secret)?;
             fs::write(decrypted_dest, decrypted).unwrap();
         }
 
@@ -227,7 +208,7 @@ pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resu
     };
 
     if groups.contains(&"*".to_string()) {
-        let groups_dir = handler.dotfiles_dir.join("Secrets");
+        let groups_dir = dotfiles_dir.join("Secrets");
         for group in fs::read_dir(groups_dir).unwrap() {
             let Ok(group) = Dotfile::try_from(group.unwrap().path()) else {
                 eprintln!("{}", t!("errors.got_invalid_group").red());
@@ -240,7 +221,7 @@ pub fn decrypt_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resu
     }
 
     for group in groups {
-        let group = handler.dotfiles_dir.join("Secrets").join(group);
+        let group = dotfiles_dir.join("Secrets").join(group);
         let Ok(group) = Dotfile::try_from(group) else {
             eprintln!("{}", t!("errors.got_invalid_group").red());
             return Err(ExitCode::FAILURE);
