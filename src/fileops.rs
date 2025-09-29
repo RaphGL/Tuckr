@@ -553,73 +553,29 @@ pub fn ls_profiles_cmd() -> Result<(), ExitCode> {
 
 pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
-        Ok(path) => path,
-        Err(e) => {
-            eprintln!("{e}");
-            return Err(ReturnCode::NoSetupFolder.into());
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("{err}");
+            return Err(ReturnCode::CouldntFindDotfiles.into());
         }
-    }
-    .join("Configs");
+    };
 
-    let groups: Vec<_> = dotfiles_dir
-        .read_dir()
-        .unwrap()
-        .filter_map(|f| {
-            let f = f.unwrap();
-            if f.file_type().unwrap().is_dir() {
-                Some(f.file_name().into_string().unwrap())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    'next_file: for file in files {
-        let mut file_path = match PathBuf::from(file).canonicalize() {
-            Ok(fp) => fp,
-            Err(err) => {
-                eprintln!("{err}");
-                continue;
-            }
-        };
-
+    for file in files {
+        let file_path = Path::new(file);
         if !file_path.exists() {
             eprintln!("{}", t!("errors.x_doesnt_exist", x = file).red());
             continue;
         }
 
-        if let Ok(dotfile) = dotfiles::Dotfile::try_from(file_path.clone()) {
-            println!("{}", dotfile.group_name);
+        let Some(group) = dotfiles::get_group_from_target_path(file_path) else {
+            eprintln!("{}", t!("errors.not_a_tuckr_dotfile", file = file).red());
+            continue;
+        };
+
+        if !group.group_path.starts_with(&dotfiles_dir) {
             continue;
         }
-
-        while !file_path.is_symlink() {
-            // continuously go up a directory trying to find where the symlink is
-            if !file_path.pop() {
-                eprintln!("{}", t!("errors.not_a_tuckr_dotfile", file = file).red());
-                continue 'next_file;
-            }
-        }
-
-        let basepath = dotfiles::get_target_basepath(&file_path).unwrap();
-
-        for group in &groups {
-            let dotfile_path = dotfiles_dir.join(group).join(&basepath);
-
-            if !dotfile_path.exists() {
-                continue;
-            }
-
-            let dotfile = match dotfiles::Dotfile::try_from(dotfile_path) {
-                Ok(dotfile) => dotfile,
-                Err(err) => {
-                    eprintln!("{err}");
-                    continue;
-                }
-            };
-
-            println!("{}", dotfile.group_name);
-        }
+        println!("{}", group.group_name);
     }
 
     Ok(())

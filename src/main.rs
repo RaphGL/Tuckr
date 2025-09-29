@@ -11,7 +11,6 @@
 
 mod dotfiles;
 mod fileops;
-mod filetree;
 mod hooks;
 mod secrets;
 mod symlinks;

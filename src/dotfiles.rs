@@ -454,6 +454,29 @@ pub fn get_nonexistent_groups(
     Some(nonexistent_groups)
 }
 
+// searches for a link in a path and if the symlink points to a valid dotfile
+// it returns the group dotfile
+pub fn get_group_from_target_path(target_path: &Path) -> Option<Dotfile> {
+    let mut file_path = PathBuf::from(target_path).canonicalize().ok()?;
+    if !file_path.exists() {
+        return None;
+    }
+
+    if let Ok(dotfile) = dotfiles::Dotfile::try_from(file_path.clone()) {
+        return Some(dotfile);
+    }
+
+    while !file_path.is_symlink() {
+        // continuously go up a directory trying to find where the symlink is
+        if !file_path.pop() {
+            return None;
+        }
+    }
+
+    let link = file_path.read_link().ok()?;
+    Dotfile::try_from(link).ok()
+}
+
 /// Returns true if the group's name is valid on all platforms
 ///
 /// For more information check: https://stackoverflow.com/questions/1976007/what-characters-are-forbidden-in-windows-and-linux-directory-names

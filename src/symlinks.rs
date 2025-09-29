@@ -396,37 +396,29 @@ impl<'a> SymlinkHandler<'a> {
     }
 
     /// Symlinks all the files of a group to the user's $TUCKR_TARGET
-    fn add(&self, dry_run: bool, only_files: bool, group: &str) {
+    fn add(&mut self, dry_run: bool, only_files: bool, group: &str) {
         let Some(mut groups) =
             self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
         else {
             return;
         };
 
-        loop {
-            let Some(idx) = dotfiles::get_highest_priority_target_idx(&groups) else {
-                break;
-            };
+        let mut removed_groups = HashSet::new();
+        let mut added_files = Vec::new();
 
+        while let Some(idx) = dotfiles::get_highest_priority_target_idx(&groups) {
             let group = &groups[idx];
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(group)).unwrap();
             if group.path.exists() {
                 for f in group.try_iter().unwrap() {
-                    if only_files {
-                        if f.path.is_dir() {
-                            continue;
-                        }
+                    let f_target = f.to_target_path().unwrap();
 
-                        // we need to ensure that the target dotfile's parent exists otherwise symlink will fail
-                        let f_target = f.to_target_path().unwrap();
-                        let target_parent = f_target.parent().unwrap();
-
-                        if !target_parent.exists() {
-                            fs::create_dir_all(target_parent).unwrap();
-                        }
+                    // if there's a symlink in this path, we take its group and put it in the "to be removed" bucket
+                    // it will later be readded so that the groups are all contained in the same parent directory
+                    if let Some(group) = dotfiles::get_group_from_target_path(&f_target) {
+                        removed_groups.insert(group);
                     }
-
-                    symlink_file(dry_run, f.path);
+                    added_files.push(f);
                 }
             } else {
                 eprintln!(
@@ -437,6 +429,56 @@ impl<'a> SymlinkHandler<'a> {
 
             groups.remove(idx);
         }
+
+        let group_only_added_files = added_files.clone();
+
+        // NOTE/TODO?: this will only work if the dotfiles are in the same profile context
+        // maybe we should instead move the files into a temporary and then move them back
+        for group in removed_groups {
+            self.remove(dry_run, &group.group_name);
+
+            let target_path = group.to_target_path().unwrap();
+            fs::create_dir_all(if target_path.is_file() {
+                target_path.parent().unwrap()
+            } else {
+                &target_path
+            })
+            .unwrap();
+
+            let group_iter = Dotfile::try_from(group.group_path)
+                .unwrap()
+                .try_iter()
+                .unwrap();
+
+            for file in group_iter {
+                added_files.push(file);
+            }
+        }
+
+        for file in added_files {
+            if only_files {
+                if file.path.is_dir() {
+                    continue;
+                }
+
+                // we need to ensure that the target dotfile's parent exists otherwise symlink will fail
+                let f_target = file.to_target_path().unwrap();
+                let target_parent = f_target.parent().unwrap();
+
+                if !target_parent.exists() {
+                    fs::create_dir_all(target_parent).unwrap();
+                }
+            }
+
+            symlink_file(dry_run, file.path);
+        }
+
+        // we do this because otherwise the next time this function is called
+        // the dotfile won't be in the symlink status cache
+        // TODO: find a better way??
+        self.symlinked
+            .insert(group.into(), group_only_added_files.into_iter().collect());
+        self.not_symlinked.remove(group);
     }
 
     /// Deletes symlinks from $TUCKR_TARGET if they're owned by dotfiles dir
@@ -514,7 +556,7 @@ pub fn add_cmd(
         }
     }
 
-    let sym = SymlinkHandler::try_new(ctx)?;
+    let mut sym = SymlinkHandler::try_new(ctx)?;
 
     if let Some(nonexistent_groups) =
         dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, groups)
@@ -526,7 +568,15 @@ pub fn add_cmd(
         return Err(ReturnCode::NoSetupFolder.into());
     };
 
-    let add_group = |group: &String| {
+    fn add_group(
+        ctx: &Context,
+        sym: &mut SymlinkHandler,
+        group: &String,
+        exclude: &[String],
+        only_files: bool,
+        force: bool,
+        adopt: bool,
+    ) {
         if exclude.contains(group) {
             return;
         }
@@ -587,12 +637,13 @@ pub fn add_cmd(
         }
 
         sym.add(ctx.dry_run, only_files, group)
-    };
+    }
 
     if groups.contains(&"*".to_string()) {
-        for group in sym.not_symlinked.keys() {
-            if dotfiles::group_is_valid_target(group, &ctx.custom_targets) {
-                add_group(group);
+        let not_symlinked_groups: Vec<_> = sym.not_symlinked.clone().into_keys().collect();
+        for group in not_symlinked_groups {
+            if dotfiles::group_is_valid_target(&group, &ctx.custom_targets) {
+                add_group(ctx, &mut sym, &group, exclude, only_files, force, adopt);
             }
         }
     } else {
@@ -613,7 +664,9 @@ pub fn add_cmd(
             related_groups
         };
 
-        groups.iter().for_each(add_group);
+        for group in groups {
+            add_group(ctx, &mut sym, &group, exclude, only_files, force, adopt);
+        }
     }
 
     let post_add_sym = SymlinkHandler::try_new(ctx)?;
