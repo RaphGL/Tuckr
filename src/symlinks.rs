@@ -877,8 +877,8 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
             .with(
                 Modify::new(Rows::first()).with(Format::content(|s| s.default_color().to_string())),
             )
-            .with(Modify::new(Columns::single(0)).with(Format::content(|s| s.green().to_string())))
-            .with(Modify::new(Columns::single(1)).with(Format::content(|s| s.red().to_string())));
+            .with(Modify::new(Columns::one(0)).with(Format::content(|s| s.green().to_string())))
+            .with(Modify::new(Columns::one(1)).with(Format::content(|s| s.red().to_string())));
 
         let conflict_builder = tabled::Table::builder(&conflicts)
             .index()

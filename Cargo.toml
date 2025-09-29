@@ -1,6 +1,6 @@
 [package]
 name = "tuckr"
-version = "0.11.2"
+version = "0.12.0"
 authors = ["RaphGL"]
 edition = "2024"
 description = "Super powered GNU Stow replacement"
@@ -21,9 +21,10 @@ rpassword = "7.3"
 rust-i18n = "3.1"
 sha2 = "0.10"
 sys-locale = "0.3.2"
-tabled = {version = "0.19", features = ["ansi"]}
+tabled = {version = "0.20", features = ["ansi"]}
 zeroize = "1.8"
 
-# Used by clap, so it's not an additional dependency.
+# it's already a transitive dependency by clap
+# so we might as well use it too
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
