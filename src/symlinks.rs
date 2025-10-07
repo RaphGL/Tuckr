@@ -281,7 +281,7 @@ impl<'a> SymlinkHandler<'a> {
     }
 
     /// only meant for internal use
-    fn get_related_cond_groups(
+    fn __get_related_cond_groups(
         &self,
         target_group: &str,
         cache: &HashCache,
@@ -295,10 +295,7 @@ impl<'a> SymlinkHandler<'a> {
 
         let cond_groups: Vec<String> = cache
             .iter()
-            .filter(|(group, _)| {
-                dotfiles::group_without_target(group) == target_group
-                    && dotfiles::group_is_valid_target(group, &self.ctx.custom_targets)
-            })
+            .filter(|(group, _)| dotfiles::group_without_target(group) == target_group)
             .map(|(group, _)| group.clone())
             .collect();
 
@@ -311,26 +308,29 @@ impl<'a> SymlinkHandler<'a> {
 
     /// Returns target_group and all of its conditional groups that are valid in the current platform
     ///
-    /// symlinked: gets symlinked conditional groups if true, otherwise gets not symlinked ones
+    /// target_group: a group used as the base for all conditional groups
+    /// symtype: a bitflag of the possible symlink statuses
+    /// include_invalid: if groups invalid in the current platform should be included in the returned vec
     fn get_related_conditional_groups(
         &self,
         target_group: &str,
         symtype: BitFlags<SymlinkType>,
+        include_invalid: bool,
     ) -> Option<Vec<String>> {
         let symlinked = if symtype.contains(SymlinkType::Symlinked) {
-            self.get_related_cond_groups(target_group, &self.symlinked)
+            self.__get_related_cond_groups(target_group, &self.symlinked)
         } else {
             None
         };
 
         let not_symlinked = if symtype.contains(SymlinkType::NotSymlinked) {
-            self.get_related_cond_groups(target_group, &self.not_symlinked)
+            self.__get_related_cond_groups(target_group, &self.not_symlinked)
         } else {
             None
         };
 
         let not_owned = if symtype.contains(SymlinkType::NotOwned) {
-            self.get_related_cond_groups(target_group, &self.not_owned)
+            self.__get_related_cond_groups(target_group, &self.not_owned)
         } else {
             None
         };
@@ -341,6 +341,9 @@ impl<'a> SymlinkHandler<'a> {
             .chain(not_owned.iter())
             .flatten()
             .map(|group| group.to_owned())
+            .filter(|group| {
+                dotfiles::group_is_valid_target(group, &self.ctx.custom_targets) || include_invalid
+            })
             .collect();
 
         if cond_groups.is_empty() {
@@ -398,7 +401,7 @@ impl<'a> SymlinkHandler<'a> {
     /// Symlinks all the files of a group to the user's $TUCKR_TARGET
     fn add(&mut self, dry_run: bool, only_files: bool, group: &str) {
         let Some(mut groups) =
-            self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
+            self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into(), false)
         else {
             return;
         };
@@ -512,7 +515,7 @@ impl<'a> SymlinkHandler<'a> {
         }
 
         let Some(groups) =
-            self.get_related_conditional_groups(group, SymlinkType::Symlinked.into())
+            self.get_related_conditional_groups(group, SymlinkType::Symlinked.into(), false)
         else {
             return;
         };
@@ -654,6 +657,7 @@ pub fn add_cmd(
                 let Some(mut related) = sym.get_related_conditional_groups(
                     group,
                     SymlinkType::NotSymlinked | SymlinkType::NotOwned,
+                    false,
                 ) else {
                     continue;
                 };
@@ -793,7 +797,7 @@ fn print_global_status(sym: &SymlinkHandler, json: bool) -> Result<(), ExitCode>
             .keys()
             .filter_map(|group| {
                 if sym
-                    .get_related_conditional_groups(group, SymlinkType::NotSymlinked.into())
+                    .get_related_conditional_groups(group, SymlinkType::NotSymlinked.into(), false)
                     .is_none()
                 {
                     Some(dotfiles::group_without_target(group))
@@ -933,6 +937,7 @@ fn print_groups_status(
             sym.get_related_conditional_groups(
                 g,
                 enumflags2::make_bitflags!(SymlinkType::{NotSymlinked | NotOwned}),
+                false,
             )
         })
         .flatten()
@@ -940,22 +945,9 @@ fn print_groups_status(
 
     let symlinked: Vec<_> = groups
         .iter()
-        .filter_map(|g| sym.get_related_conditional_groups(g, SymlinkType::Symlinked.into()))
+        .filter_map(|g| sym.get_related_conditional_groups(g, SymlinkType::Symlinked.into(), false))
         .flatten()
         .collect();
-
-    let unsupported = {
-        let mut unsupported = groups
-            .iter()
-            .map(|group| Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap())
-            .filter(|group| !group.is_valid_target(&ctx.custom_targets))
-            .map(|group| group.group_name)
-            .collect::<Vec<_>>();
-
-        unsupported.sort();
-        unsupported.dedup();
-        unsupported
-    };
 
     let file_conflicts: HashCache = sym
         .get_conflicts_in_cache()
@@ -968,6 +960,29 @@ fn print_groups_status(
     let nonexistent_groups =
         dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, &groups);
 
+    let unsupported = {
+        let mut unsupported = Vec::new();
+
+        for group in &groups {
+            if let Some(related_groups) =
+                sym.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into(), true)
+            {
+                for group in related_groups {
+                    unsupported.push(group);
+                }
+            }
+
+            let group = Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap();
+            if !group.is_valid_target(&ctx.custom_targets) {
+                unsupported.push(group.group_name);
+            }
+        }
+
+        unsupported.sort();
+        unsupported.dedup();
+        unsupported
+    };
+
     if json {
         let conflicts: HashMap<_, _> = file_conflicts
             .into_iter()
@@ -979,7 +994,7 @@ fn print_groups_status(
                         let target_path = f.to_target_path().unwrap();
 
                         // NOTE: DO NOT I18N THESE STRINGS.
-                        // They are part of the JSON API. Changing them would break scripts .
+                        // They are part of the JSON API. Changing them would break scripts.
                         let reason = if !target_path.is_symlink() {
                             "already exists".to_string()
                         } else {
@@ -988,7 +1003,7 @@ fn print_groups_status(
                                 "symlinks elsewhere".to_string()
                             } else {
                                 // Symlink points to another dotfile within the repo
-                                "already exists".to_string() // Consistent with current tuckr behavior
+                                "already exists".to_string()
                             }
                         };
                         ConflictDetail {
