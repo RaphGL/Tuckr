@@ -134,7 +134,7 @@ impl<'a> SymlinkHandler<'a> {
             return Err(ReturnCode::NoSuchFileOrDir.into());
         }
 
-        let symlinker = SymlinkHandler {
+        let mut symlinker = SymlinkHandler {
             ctx,
             dotfiles_dir,
             symlinked: HashCache::new(),
@@ -143,16 +143,20 @@ impl<'a> SymlinkHandler<'a> {
         };
 
         // this fills the symlinker with dotfile status information
-        symlinker.validate()
+        match symlinker.validate() {
+            true => Ok(symlinker),
+            false => Err(ReturnCode::CouldntFindDotfiles.into()),
+        }
     }
 
-    /// **This function should not be used outside this scope**
+    /// Validates all dotfiles and populates `Self` with the information gathered.
     ///
-    /// Checks which dotfiles are or are not symlinked and registers their Configs/$group path
-    /// into the struct
-    ///
-    /// Returns a copy of self with all the fields set accordingly
-    fn validate(mut self) -> Result<Self, ExitCode> {
+    /// Returns false if it failed to retrieve dotfiles and validate them
+    fn validate(&mut self) -> bool {
+        self.symlinked.clear();
+        self.not_symlinked.clear();
+        self.not_owned.clear();
+
         let configs_dir = self.dotfiles_dir.join("Configs");
 
         if !configs_dir.exists() && !configs_dir.is_dir() {
@@ -163,15 +167,10 @@ impl<'a> SymlinkHandler<'a> {
                     dotfiles = configs_dir.display()
                 )
             );
-            return Err(ReturnCode::CouldntFindDotfiles.into());
+            return false;
         }
 
-        let mut symlinked = HashCache::new();
-        let mut not_symlinked = HashCache::new();
-        let mut not_owned = HashCache::new();
-
         // iterates over every file inside dotfiles/Config and determines their symlink status
-
         for f in fileops::DirWalk::new(configs_dir) {
             // skip group directories otherwise it would try to link dotfiles/Configs/Groups to the users home
             let f = Dotfile::try_from(f).unwrap();
@@ -197,14 +196,14 @@ impl<'a> SymlinkHandler<'a> {
                 };
 
                 if link == f.path {
-                    symlinked.entry(f.group_name.clone()).or_default();
+                    self.symlinked.entry(f.group_name.clone()).or_default();
 
-                    let group = symlinked.get_mut(&f.group_name).unwrap();
+                    let group = self.symlinked.get_mut(&f.group_name).unwrap();
                     group.insert(f);
                 } else {
-                    not_owned.entry(f.group_name.clone()).or_default();
+                    self.not_owned.entry(f.group_name.clone()).or_default();
 
-                    let group = not_owned.get_mut(&f.group_name).unwrap();
+                    let group = self.not_owned.get_mut(&f.group_name).unwrap();
                     group.insert(f);
                 }
             } else {
@@ -212,19 +211,11 @@ impl<'a> SymlinkHandler<'a> {
                     continue;
                 }
 
-                not_symlinked.entry(f.group_name.clone()).or_default();
+                self.not_symlinked.entry(f.group_name.clone()).or_default();
 
-                let group = not_symlinked.get_mut(&f.group_name).unwrap();
+                let group = self.not_symlinked.get_mut(&f.group_name).unwrap();
                 group.insert(f);
             }
-        }
-
-        fn remove_empty_groups(group_type: HashCache) -> HashCache {
-            group_type
-                .iter()
-                .filter(|(_, v)| !v.is_empty())
-                .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                .collect()
         }
 
         // removes entries for paths that are subpaths of another entry (canonicalization).
@@ -249,8 +240,8 @@ impl<'a> SymlinkHandler<'a> {
         //
         // this is necessary because if a directory is canonicalized and symlinked,
         // files inside it won't be symlinked and thus marked as `not_symlinked` wrongly.
-        for (group, files) in &symlinked {
-            let Some(unsymlinked_group) = not_symlinked.get_mut(group) else {
+        for (group, files) in &self.symlinked {
+            let Some(unsymlinked_group) = self.not_symlinked.get_mut(group) else {
                 continue;
             };
 
@@ -265,45 +256,26 @@ impl<'a> SymlinkHandler<'a> {
             }
         }
 
-        canonicalize_groups(&mut symlinked);
-        canonicalize_groups(&mut not_symlinked);
-        canonicalize_groups(&mut not_owned);
+        canonicalize_groups(&mut self.symlinked);
+        canonicalize_groups(&mut self.not_symlinked);
+        canonicalize_groups(&mut self.not_owned);
 
-        self.symlinked = remove_empty_groups(symlinked);
-        self.not_symlinked = remove_empty_groups(not_symlinked);
-        self.not_owned = remove_empty_groups(not_owned);
+        fn remove_empty_groups(group_type: &mut HashCache) {
+            *group_type = group_type
+                .iter()
+                .filter(|(_, v)| !v.is_empty())
+                .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                .collect()
+        }
 
-        Ok(self)
+        remove_empty_groups(&mut self.symlinked);
+        remove_empty_groups(&mut self.not_symlinked);
+        remove_empty_groups(&mut self.not_owned);
+        true
     }
 
     fn is_empty(&self) -> bool {
         self.symlinked.is_empty() && self.not_symlinked.is_empty() && self.not_owned.is_empty()
-    }
-
-    /// only meant for internal use
-    fn __get_related_cond_groups(
-        &self,
-        target_group: &str,
-        cache: &HashCache,
-    ) -> Option<Vec<String>> {
-        if dotfiles::group_ends_with_target_name(target_group) {
-            return match cache.contains_key(target_group) {
-                true => Some(vec![target_group.to_string()]),
-                false => None,
-            };
-        }
-
-        let cond_groups: Vec<String> = cache
-            .iter()
-            .filter(|(group, _)| dotfiles::group_without_target(group) == target_group)
-            .map(|(group, _)| group.clone())
-            .collect();
-
-        if cond_groups.is_empty() {
-            return None;
-        }
-
-        Some(cond_groups)
     }
 
     /// Returns target_group and all of its conditional groups that are valid in the current platform
@@ -317,20 +289,40 @@ impl<'a> SymlinkHandler<'a> {
         symtype: BitFlags<SymlinkType>,
         include_invalid: bool,
     ) -> Option<Vec<String>> {
+        fn __get_related_cond_groups(target_group: &str, cache: &HashCache) -> Option<Vec<String>> {
+            if dotfiles::group_ends_with_target_name(target_group) {
+                return match cache.contains_key(target_group) {
+                    true => Some(vec![target_group.to_string()]),
+                    false => None,
+                };
+            }
+
+            let cond_groups: Vec<String> = cache
+                .iter()
+                .filter(|(group, _)| dotfiles::group_without_target(group) == target_group)
+                .map(|(group, _)| group.clone())
+                .collect();
+
+            match cond_groups.is_empty() {
+                true => None,
+                false => Some(cond_groups),
+            }
+        }
+
         let symlinked = if symtype.contains(SymlinkType::Symlinked) {
-            self.__get_related_cond_groups(target_group, &self.symlinked)
+            __get_related_cond_groups(target_group, &self.symlinked)
         } else {
             None
         };
 
         let not_symlinked = if symtype.contains(SymlinkType::NotSymlinked) {
-            self.__get_related_cond_groups(target_group, &self.not_symlinked)
+            __get_related_cond_groups(target_group, &self.not_symlinked)
         } else {
             None
         };
 
         let not_owned = if symtype.contains(SymlinkType::NotOwned) {
-            self.__get_related_cond_groups(target_group, &self.not_owned)
+            __get_related_cond_groups(target_group, &self.not_owned)
         } else {
             None
         };
@@ -673,8 +665,8 @@ pub fn add_cmd(
         }
     }
 
-    let post_add_sym = SymlinkHandler::try_new(ctx)?;
-    let potential_conflicts = post_add_sym.get_conflicts_in_cache();
+    sym.validate();
+    let potential_conflicts = sym.get_conflicts_in_cache();
 
     if !potential_conflicts.is_empty() {
         if groups.iter().any(|g| g == "*") {
@@ -695,7 +687,7 @@ pub fn add_cmd(
                 )
                 .yellow(),
             );
-            return print_groups_status(ctx, &post_add_sym, groups.into(), false);
+            return print_groups_status(ctx, &sym, groups.into(), false);
         }
     }
     Ok(())
@@ -968,13 +960,10 @@ fn print_groups_status(
                 sym.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into(), true)
             {
                 for group in related_groups {
-                    unsupported.push(group);
+                    if !dotfiles::group_is_valid_target(group.as_str(), &ctx.custom_targets) {
+                        unsupported.push(group);
+                    }
                 }
-            }
-
-            let group = Dotfile::try_from(sym.dotfiles_dir.join("Configs").join(group)).unwrap();
-            if !group.is_valid_target(&ctx.custom_targets) {
-                unsupported.push(group.group_name);
             }
         }
 
@@ -1236,7 +1225,7 @@ mod tests {
         let mut ctx = Context::default();
         ctx.profile = None;
 
-        let sym = SymlinkHandler::try_new(&ctx).unwrap();
+        let mut sym = SymlinkHandler::try_new(&ctx).unwrap();
         assert!(
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
@@ -1253,7 +1242,7 @@ mod tests {
         )
         .unwrap();
 
-        let sym = SymlinkHandler::try_new(&ctx).unwrap();
+        sym.validate();
         assert!(sym.symlinked.contains_key("Group1"));
     }
 
@@ -1273,7 +1262,7 @@ mod tests {
 
         let ctx = Context::default();
 
-        let sym = SymlinkHandler::try_new(&ctx).unwrap();
+        let mut sym = SymlinkHandler::try_new(&ctx).unwrap();
         assert!(
             !sym.not_symlinked.is_empty() || !sym.symlinked.is_empty() || !sym.not_owned.is_empty()
         );
@@ -1281,7 +1270,7 @@ mod tests {
         assert!(!sym.not_symlinked.contains_key("Group1"));
 
         super::remove_cmd(&Context::default(), &["Group1".to_string()], &[]).unwrap();
-        let sym = SymlinkHandler::try_new(&ctx).unwrap();
+        sym.validate();
         assert!(sym.not_symlinked.contains_key("Group1"));
     }
 
