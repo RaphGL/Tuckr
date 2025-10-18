@@ -1,0 +1,29 @@
+name: "unit test"
+
+on:
+  push:
+    branches: "master"
+    paths: "**.rs"
+  pull_request:
+    types: review-requested
+
+jobs:
+  cargo-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build and unit test
+        run: cargo test
+
+
