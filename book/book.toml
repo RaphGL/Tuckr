@@ -1,0 +1,5 @@
+[book]
+authors = ["RaphGL"]
+language = "en"
+src = "src"
+title = "Tuckr Documentation"
