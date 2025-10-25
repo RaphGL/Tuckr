@@ -141,15 +141,15 @@ impl Iterator for DirWalk {
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
-    let dotfiles_dir = dotfiles::get_dotfiles_path(if cfg!(test) {
-        None
+    let potential_dirs = dotfiles::get_potential_dotfiles_paths(ctx.profile.clone());
+
+    let dotfiles_dir = if cfg!(test) {
+        potential_dirs.test
+    } else if let Some(dir) = potential_dirs.env {
+        dir
     } else {
-        ctx.profile.clone()
-    })
-    .map_err(|err| {
-        eprintln!("{err}");
-        ExitCode::from(ReturnCode::CouldntFindDotfiles)
-    })?;
+        potential_dirs.config
+    };
 
     for dir in [
         dotfiles_dir.join("Configs"),
@@ -902,5 +902,17 @@ mod tests {
             assert!(is_ignored_file(".Trash-tuckr"));
             assert!(is_ignored_file("tuckr-backup~"));
         }
+    }
+
+    #[test]
+    fn init_cmd_runs_successfully() {
+        let ctx = Context::default();
+        super::init_cmd(&ctx).unwrap();
+
+        let dotfiles_dir = dotfiles::get_dotfiles_path(ctx.profile).unwrap();
+        assert!(dotfiles_dir.exists());
+        assert!(dotfiles_dir.join("Configs").exists());
+        assert!(dotfiles_dir.join("Hooks").exists());
+        assert!(dotfiles_dir.join("Secrets").exists());
     }
 }

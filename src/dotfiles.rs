@@ -334,40 +334,55 @@ impl Iterator for DotfileIter {
     }
 }
 
-/// Returns an Option<String> with the path to of the tuckr dotfiles directory
-///
-/// When run on a unit test it returns a temporary directory for testing purposes.
-/// this testing directory is unique to the thread it's running on,
-/// so different unit tests cannot interact with the other's dotfiles directory
-pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+pub struct PotentialDotfilePaths {
+    pub home: PathBuf,
+    pub config: PathBuf,
+    pub env: Option<PathBuf>,
+    pub test: PathBuf,
+}
+
+pub fn get_potential_dotfiles_paths(profile: Option<String>) -> PotentialDotfilePaths {
     let dotfiles_dir = match profile {
         Some(ref profile) => format!("dotfiles_{profile}"),
         None => "dotfiles".into(),
     };
 
-    if let Ok(dir) = std::env::var("TUCKR_HOME")
-        && !dir.is_empty()
-    {
-        return Ok(PathBuf::from(dir).join(dotfiles_dir));
+    PotentialDotfilePaths {
+        home: dirs::home_dir().unwrap().join(format!(".{dotfiles_dir}")),
+        config: dirs::config_dir().unwrap().join(dotfiles_dir),
+        env: std::env::var("TUCKR_HOME")
+            .map(|home| PathBuf::from(home))
+            .ok(),
+        test: std::env::temp_dir()
+            .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
+            .join("dotfiles"),
     }
+}
 
-    let (home_dotfiles, config_dotfiles) = {
-        let home_dotfiles = dirs::home_dir().unwrap();
-        let config_dotfiles = dirs::config_dir().unwrap();
-
-        (
-            home_dotfiles.join(format!(".{dotfiles_dir}")),
-            config_dotfiles.join(dotfiles_dir),
-        )
-    };
+/// Returns an Option<String> with the path to the tuckr dotfiles directory
+///
+/// When run on a unit test it returns a temporary directory for testing purposes.
+/// this testing directory is unique to the thread it's running on,
+/// so different unit tests cannot interact with the other's dotfiles directory
+pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+    let PotentialDotfilePaths {
+        home: home_dotfiles,
+        config: config_dotfiles,
+        env: env_dotfiles,
+        test: test_dotfiles,
+    } = get_potential_dotfiles_paths(profile.clone());
 
     if cfg!(test) {
         // using the thread's name is necessary for tests
         // since unit tests run in parallel, each test needs a uniquely identifying name.
         // cargo-test names each threads with the name of the unit test that is running on it.
-        Ok(std::env::temp_dir()
-            .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
-            .join("dotfiles"))
+        return Ok(test_dotfiles);
+    }
+
+    if let Some(dotfiles) = env_dotfiles
+        && dotfiles.exists()
+    {
+        Ok(dotfiles.into())
     } else if config_dotfiles.exists() {
         Ok(config_dotfiles)
     } else if home_dotfiles.exists() {
