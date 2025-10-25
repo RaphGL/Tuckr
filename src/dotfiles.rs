@@ -339,39 +339,75 @@ impl Iterator for DotfileIter {
 /// When run on a unit test it returns a temporary directory for testing purposes.
 /// this testing directory is unique to the thread it's running on,
 /// so different unit tests cannot interact with the other's dotfiles directory
-pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+#[derive(Clone, Debug)]
+pub struct DotfilesCandidates {
+    /// If TUCKR_HOME is set and non-empty, this is the override path (TUCKR_HOME/dotfiles[_profile])
+    pub env_override: Option<PathBuf>,
+    /// Candidate under $HOME (e.g., ~/.dotfiles[_profile])
+    pub home_dotfiles: PathBuf,
+    /// Candidate under the OS config dir (e.g., ~/.config/dotfiles[_profile])
+    pub config_dotfiles: PathBuf,
+}
+
+/// Computes candidate locations where dotfiles may live, without performing any existence checks.
+///
+/// This function encapsulates the logic to:
+/// - Derive the dotfiles directory name from the optional profile
+/// - Honor TUCKR_HOME when set (as an override join)
+/// - Compute the HOME and CONFIG candidate paths
+pub fn get_dotfiles_candidates(profile: Option<String>) -> Result<DotfilesCandidates, String> {
     let dotfiles_dir = match profile {
         Some(ref profile) => format!("dotfiles_{profile}"),
         None => "dotfiles".into(),
     };
 
-    if let Ok(dir) = std::env::var("TUCKR_HOME")
+    let env_override = if let Ok(dir) = std::env::var("TUCKR_HOME")
         && !dir.is_empty()
     {
-        return Ok(PathBuf::from(dir).join(dotfiles_dir));
-    }
-
-    let (home_dotfiles, config_dotfiles) = {
-        let home_dotfiles = dirs::home_dir().unwrap();
-        let config_dotfiles = dirs::config_dir().unwrap();
-
-        (
-            home_dotfiles.join(format!(".{dotfiles_dir}")),
-            config_dotfiles.join(dotfiles_dir),
-        )
+        Some(PathBuf::from(dir).join(&dotfiles_dir))
+    } else {
+        None
     };
+
+    let home_base = dirs::home_dir().unwrap();
+    let config_base = dirs::config_dir().unwrap();
+
+    Ok(DotfilesCandidates {
+        env_override,
+        home_dotfiles: home_base.join(format!(".{dotfiles_dir}")),
+        config_dotfiles: config_base.join(dotfiles_dir),
+    })
+}
+
+/// Returns the path to the tuckr dotfiles directory, resolving in this order:
+/// 1) TUCKR_HOME override (if set, returned unconditionally)
+/// 2) Test temp dir path when running under tests (always returned)
+/// 3) Existing config path
+/// 4) Existing home path
+///
+/// If none exist, returns an error with guidance to create the config path or run `tuckr init`.
+pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, String> {
+    let candidates = get_dotfiles_candidates(profile.clone())?;
+
+    if let Some(env_path) = candidates.env_override {
+        return Ok(env_path);
+    }
 
     if cfg!(test) {
         // using the thread's name is necessary for tests
         // since unit tests run in parallel, each test needs a uniquely identifying name.
         // cargo-test names each threads with the name of the unit test that is running on it.
-        Ok(std::env::temp_dir()
-            .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
-            .join("dotfiles"))
-    } else if config_dotfiles.exists() {
-        Ok(config_dotfiles)
-    } else if home_dotfiles.exists() {
-        Ok(home_dotfiles)
+        return Ok(
+            std::env::temp_dir()
+                .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
+                .join("dotfiles"),
+        );
+    }
+
+    if candidates.config_dotfiles.exists() {
+        Ok(candidates.config_dotfiles)
+    } else if candidates.home_dotfiles.exists() {
+        Ok(candidates.home_dotfiles)
     } else {
         let init_cmd = match profile {
             Some(profile) => format!("tuckr -p {profile} init"),
@@ -382,7 +418,7 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
             t!("errors.couldnt_find_dotfiles_dir").yellow(),
             t!(
                 "errors.make_sure_dir_exists_or_run",
-                dir = config_dotfiles.display(),
+                dir = candidates.config_dotfiles.display(),
                 cmd = init_cmd
             )
         ))

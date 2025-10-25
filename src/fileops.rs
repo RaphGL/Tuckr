@@ -141,15 +141,48 @@ impl Iterator for DirWalk {
 
 /// Creates the necessary files and folders for a tuckr directory if they don't exist
 pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
-    let dotfiles_dir = dotfiles::get_dotfiles_path(if cfg!(test) {
+    let dotfiles_dir = match dotfiles::get_dotfiles_path(if cfg!(test) {
         None
     } else {
         ctx.profile.clone()
-    })
-    .map_err(|err| {
-        eprintln!("{err}");
-        ExitCode::from(ReturnCode::CouldntFindDotfiles)
-    })?;
+    }) {
+        Ok(dir) => dir,
+        Err(_err) => {
+            // Fall back to creating the preferred directory without parsing the error string
+            // Prefer TUCKR_HOME override when set; otherwise, use the config directory candidate, then home
+
+            let candidates = dotfiles::get_dotfiles_candidates(if cfg!(test) {
+                None
+            } else {
+                ctx.profile.clone()
+            })
+            .map_err(|e| {
+                eprintln!("{e}");
+                ExitCode::from(ReturnCode::CouldntFindDotfiles)
+            })?;
+
+            let chosen = if let Some(env_path) = candidates.env_override {
+                env_path
+            } else if !candidates.config_dotfiles.as_os_str().is_empty() {
+                candidates.config_dotfiles
+            } else {
+                candidates.home_dotfiles
+            };
+
+            // Only try to create once, using the first defined option.
+            if ctx.dry_run {
+                eprintln!(
+                    "{}",
+                    t!("dry-run.creating_dir", dir = chosen.display()).green()
+                );
+            } else if let Err(e) = fs::create_dir_all(&chosen) {
+                eprintln!("{}", e.red());
+                return Err(ExitCode::from(ReturnCode::CouldntFindDotfiles));
+            }
+
+            chosen
+        }
+    };
 
     for dir in [
         dotfiles_dir.join("Configs"),
@@ -167,14 +200,16 @@ pub fn init_cmd(ctx: &Context) -> Result<(), ExitCode> {
         }
     }
 
-    println!(
-        "{}",
-        t!(
-            "info.dotfiles_created_at",
-            location = dotfiles_dir.to_str().unwrap()
-        )
-        .green()
-    );
+    if !ctx.dry_run {
+        println!(
+            "{}",
+            t!(
+                "info.dotfiles_created_at",
+                location = dotfiles_dir.to_str().unwrap()
+            )
+            .green()
+        );
+    }
 
     Ok(())
 }
@@ -902,5 +937,39 @@ mod tests {
             assert!(is_ignored_file(".Trash-tuckr"));
             assert!(is_ignored_file("tuckr-backup~"));
         }
+    }
+
+    #[test]
+    fn init_creates_parent_directory() {
+        // This test verifies that init_cmd creates the Configs, Hooks, and Secrets subdirectories.
+        
+        let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
+        
+        // Ensure the dotfiles directory doesn't exist before we start
+        if dotfiles_dir.exists() {
+            fs::remove_dir_all(&dotfiles_dir).unwrap();
+        }
+        
+        assert!(!dotfiles_dir.exists(), "Dotfiles directory should not exist before init");
+        
+        // Run init_cmd which should create the directory structure
+        let result = super::init_cmd(&Context::default());
+        
+        assert!(result.is_ok(), "init_cmd should succeed: {:?}", result);
+        
+        // Verify the dotfiles directory exists (created by init or the test setup)
+        assert!(dotfiles_dir.exists(), "Dotfiles directory should exist after init");
+        
+        // Verify the subdirectories were created
+        let configs_dir = dotfiles_dir.join("Configs");
+        let hooks_dir = dotfiles_dir.join("Hooks");
+        let secrets_dir = dotfiles_dir.join("Secrets");
+        
+        assert!(configs_dir.exists() && configs_dir.is_dir(), "Configs directory should be created");
+        assert!(hooks_dir.exists() && hooks_dir.is_dir(), "Hooks directory should be created");
+        assert!(secrets_dir.exists() && secrets_dir.is_dir(), "Secrets directory should be created");
+        
+        // Cleanup
+        fs::remove_dir_all(&dotfiles_dir).unwrap();
     }
 }
