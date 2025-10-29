@@ -11,6 +11,20 @@ use std::process::ExitCode;
 use std::{fs, path};
 use tabled::{Table, Tabled};
 
+pub const FROM_STOW_HELP: &str = "\
+By running this command a copy of the stow dotfiles repo is created and converted to tuckr.
+This operation is non-destructive, if you have a previous config it will be kept with a `_old` suffix.
+
+Before continuing, here's the differences between Stow and Tuckr you ought to know:
+    - Stow is unopinionated, Tuckr expects your dotfiles to have a certain file structure
+    - `--dotfiles` is not supported, but this command will properly convert `dot-`
+    - Tuckr validates that dotfiles are properly symlinked, so use groups to be able to get the most out of it
+
+Also note that this command can only be so smart, so you will likely have to create the groups yourself to be able
+to start using tuckr unless you already were using stow with different programs' dotfiles in different directories.
+
+To check more in depth what Tuckr can do and how to use it, please check the wiki: https://github.com/RaphGL/Tuckr/wiki";
+
 fn is_ignored_file(file: impl AsRef<Path>) -> bool {
     let file = file.as_ref().file_name().unwrap().to_str().unwrap();
 
@@ -609,19 +623,30 @@ pub fn get_user_confirmation(msg: &str) -> bool {
 // TODO: translate messages
 // TODO: add colors to the dry run messages
 pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), ExitCode> {
-    println!("By running this command a copy of the stow dotfiles repo is created and converted to tuckr.
-        This operation is non-destructive, if you have a previous config it will be kept with a `_old` suffix.
 
-        Before continuing, here's the differences between Stow and Tuckr you ought to know:
-            - Stow is unopinionated, Tuckr expects your dotfiles to have a certain file structure
-            - `--dotfiles` is not supported, but this command will properly convert `dot-`
-            - Tuckr validates that dotfiles are properly symlinked, so use groups to be able to get the most out of it
+    // Helper to compute the intended dotfiles directory without requiring it to exist
+    let compute_potential_dir = |profile: Option<String>| -> PathBuf {
+        let potential = dotfiles::get_potential_dotfiles_paths(profile);
+        if cfg!(test) {
+            potential.test
+        } else if let Some(dir) = potential.env {
+            dir
+        } else {
+            potential.config
+        }
+    };
 
-        Also note that this command only be so smart, so you will likely have to create the groups yourself to be able
-        to start using tuckr unless you already were using stow with different programs' dotfiles in different directories.
+    // Helper to compute the old backup directory path
+    let compute_old_dotfiles_path = |dotfiles_dir: path::PathBuf| -> PathBuf {
+        let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
+        dotfiles_dir
+            .parent()
+            .unwrap()
+            .join(format!("{old_dirname}_old"))
+    };
 
-        To check more in depth what Tuckr can do and how to use it, please check the wiki: https://github.com/RaphGL/Tuckr/wiki
-    ");
+
+    println!("{}", FROM_STOW_HELP);
 
     let used_dot_prefix = get_user_confirmation("Did you use `--dotfiles` with Stow?");
 
@@ -634,6 +659,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         None => "incomplete_conversion".into(),
     });
 
+    // Ensure the primary dotfiles dir exists for the active profile
     init_cmd(ctx)?;
 
     let stow_path = match stow_path {
@@ -644,19 +670,96 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
         Ok(dir) => dir,
         Err(err) => {
-            eprintln!("{err}");
-            return Err(ReturnCode::CouldntFindDotfiles.into());
+            if ctx.dry_run {
+                eprintln!(
+                    "{}\n{}",
+                    "[dry-run] Could not find existing dotfiles directory for active profile; simulating with intended location.",
+                    err
+                );
+
+                compute_potential_dir(ctx.profile.clone())
+            } else {
+                println!("error getting dotfiles path for profile {:?}", ctx.profile);
+                eprintln!("{err}");
+                return Err(ReturnCode::CouldntFindDotfiles.into());
+            }
         }
     };
+
+    if dotfiles_dir.exists() {
+        let old_dotfiles = compute_old_dotfiles_path(dotfiles_dir.clone());
+        
+        if old_dotfiles.exists() {
+            eprintln!(
+                "{}",
+                format!(
+                    "Error: The backup directory '{}' already exists from a previous conversion.",
+                    old_dotfiles.display()
+                )
+                .red()
+            );
+            eprintln!(
+                "{}",
+                "Please remove or rename it before running from-stow again."
+            );
+            return Err(ExitCode::FAILURE);
+        }
+    }
 
     // we want to preserve the user's original configs just in case we screw up the conversion
     // or they want to go back and they didn't have version control enabled
     // so we work on a new copy and then swap to the new one if it's converted successfully
-    let new_dotfiles_dir = match dotfiles::get_dotfiles_path(temp_profile.clone()) {
-        Ok(dir) => dir,
-        Err(err) => {
-            eprintln!("{err}");
-            return Err(ReturnCode::CouldntFindDotfiles.into());
+
+    // Clean up any existing temp profile directory from a previous failed conversion
+    let temp_dotfiles_dir_path = compute_potential_dir(temp_profile.clone());
+    if temp_dotfiles_dir_path.exists() {
+        if ctx.dry_run {
+            eprintln!(
+                "{}",
+                format!(
+                    "[dry-run] Would remove existing temp profile directory: {}",
+                    temp_dotfiles_dir_path.display()
+                )
+                .yellow()
+            );
+        } else {
+            println!(
+                "Removing existing temp profile directory from previous conversion: {}",
+                temp_dotfiles_dir_path.display()
+            );
+            if let Err(e) = fs::remove_dir_all(&temp_dotfiles_dir_path) {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Failed to remove temp profile directory `{}`: {}",
+                        temp_dotfiles_dir_path.display(),
+                        e
+                    )
+                    .red()
+                );
+                return Err(ExitCode::FAILURE);
+            }
+        }
+    }
+
+    let new_dotfiles_dir = if ctx.dry_run {
+        // In dry-run, we don't actually create the temp dir; simulate its intended path
+        compute_potential_dir(temp_profile.clone())
+    } else {
+        let temp_ctx = Context {
+            profile: temp_profile.clone(),
+            dry_run: ctx.dry_run,
+            custom_targets: ctx.custom_targets.clone(),
+        };
+        init_cmd(&temp_ctx)?;
+
+        match dotfiles::get_dotfiles_path(temp_profile.clone()) {
+            Ok(dir) => dir,
+            Err(err) => {
+                println!("error getting dotfiles path for temp profile {:?}", temp_profile);
+                eprintln!("{err}");
+                return Err(ReturnCode::CouldntFindDotfiles.into());
+            }
         }
     };
 
@@ -686,8 +789,9 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         if file.is_dir() {
             if ctx.dry_run {
                 eprintln!("Creating directory `{}`", tuckr_path.display());
+            } else {
+                fs::create_dir_all(tuckr_path).unwrap();
             }
-            fs::create_dir_all(tuckr_path).unwrap();
             continue;
         }
 
@@ -703,9 +807,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
     }
 
     if dotfiles_dir.exists() {
-        let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
-        let mut old_dotfiles = dotfiles_dir.clone();
-        old_dotfiles.set_file_name(format!("{old_dirname}_old"));
+        let old_dotfiles = compute_old_dotfiles_path(dotfiles_dir.clone());
 
         if ctx.dry_run {
             eprintln!(
@@ -724,7 +826,11 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         }
     }
 
-    println!("{}", "\nYour dotfiles have been converted to Tuckr".green());
+    if ctx.dry_run {
+        println!("{}", "\nDry-run of converting stow files to Tuckr has completed successfully".green())
+    } else {
+        println!("{}", "\nYour dotfiles have been converted to Tuckr".green());
+    }
 
     Ok(())
 }
