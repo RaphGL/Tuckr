@@ -3,6 +3,9 @@ name: Deploy mdbook to GitHub Pages
 on:
   push:
     branches: [main]
+    paths:
+      - 'book/**'
+      - '.github/workflows/mdbook.yml'
   workflow_dispatch:
 
 permissions:
