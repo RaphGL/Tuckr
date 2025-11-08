@@ -290,7 +290,7 @@ impl<'a> SymlinkHandler<'a> {
         include_invalid: bool,
     ) -> Option<Vec<String>> {
         fn __get_related_cond_groups(target_group: &str, cache: &HashCache) -> Option<Vec<String>> {
-            if dotfiles::group_ends_with_target_name(target_group) {
+            if dotfiles::group_target_name(target_group).is_some() {
                 return match cache.contains_key(target_group) {
                     true => Some(vec![target_group.to_string()]),
                     false => None,

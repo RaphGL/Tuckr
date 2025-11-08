@@ -42,7 +42,7 @@ pub fn get_group_priority<T: AsRef<str>>(group: T) -> usize {
     match target {
         "unix" | "windows" => 1,
         "wsl" => 3,
-        _ if !group_ends_with_target_name(group) => 0,
+        _ if group_target_name(group).is_none() => 0,
         _ if target.starts_with('#') => 4,
         _ => 2,
     }
@@ -163,24 +163,21 @@ impl TryFrom<path::PathBuf> for Dotfile {
     }
 }
 
-// returns true if group ends with a valid target platform suffix
-pub fn group_ends_with_target_name(group: &str) -> bool {
+// returns Some if group ends with a valid target platform suffix or custom target
+pub fn group_target_name(group: &str) -> Option<&str> {
     let Some(potential_target) = group.split('_').next_back() else {
-        return false;
+        return None;
     };
 
     // a custom target would look like my_group_#target
-    potential_target.starts_with('#') || VALID_TARGETS.iter().any(|target| group.ends_with(target))
+    (potential_target.starts_with('#') || VALID_TARGETS.iter().any(|target| group.ends_with(target))).then_some(potential_target)
 }
 
 pub fn group_without_target(group: &str) -> &str {
-    for target in VALID_TARGETS {
-        if let Some(base_group) = group.strip_suffix(target) {
-            return base_group;
-        }
-    }
-
-    group
+    let Some(target) = group_target_name(group) else {
+        return group;
+    };
+    &group.strip_suffix(target).expect("group has target").trim_end_matches('_')
 }
 
 fn platform_is_under_wsl() -> bool {
@@ -217,14 +214,9 @@ pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) ->
     let current_target_family = format!("_{}", env::consts::FAMILY);
 
     // returns true if a group has no suffix or its suffix matches the current OS
-    if group_ends_with_target_name(group) {
-        let target = group
-            .split('_')
-            .next_back()
-            .expect("a group with target name should always have a `_`");
-
+    if let Some(target) = group_target_name(group) {
         // custom target syntax: group_#target
-        if let Some(target) = target.strip_prefix(target)
+        if let Some(target) = target.strip_prefix('#')
             && custom_targets.iter().any(|t| t.as_ref() == target)
         {
             return true;
