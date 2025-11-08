@@ -300,7 +300,7 @@ enum Command {
     GroupIs { files: Vec<String> },
 
     /// Convert a GNU Stow dotfiles repository into a Tuckr repository.
-    #[command(name = "from-stow")]
+    #[command(name = "from-stow", long_about = fileops::FROM_STOW_INFO)]
     FromStow { stow_path: Option<String> },
 }
 
