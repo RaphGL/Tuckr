@@ -165,9 +165,7 @@ impl TryFrom<path::PathBuf> for Dotfile {
 
 // returns Some if group ends with a valid target platform suffix or custom target
 pub fn get_group_target(group: &str) -> Option<&str> {
-    let Some(potential_target) = group.split('_').next_back() else {
-        return None;
-    };
+    let potential_target = group.split('_').next_back()?;
 
     // a custom target would look like my_group_#target
     (potential_target.starts_with('#')
@@ -179,7 +177,7 @@ pub fn group_without_target(group: &str) -> &str {
     let Some(target) = get_group_target(group) else {
         return group;
     };
-    &group
+    group
         .strip_suffix(target)
         .expect("group has target")
         .trim_end_matches('_')
@@ -347,9 +345,7 @@ pub fn get_potential_dotfiles_paths(profile: Option<String>) -> PotentialDotfile
     PotentialDotfilePaths {
         home: dirs::home_dir().unwrap().join(format!(".{dotfiles_dir}")),
         config: dirs::config_dir().unwrap().join(dotfiles_dir),
-        env: std::env::var("TUCKR_HOME")
-            .map(|home| PathBuf::from(home))
-            .ok(),
+        env: std::env::var("TUCKR_HOME").map(PathBuf::from).ok(),
         test: std::env::temp_dir()
             .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
             .join("dotfiles"),
@@ -379,7 +375,7 @@ pub fn get_dotfiles_path(profile: Option<String>) -> Result<path::PathBuf, Strin
     if let Some(dotfiles) = env_dotfiles
         && dotfiles.exists()
     {
-        Ok(dotfiles.into())
+        Ok(dotfiles)
     } else if config_dotfiles.exists() {
         Ok(config_dotfiles)
     } else if home_dotfiles.exists() {
