@@ -42,7 +42,7 @@ pub fn get_group_priority<T: AsRef<str>>(group: T) -> usize {
     match target {
         "unix" | "windows" => 1,
         "wsl" => 3,
-        _ if group_target_name(group).is_none() => 0,
+        _ if get_group_target(group).is_none() => 0,
         _ if target.starts_with('#') => 4,
         _ => 2,
     }
@@ -164,20 +164,25 @@ impl TryFrom<path::PathBuf> for Dotfile {
 }
 
 // returns Some if group ends with a valid target platform suffix or custom target
-pub fn group_target_name(group: &str) -> Option<&str> {
+pub fn get_group_target(group: &str) -> Option<&str> {
     let Some(potential_target) = group.split('_').next_back() else {
         return None;
     };
 
     // a custom target would look like my_group_#target
-    (potential_target.starts_with('#') || VALID_TARGETS.iter().any(|target| group.ends_with(target))).then_some(potential_target)
+    (potential_target.starts_with('#')
+        || VALID_TARGETS.iter().any(|target| group.ends_with(target)))
+    .then_some(potential_target)
 }
 
 pub fn group_without_target(group: &str) -> &str {
-    let Some(target) = group_target_name(group) else {
+    let Some(target) = get_group_target(group) else {
         return group;
     };
-    &group.strip_suffix(target).expect("group has target").trim_end_matches('_')
+    &group
+        .strip_suffix(target)
+        .expect("group has target")
+        .trim_end_matches('_')
 }
 
 fn platform_is_under_wsl() -> bool {
@@ -214,7 +219,7 @@ pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) ->
     let current_target_family = format!("_{}", env::consts::FAMILY);
 
     // returns true if a group has no suffix or its suffix matches the current OS
-    if let Some(target) = group_target_name(group) {
+    if let Some(target) = get_group_target(group) {
         // custom target syntax: group_#target
         if let Some(target) = target.strip_prefix('#')
             && custom_targets.iter().any(|t| t.as_ref() == target)
@@ -633,6 +638,22 @@ mod tests {
 
         for (group, expected_priority) in groups {
             assert_eq!(super::get_group_priority(group), expected_priority);
+        }
+    }
+
+    #[test]
+    fn get_target_from_group() {
+        let groups = [
+            ("asdfadsf_#custom-group", "#custom-group"),
+            ("asdfmmlm_dsafadsf_windows", "windows"),
+            ("amlkmlsdl_asdjfasjf-asdfadsf423_linux", "linux"),
+            ("^root-asdfaf_#root", "#root"),
+            ("^rootkLjsdfmla_freebsd", "freebsd"),
+        ];
+
+        for (group, expected_target) in groups {
+            let target = super::get_group_target(group);
+            assert_eq!(target, Some(expected_target));
         }
     }
 }
