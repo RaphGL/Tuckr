@@ -595,9 +595,9 @@ pub fn add_cmd(
                         "{}",
                         t!("dry-run.removing_x", x = deleted_file.display()).red()
                     );
-                } else if target_file.is_dir() {
+                } else if deleted_file.is_dir() {
                     fs::remove_dir_all(deleted_file).unwrap();
-                } else if target_file.is_file() {
+                } else if deleted_file.is_file() {
                     fs::remove_file(deleted_file).unwrap();
                 }
 
