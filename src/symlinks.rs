@@ -207,7 +207,7 @@ impl<'a> SymlinkHandler<'a> {
                     group.insert(f);
                 }
             } else {
-                if target.is_dir() {
+                if target.is_dir() && f.path.is_dir() {
                     continue;
                 }
 
