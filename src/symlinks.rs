@@ -159,7 +159,7 @@ impl<'a> SymlinkHandler<'a> {
 
         let configs_dir = self.dotfiles_dir.join("Configs");
 
-        if !configs_dir.exists() && !configs_dir.is_dir() {
+        if !configs_dir.is_dir() {
             eprintln!(
                 "{}",
                 t!(
