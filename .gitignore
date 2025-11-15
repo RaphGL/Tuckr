@@ -2,3 +2,4 @@
 target
 pkg/*
 !pkg/PKGBUILD
+book/book/**

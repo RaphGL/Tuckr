@@ -1,0 +1,50 @@
+# based on `https://github.com/purrbot-site/Docs/blob/master/.github/workflows/deploy.yml`
+name: Deploy Site
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "book/**"
+      - ".github/workflows/deploy.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Chekout code
+        uses: actions/checkout@v5
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Set up mdbook
+        run: |
+          cargo install mdbook
+
+      - name: Build documentation
+        run: |
+          mdbook build book
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: "book/book"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
