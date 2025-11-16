@@ -8,7 +8,7 @@
   <h3 align="center">A super powered replacement for GNU Stow</h3>
   <p align="center">
     <br />
-    <a href="https://github.com/RaphGL/Tuckr/wiki"><strong>Explore the docs »</strong></a>
+    <a href="https://raphgl.github.io/Tuckr/"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     ·
@@ -173,7 +173,7 @@ Options:
   -V, --version            Print version
 ```
 
-Note: for additional information also check [the wiki](https://github.com/RaphGL/Tuckr/wiki)
+Note: for additional information also check [docs](https://raphgl.github.io/Tuckr/)
 
 ### How it works
 
