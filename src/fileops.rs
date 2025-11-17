@@ -675,7 +675,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         println!(
             "{}",
             format!(
-                "A dotfiles_old directory already exists at `{}`\nPlease move it elsewhere or delete it before continuing",
+                "A backup directory already exists at `{}`\nPlease move it elsewhere or delete it before continuing",
                 old_dotfiles.display()
             ).red()
         );
@@ -710,8 +710,8 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
                 eprintln!("Creating directory `{}`", tuckr_path.display());
             } else {
                 fs::create_dir_all(tuckr_path).unwrap();
-                continue;
             }
+            continue;
         }
 
         if ctx.dry_run {
