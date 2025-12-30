@@ -399,7 +399,7 @@ impl<'a> SymlinkHandler<'a> {
         };
 
         let mut removed_groups = HashSet::new();
-        let mut added_files = Vec::new();
+        let mut added_files = HashSet::new();
 
         while let Some(idx) = dotfiles::get_highest_priority_target_idx(&groups) {
             let group = &groups[idx];
@@ -413,7 +413,7 @@ impl<'a> SymlinkHandler<'a> {
                     if let Some(group) = dotfiles::get_group_from_target_path(&f_target) {
                         removed_groups.insert(group);
                     }
-                    added_files.push(f);
+                    added_files.insert(f);
                 }
             } else {
                 eprintln!(
@@ -429,24 +429,24 @@ impl<'a> SymlinkHandler<'a> {
 
         // NOTE/TODO?: this will only work if the dotfiles are in the same profile context
         // maybe we should instead move the files into a temporary and then move them back
-        for group in removed_groups {
+        for group in &removed_groups {
             self.remove(dry_run, &group.group_name);
 
             let target_path = group.to_target_path().unwrap();
-            fs::create_dir_all(if target_path.is_file() {
+            fs::create_dir_all(if group.path.is_file() {
                 target_path.parent().unwrap()
             } else {
                 &target_path
             })
             .unwrap();
 
-            let group_iter = Dotfile::try_from(group.group_path)
+            let group_iter = Dotfile::try_from(group.group_path.clone())
                 .unwrap()
                 .try_iter()
                 .unwrap();
 
             for file in group_iter {
-                added_files.push(file);
+                added_files.insert(file);
             }
         }
 
