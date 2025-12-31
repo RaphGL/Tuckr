@@ -13,7 +13,7 @@ use core::slice;
 use owo_colors::OwoColorize;
 use rust_i18n::t;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use tabled::{Table, Tabled};
 
@@ -71,6 +71,36 @@ impl Iterator for DeployStages {
     }
 }
 
+fn execute_script(group: &str, script: &Path) -> Result<(), ExitCode> {
+    #[cfg(not(windows))]
+    let mut command = Command::new(script);
+
+    #[cfg(windows)]
+    let mut command = Command::new("cmd");
+    #[cfg(windows)]
+    command.arg("/c").arg(&script);
+
+    let mut output = match command.spawn() {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("{}", format!("Failed to run `{}`. Make sure the file is executable and has the correct permissions.", script.display()).red());
+            eprintln!("{e}");
+            return Err(ExitCode::FAILURE);
+        }
+    };
+
+    if !output.wait().unwrap().success() {
+        let filename = script.file_name().unwrap().to_str().unwrap();
+        print_info_box(
+            t!("errors.failed_to_hook").red().to_string().as_str(),
+            format!("{group} {filename}").as_str(),
+        );
+        return Err(ExitCode::FAILURE);
+    }
+
+    Ok(())
+}
+
 /// Runs hooks of type PreHook or PostHook
 fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
@@ -125,21 +155,7 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
             continue;
         }
 
-        let mut output = match Command::new(&file).spawn() {
-            Ok(output) => output,
-            Err(e) => {
-                eprintln!("{e}");
-                return Err(ExitCode::FAILURE);
-            }
-        };
-
-        if !output.wait().unwrap().success() {
-            print_info_box(
-                t!("errors.failed_to_hook").red().to_string().as_str(),
-                format!("{group} {filename}").as_str(),
-            );
-            return Err(ExitCode::FAILURE);
-        }
+        execute_script(&group, file.as_path())?;
     }
 
     Ok(())
@@ -346,23 +362,7 @@ pub fn unset_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result
                     continue;
                 }
 
-                let hook = Command::new(&file).spawn();
-
-                let mut output = match hook {
-                    Ok(out) => out,
-                    Err(err) => {
-                        eprintln!("{err}");
-                        return Err(ReturnCode::NoSuchFileOrDir.into());
-                    }
-                };
-
-                if !output.wait().unwrap().success() {
-                    print_info_box(
-                        t!("errors.failed_to_hook").red().to_string().as_str(),
-                        format!("{group} {filename}").as_str(),
-                    );
-                    return Err(ExitCode::FAILURE);
-                }
+                execute_script(group, &file)?
             }
         }
 
@@ -384,12 +384,12 @@ mod tests {
     #[test]
     fn run_deploy_steps() {
         let mut steps = DeployStages::new();
-        assert!(steps.0 == DeployStep::Initialize);
+        assert_eq!(steps.0, DeployStep::Initialize);
         steps.next();
-        assert!(steps.0 == DeployStep::PreHook);
+        assert_eq!(steps.0, DeployStep::PreHook);
         steps.next();
-        assert!(steps.0 == DeployStep::Symlink);
+        assert_eq!(steps.0, DeployStep::Symlink);
         steps.next();
-        assert!(steps.0 == DeployStep::PostHook);
+        assert_eq!(steps.0, DeployStep::PostHook);
     }
 }
