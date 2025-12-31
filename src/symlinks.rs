@@ -528,6 +528,30 @@ impl<'a> SymlinkHandler<'a> {
     }
 }
 
+fn get_nonexistent_groups_with_no_related_groups(
+    sym: &SymlinkHandler,
+    groups: &[String],
+) -> Option<Vec<String>> {
+    let mut nonexistent_groups = Vec::new();
+    for group in groups {
+        if sym
+            .get_related_conditional_groups(
+                group,
+                SymlinkType::Symlinked | SymlinkType::NotSymlinked | SymlinkType::NotOwned,
+                false,
+            )
+            .is_none()
+        {
+            nonexistent_groups.push(group.clone());
+        }
+    }
+
+    if nonexistent_groups.is_empty() {
+        return None;
+    }
+
+    Some(nonexistent_groups)
+}
 /// Adds symlinks
 #[allow(clippy::too_many_arguments)]
 pub fn add_cmd(
@@ -553,9 +577,7 @@ pub fn add_cmd(
 
     let mut sym = SymlinkHandler::try_new(ctx)?;
 
-    if let Some(nonexistent_groups) =
-        dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, groups)
-    {
+    if let Some(nonexistent_groups) = get_nonexistent_groups_with_no_related_groups(&sym, groups) {
         for group in nonexistent_groups {
             eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
         }
@@ -709,9 +731,7 @@ pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resul
         return Ok(());
     }
 
-    if let Some(nonexistent_groups) =
-        dotfiles::get_nonexistent_groups(ctx.profile.clone(), DotfileType::Configs, groups)
-    {
+    if let Some(nonexistent_groups) = get_nonexistent_groups_with_no_related_groups(&sym, groups) {
         for group in nonexistent_groups {
             eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
         }
