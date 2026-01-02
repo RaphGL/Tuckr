@@ -776,7 +776,7 @@ mod tests {
 
             let target_dir = dirs::home_dir().unwrap().join(format!(
                 "tuckr_test-{}",
-                std::thread::current().name().unwrap()
+                std::thread::current().name().unwrap().replace("::", "_")
             ));
             fs::create_dir_all(&target_dir).unwrap();
 

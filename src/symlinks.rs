@@ -552,6 +552,7 @@ fn get_nonexistent_groups_with_no_related_groups(
 
     Some(nonexistent_groups)
 }
+
 /// Adds symlinks
 #[allow(clippy::too_many_arguments)]
 pub fn add_cmd(

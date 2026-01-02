@@ -347,7 +347,12 @@ pub fn get_potential_dotfiles_paths(profile: Option<String>) -> PotentialDotfile
         config: dirs::config_dir().unwrap().join(dotfiles_dir),
         env: std::env::var("TUCKR_HOME").map(PathBuf::from).ok(),
         test: std::env::temp_dir()
-            .join(format!("tuckr-{}", std::thread::current().name().unwrap()))
+            .join(format!(
+                "tuckr-{}",
+                // this will return a namespace but `::` is invalid on paths in windows
+                // so we need to change it to prevent panics when interacting with the file system there
+                std::thread::current().name().unwrap().replace("::", "_")
+            ))
             .join("dotfiles"),
     }
 }
