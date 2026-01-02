@@ -19,7 +19,7 @@ use rust_i18n::t;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use tabled::{Table, Tabled};
 
@@ -95,6 +95,34 @@ fn symlink_file(dry_run: bool, f: PathBuf) {
                 t!("errors.failed_to_link_file", file = f.to_str().unwrap())
             );
         }
+    }
+}
+
+fn remove_symlink(dry_run: bool, file: &Path) {
+    let dotfile = Dotfile::try_from(file.to_path_buf()).unwrap();
+    let target_dotfile = dotfile.to_target_path().unwrap();
+    let Ok(linked) = fs::read_link(&target_dotfile) else {
+        return;
+    };
+
+    if dotfile.path != linked {
+        return;
+    }
+
+    if dry_run {
+        eprintln!(
+            "{}",
+            t!("dry-run.removing_x", x = target_dotfile.display()).red()
+        );
+        return;
+    }
+
+    if target_dotfile.is_dir() {
+        fs::remove_dir_all(&target_dotfile).unwrap();
+    } else {
+        fs::remove_file(&target_dotfile)
+            .map_err(|err| format!("error with path `{}`: {err}", target_dotfile.display()))
+            .unwrap();
     }
 }
 
@@ -414,8 +442,9 @@ impl<'a> SymlinkHandler<'a> {
                 for f in group.try_iter().unwrap() {
                     let f_target = f.to_target_path().unwrap();
 
-                    // if there's a symlink in this path, we take its group and put it in the "to be removed" bucket
-                    // it will later be readded so that the groups are all contained in the same parent directory
+                    // if there's a symlink in this path or its parents, we take it and put it in the "to be removed" bucket
+                    // it will later be readded after the parents dirs are created,
+                    // so that the groups are all contained in the same parent directory
                     if let Some(dotfile) = dotfiles::get_dotfile_from_path(&f_target) {
                         removed_files.insert(dotfile);
                     }
@@ -433,10 +462,8 @@ impl<'a> SymlinkHandler<'a> {
 
         let group_only_added_files = added_files.clone();
 
-        // NOTE/TODO?: this will only work if the dotfiles are in the same profile context
-        // maybe we should instead move the files into a temporary and then move them back
         for file in &removed_files {
-            self.remove(dry_run, &file.group_name);
+            remove_symlink(dry_run, &file.path);
 
             let target_path = file.to_target_path().unwrap();
             fs::create_dir_all(if file.path.is_file() {
@@ -444,15 +471,14 @@ impl<'a> SymlinkHandler<'a> {
             } else {
                 &target_path
             })
-                .unwrap();
+            .unwrap();
 
-            let group_iter = Dotfile::try_from(file.group_path.clone())
-                .unwrap()
-                .try_iter()
-                .unwrap();
-
-            for file in group_iter {
-                added_files.insert(file);
+            for file in fileops::DirWalk::new(&file.group_path) {
+                let Ok(dotfile) = Dotfile::try_from(file) else {
+                    continue;
+                };
+                println!("{:?}", dotfile);
+                added_files.insert(dotfile);
             }
         }
 
@@ -482,34 +508,6 @@ impl<'a> SymlinkHandler<'a> {
 
     /// Deletes symlinks from $TUCKR_TARGET if they're owned by dotfiles dir
     fn remove(&self, dry_run: bool, group: &str) {
-        fn remove_symlink(dry_run: bool, file: PathBuf) {
-            let dotfile = Dotfile::try_from(file).unwrap();
-            let target_dotfile = dotfile.to_target_path().unwrap();
-            let Ok(linked) = fs::read_link(&target_dotfile) else {
-                return;
-            };
-
-            if dotfile.path != linked {
-                return;
-            }
-
-            if dry_run {
-                eprintln!(
-                    "{}",
-                    t!("dry-run.removing_x", x = target_dotfile.display()).red()
-                );
-                return;
-            }
-
-            if target_dotfile.is_dir() {
-                fs::remove_dir_all(&target_dotfile).unwrap();
-            } else {
-                fs::remove_file(&target_dotfile)
-                    .map_err(|err| format!("error with path `{}`: {err}", target_dotfile.display()))
-                    .unwrap();
-            }
-        }
-
         let Some(groups) =
             self.get_related_conditional_groups(group, SymlinkType::Symlinked.into(), false)
         else {
@@ -527,7 +525,7 @@ impl<'a> SymlinkHandler<'a> {
             group
                 .try_iter()
                 .unwrap()
-                .for_each(|f| remove_symlink(dry_run, f.path));
+                .for_each(|f| remove_symlink(dry_run, &f.path));
         }
     }
 }
