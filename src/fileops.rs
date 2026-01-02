@@ -567,7 +567,7 @@ pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
             continue;
         }
 
-        let Some(group) = dotfiles::get_group_from_target_path(file_path) else {
+        let Some(group) = dotfiles::get_dotfile_from_path(file_path) else {
             eprintln!("{}", t!("errors.not_a_tuckr_dotfile", file = file).red());
             continue;
         };

@@ -398,8 +398,14 @@ impl<'a> SymlinkHandler<'a> {
             return;
         };
 
-        let mut removed_groups = HashSet::new();
+        let mut removed_files = HashSet::new();
         let mut added_files = HashSet::new();
+
+        // Context: if a directory is a symlink of a group and then another group tries to symlink to that same directory
+        // we would end up adding a symlink inside another symlink, borking the user's dotfiles.
+        // So the solution is to detect that the directory should be shared by multiple groups or even multiple dotfiles profiles,
+        // If that happens we should remove all the groups that will share those directories, create the shared directories
+        // and then add everything back in
 
         while let Some(idx) = dotfiles::get_highest_priority_target_idx(&groups) {
             let group = &groups[idx];
@@ -410,8 +416,8 @@ impl<'a> SymlinkHandler<'a> {
 
                     // if there's a symlink in this path, we take its group and put it in the "to be removed" bucket
                     // it will later be readded so that the groups are all contained in the same parent directory
-                    if let Some(group) = dotfiles::get_group_from_target_path(&f_target) {
-                        removed_groups.insert(group);
+                    if let Some(dotfile) = dotfiles::get_dotfile_from_path(&f_target) {
+                        removed_files.insert(dotfile);
                     }
                     added_files.insert(f);
                 }
@@ -429,18 +435,18 @@ impl<'a> SymlinkHandler<'a> {
 
         // NOTE/TODO?: this will only work if the dotfiles are in the same profile context
         // maybe we should instead move the files into a temporary and then move them back
-        for group in &removed_groups {
-            self.remove(dry_run, &group.group_name);
+        for file in &removed_files {
+            self.remove(dry_run, &file.group_name);
 
-            let target_path = group.to_target_path().unwrap();
-            fs::create_dir_all(if group.path.is_file() {
+            let target_path = file.to_target_path().unwrap();
+            fs::create_dir_all(if file.path.is_file() {
                 target_path.parent().unwrap()
             } else {
                 &target_path
             })
-            .unwrap();
+                .unwrap();
 
-            let group_iter = Dotfile::try_from(group.group_path.clone())
+            let group_iter = Dotfile::try_from(file.group_path.clone())
                 .unwrap()
                 .try_iter()
                 .unwrap();
@@ -468,9 +474,7 @@ impl<'a> SymlinkHandler<'a> {
             symlink_file(dry_run, file.path);
         }
 
-        // we do this because otherwise the next time this function is called
-        // the dotfile won't be in the symlink status cache
-        // TODO: find a better way??
+        // we have to update the cache to reflect the new state
         self.symlinked
             .insert(group.into(), group_only_added_files.into_iter().collect());
         self.not_symlinked.remove(group);

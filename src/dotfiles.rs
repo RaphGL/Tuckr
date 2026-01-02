@@ -469,11 +469,12 @@ pub fn get_nonexistent_groups(
 
 // searches for a link in a path and if the symlink points to a valid dotfile
 // it returns the group dotfile
-pub fn get_group_from_target_path(target_path: &Path) -> Option<Dotfile> {
-    let mut file_path = PathBuf::from(target_path).canonicalize().ok()?;
+pub fn get_dotfile_from_path(target_path: &Path) -> Option<Dotfile> {
+    let mut file_path = PathBuf::from(target_path);
     if !file_path.exists() {
         return None;
     }
+
 
     if let Ok(dotfile) = dotfiles::Dotfile::try_from(file_path.clone()) {
         return Some(dotfile);
