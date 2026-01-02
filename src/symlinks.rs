@@ -477,7 +477,6 @@ impl<'a> SymlinkHandler<'a> {
                 let Ok(dotfile) = Dotfile::try_from(file) else {
                     continue;
                 };
-                println!("{:?}", dotfile);
                 added_files.insert(dotfile);
             }
         }

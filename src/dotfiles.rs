@@ -475,7 +475,6 @@ pub fn get_dotfile_from_path(target_path: &Path) -> Option<Dotfile> {
         return None;
     }
 
-
     if let Ok(dotfile) = dotfiles::Dotfile::try_from(file_path.clone()) {
         return Some(dotfile);
     }

@@ -78,7 +78,7 @@ fn execute_script(group: &str, script: &Path) -> Result<(), ExitCode> {
     #[cfg(windows)]
     let mut command = Command::new("cmd");
     #[cfg(windows)]
-    command.arg("/c").arg(&script);
+    command.arg("/c").arg(script);
 
     let mut output = match command.spawn() {
         Ok(output) => output,
@@ -155,7 +155,7 @@ fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(),
             continue;
         }
 
-        execute_script(&group, file.as_path())?;
+        execute_script(group, file.as_path())?;
     }
 
     Ok(())
