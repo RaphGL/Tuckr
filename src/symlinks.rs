@@ -579,14 +579,6 @@ pub fn add_cmd(
 
     let mut sym = SymlinkHandler::try_new(ctx)?;
 
-    if let Some(nonexistent_groups) = get_nonexistent_groups_with_no_related_groups(&sym, groups) {
-        for group in nonexistent_groups {
-            eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
-        }
-
-        return Err(ReturnCode::NoSetupFolder.into());
-    };
-
     fn add_group(
         ctx: &Context,
         sym: &mut SymlinkHandler,
@@ -666,6 +658,16 @@ pub fn add_cmd(
             }
         }
     } else {
+        if let Some(nonexistent_groups) =
+            get_nonexistent_groups_with_no_related_groups(&sym, groups)
+        {
+            for group in nonexistent_groups {
+                eprintln!("{}", t!("errors.x_doesnt_exist", x = group).red());
+            }
+
+            return Err(ReturnCode::NoSetupFolder.into());
+        };
+
         let groups = {
             let mut related_groups = Vec::new();
 
@@ -739,7 +741,7 @@ pub fn remove_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Resul
         }
 
         return Err(ReturnCode::NoSetupFolder.into());
-    };
+    }
 
     let related_groups: Vec<_> = sym
         .symlinked
