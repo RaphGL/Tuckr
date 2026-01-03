@@ -7,7 +7,7 @@
 //! 3. Post setup scripts are run
 
 use crate::Context;
-use crate::dotfiles::{self, ReturnCode};
+use crate::dotfiles::{self, DotfileType, ReturnCode};
 use crate::symlinks;
 use core::slice;
 use owo_colors::OwoColorize;
@@ -101,6 +101,69 @@ fn execute_script(group: &str, script: &Path) -> Result<(), ExitCode> {
     Ok(())
 }
 
+fn get_related_hook_groups(ctx: &Context, groups: &[String]) -> Vec<String> {
+    let hooks_dir = dotfiles::get_dotfiles_path(ctx.profile.clone())
+        .unwrap()
+        .join("Hooks");
+
+    // hooks dir should already exist by the time this function as called, so idc about handling it gracefully
+    hooks_dir
+        .read_dir()
+        .unwrap()
+        .filter_map(|f| {
+            let file = f.unwrap().path();
+            if !file.is_dir() {
+                return None;
+            }
+            Some(file.file_name().unwrap().to_str().unwrap().to_string())
+        })
+        .filter(|g| {
+            dotfiles::group_is_valid_target(g, &ctx.custom_targets)
+                && groups
+                    .iter()
+                    .any(|group| group == dotfiles::group_without_target(g))
+        })
+        .collect()
+}
+
+fn get_all_hook_groups(ctx: &Context) -> Result<Vec<String>, ExitCode> {
+    let hooks_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
+        Ok(dir) => dir.join("Hooks"),
+        Err(err) => {
+            eprintln!("{}", err.red());
+            return Err(ReturnCode::NoSetupFolder.into());
+        }
+    };
+
+    let mut groups = Vec::new();
+    let mut add_group_dotfiles = |dir: PathBuf| -> Result<(), ExitCode> {
+        for file in fs::read_dir(dir).unwrap() {
+            let file = file.unwrap();
+            if !file.path().is_dir() {
+                continue;
+            }
+
+            let filename = file.file_name().into_string().unwrap();
+            if dotfiles::group_is_valid_target(&filename, &ctx.custom_targets) {
+                groups.push(filename);
+            }
+        }
+
+        Ok(())
+    };
+
+    add_group_dotfiles(hooks_dir)?;
+
+    let configs_dir = dotfiles::get_dotfiles_path(ctx.profile.clone())
+        .unwrap()
+        .join("Configs");
+
+    if configs_dir.exists() {
+        add_group_dotfiles(configs_dir)?;
+    }
+    Ok(groups)
+}
+
 /// Runs hooks of type PreHook or PostHook
 fn run_set_hook(ctx: &Context, group: &str, hook_type: DeployStep) -> Result<(), ExitCode> {
     let dotfiles_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
@@ -190,14 +253,6 @@ pub fn set_cmd(
         return symlinks::add_cmd(ctx, only_files, groups, exclude, force, adopt, assume_yes);
     }
 
-    let hooks_dir = match dotfiles::get_dotfiles_path(ctx.profile.clone()) {
-        Ok(dir) => dir.join("Hooks"),
-        Err(err) => {
-            eprintln!("{}", err.red());
-            return Err(ReturnCode::NoSetupFolder.into());
-        }
-    };
-
     let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
         if !dotfiles::group_is_valid_target(&group, &ctx.custom_targets) || exclude.contains(&group)
         {
@@ -243,53 +298,17 @@ pub fn set_cmd(
         Ok(())
     };
 
-    let mut groups = if groups.contains(&'*'.to_string()) {
-        let mut groups = Vec::new();
-        let mut add_group_dotfiles = |dir: PathBuf| -> Result<(), ExitCode> {
-            for file in fs::read_dir(dir).unwrap() {
-                let file = file.unwrap();
-                if !file.path().is_dir() {
-                   continue;
-                }
-                groups.push(file.file_name().into_string().unwrap());
-            }
-
-            Ok(())
+    let groups = {
+        let mut groups = if groups.contains(&'*'.to_string()) {
+            get_all_hook_groups(ctx)?
+        } else {
+            get_related_hook_groups(ctx, groups)
         };
-
-        add_group_dotfiles(hooks_dir)?;
-
-        let configs_dir = dotfiles::get_dotfiles_path(ctx.profile.clone())
-            .unwrap()
-            .join("Configs");
-
-        if configs_dir.exists() {
-            add_group_dotfiles(configs_dir)?;
-        }
+        // sorting is necessary to ensure that the conditional groups are run right after their base group
+        groups.sort();
+        groups.dedup();
         groups
-    } else {
-        // groups with their related conditional groups added
-        let mut expanded_groups = groups.to_vec();
-
-        for file in hooks_dir.read_dir().unwrap() {
-            let filename = file.unwrap().file_name().into_string().unwrap();
-            let base_group = dotfiles::group_without_target(&filename);
-
-            if expanded_groups
-                .iter()
-                .any(|group| group == base_group && *group != filename)
-            {
-                expanded_groups.push(filename);
-            }
-        }
-
-        expanded_groups
     };
-    // sorting is necessary to ensure that the conditional groups are run right after their base group
-    groups.sort();
-    groups.dedup();
-    // trick to restore immutability
-    let groups = groups;
 
     #[derive(Tabled)]
     struct RunStatus<'a> {
@@ -346,35 +365,52 @@ pub fn unset_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result
     };
 
     let wildcard = String::from("*");
-    if groups.contains(&wildcard) {
-        return symlinks::remove_cmd(ctx, &[wildcard], exclude);
-    }
+    let groups = {
+        let mut groups = if groups.contains(&wildcard) {
+            get_all_hook_groups(ctx)?
+        } else {
+            get_related_hook_groups(ctx, groups)
+        };
+        groups.sort();
+        groups.dedup();
+        groups
+    };
 
-    for group in groups {
+    for group in groups.iter() {
+        if !dotfiles::group_is_valid_target(group, &ctx.custom_targets) || exclude.contains(group) {
+            continue;
+        }
+
         let group_dir = hooks_dir.join(group);
-        std::env::set_current_dir(&group_dir).unwrap();
 
-        for file in group_dir.read_dir().unwrap() {
-            let file = file.unwrap().path();
-            let filename = file.file_name().unwrap().to_str().unwrap();
+        if group_dir.exists() {
+            std::env::set_current_dir(&group_dir).unwrap();
 
-            if filename.starts_with("rm") {
-                print_info_box("Running cleanup hook", group.yellow().to_string().as_str());
+            for file in group_dir.read_dir().unwrap() {
+                let file = file.unwrap().path();
+                let filename = file.file_name().unwrap().to_str().unwrap();
 
-                if ctx.dry_run {
-                    continue;
+                if filename.starts_with("rm") {
+                    print_info_box("Running cleanup hook", group.yellow().to_string().as_str());
+
+                    if ctx.dry_run {
+                        continue;
+                    }
+
+                    // TODO: show status after all cleanup hooks have been run just like with `tuckr set`
+                    _ = execute_script(group, &file);
                 }
-
-                execute_script(group, &file)?
             }
         }
 
-        print_info_box(
-            "Removing symlinked group",
-            group.yellow().to_string().as_str(),
-        );
+        if dotfiles::dotfile_contains(ctx.profile.clone(), DotfileType::Configs, group) {
+            print_info_box(
+                "Removing symlinked group",
+                group.yellow().to_string().as_str(),
+            );
 
-        symlinks::remove_cmd(ctx, &[group.to_owned()], exclude)?;
+            symlinks::remove_cmd(ctx, &[group.to_owned()], exclude)?;
+        }
     }
 
     Ok(())
