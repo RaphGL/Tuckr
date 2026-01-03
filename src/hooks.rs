@@ -246,9 +246,12 @@ pub fn set_cmd(
     let mut groups = if groups.contains(&'*'.to_string()) {
         let mut groups = Vec::new();
         let mut add_group_dotfiles = |dir: PathBuf| -> Result<(), ExitCode> {
-            for folder in fs::read_dir(dir).unwrap() {
-                let folder = folder.unwrap();
-                groups.push(folder.file_name().into_string().unwrap());
+            for file in fs::read_dir(dir).unwrap() {
+                let file = file.unwrap();
+                if !file.path().is_dir() {
+                   continue;
+                }
+                groups.push(file.file_name().into_string().unwrap());
             }
 
             Ok(())
