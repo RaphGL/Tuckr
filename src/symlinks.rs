@@ -438,12 +438,13 @@ impl<'a> SymlinkHandler<'a> {
             self.remove(dry_run, &group.group_name);
 
             let target_path = group.to_target_path().unwrap();
-            fs::create_dir_all(if target_path.is_file() {
-                target_path.parent().unwrap()
-            } else {
-                &target_path
-            })
-            .unwrap();
+            // Always create the parent directory, never the target itself
+            // (the target will be created as a symlink, not a directory)
+            if let Some(parent) = target_path.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+            }
 
             let group_iter = Dotfile::try_from(group.group_path)
                 .unwrap()
@@ -593,6 +594,19 @@ pub fn add_cmd(
             for file in group_files {
                 let target_file = file.to_target_path().unwrap();
 
+                // For --adopt, check if target exists before deleting source
+                if adopt && !target_file.exists() && !target_file.is_symlink() {
+                    eprintln!(
+                        "{}",
+                        t!(
+                            "errors.cannot_adopt_nonexistent",
+                            target = target_file.display()
+                        )
+                        .yellow()
+                    );
+                    continue;
+                }
+
                 let deleted_file = if adopt { &file.path } else { &target_file };
 
                 if dry_run {
@@ -600,9 +614,10 @@ pub fn add_cmd(
                         "{}",
                         t!("dry-run.removing_x", x = deleted_file.display()).red()
                     );
-                } else if target_file.is_dir() {
+                } else if deleted_file.is_dir() {
                     fs::remove_dir_all(deleted_file).unwrap();
-                } else if target_file.is_file() {
+                } else if deleted_file.exists() || deleted_file.is_symlink() {
+                    // Use remove_file for both regular files and symlinks
                     fs::remove_file(deleted_file).unwrap();
                 }
 
@@ -618,7 +633,7 @@ pub fn add_cmd(
                             .yellow()
                         );
                     } else {
-                        fs::rename(target_file, &file.path).unwrap();
+                        fs::rename(&target_file, &file.path).unwrap();
                     }
                 }
             }
