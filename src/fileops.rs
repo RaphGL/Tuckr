@@ -664,12 +664,19 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         None => std::env::current_dir().unwrap(),
     };
 
-    if dotfiles_dir.exists() {
+    let old_dotfiles = {
+        let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
+        let mut old_dotfiles = dotfiles_dir.clone();
+        old_dotfiles.set_file_name(format!("{old_dirname}_old"));
+        old_dotfiles
+    };
+
+    if old_dotfiles.exists() {
         println!(
             "{}",
             format!(
-                "A dotfiles directory already exists at `{}`\nPlease move it elsewhere or delete it before continuing",
-                dotfiles_dir.display()
+                "A backup directory already exists at `{}`\nPlease move it elsewhere or delete it before continuing",
+                old_dotfiles.display()
             ).red()
         );
         return Err(ExitCode::FAILURE);
@@ -701,8 +708,9 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         if file.is_dir() {
             if ctx.dry_run {
                 eprintln!("Creating directory `{}`", tuckr_path.display());
+            } else {
+                fs::create_dir_all(tuckr_path).unwrap();
             }
-            fs::create_dir_all(tuckr_path).unwrap();
             continue;
         }
 
@@ -713,16 +721,17 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
                 tuckr_path.display()
             );
         } else {
-            fs::copy(file, tuckr_path).unwrap();
+            if let Err(e) = fs::copy(&file, &tuckr_path) {
+                let error_message = format!(
+                    "Failed to copy `{}` to `{}`: {}",
+                    file.display(),
+                    tuckr_path.display(),
+                    e.to_string()
+                );
+                eprintln!("{}", error_message.red());
+            }
         }
     }
-
-    let old_dotfiles = {
-        let old_dirname = dotfiles_dir.file_name().unwrap().to_str().unwrap();
-        let mut old_dotfiles = dotfiles_dir.clone();
-        old_dotfiles.set_file_name(format!("{old_dirname}_old"));
-        old_dotfiles
-    };
 
     if ctx.dry_run {
         eprintln!(
@@ -750,11 +759,11 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         old_dotfiles.display()
     );
 
-    println!(
-        "{}\n{}",
-        dotfiles_converted_msg.green(),
-        old_dotfiles_location_msg.yellow()
-    );
+    println!("{}", dotfiles_converted_msg.green());
+
+    if old_dotfiles.exists() {
+        println!("{}", old_dotfiles_location_msg.yellow());
+    }
 
     Ok(())
 }
