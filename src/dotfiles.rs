@@ -202,7 +202,10 @@ fn platform_is_under_wsl() -> bool {
         }
     }
 
-    std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop").is_ok()
+    matches!(
+        std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop"),
+        Ok(true)
+    )
 }
 
 /// Returns true if a group with specified name can be used by current platform.
@@ -555,7 +558,9 @@ mod tests {
 
         assert_eq!(
             Dotfile::try_from(group).unwrap().to_target_path().unwrap(),
-            super::get_dotfiles_target_dir_path().unwrap().join(".zshrc")
+            super::get_dotfiles_target_dir_path()
+                .unwrap()
+                .join(".zshrc")
         );
     }
 
