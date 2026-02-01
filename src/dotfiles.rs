@@ -184,27 +184,25 @@ pub fn group_without_target(group: &str) -> &str {
 }
 
 fn platform_is_under_wsl() -> bool {
-    if !cfg!(target_os = "linux") {
+    if cfg!(not(target_os = "linux")) {
         return false;
     }
 
     for file in &["/proc/sys/kernel/osrelease", "/proc/version"] {
-        if let Ok(content) = std::fs::read(file) {
-            let Ok(content) = std::str::from_utf8(&content) else {
-                return false;
-            };
+        let Ok(content) = std::fs::read(file) else {
+            continue;
+        };
 
-            if content.contains("microsoft") || content.contains("WSL") {
-                return true;
-            }
+        let Ok(content) = std::str::from_utf8(&content) else {
+            continue;
+        };
+
+        if content.contains("microsoft") || content.contains("WSL") {
+            return true;
         }
     }
 
-    let Ok(wsl_interop_exists) = std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop") else {
-        return false;
-    };
-
-    wsl_interop_exists
+    std::fs::exists("/proc/sys/fs/binfmt_misc/WSLInterop").is_ok()
 }
 
 /// Returns true if a group with specified name can be used by current platform.
@@ -212,7 +210,6 @@ fn platform_is_under_wsl() -> bool {
 /// groups, this function returns true; for conditional groups, this function
 /// returns true when group suffix matches current target_os or target_family.
 pub fn group_is_valid_target(group: &str, custom_targets: &[impl AsRef<str>]) -> bool {
-    // Gets the current OS and OS family
     let current_target_os = format!("_{}", env::consts::OS);
     let current_target_family = format!("_{}", env::consts::FAMILY);
 
@@ -247,7 +244,7 @@ impl Dotfile {
             return false;
         };
 
-        let home_dir = dirs::home_dir().unwrap();
+        let home_dir = get_dotfiles_target_dir_path().unwrap();
         !target.starts_with(home_dir)
     }
 
@@ -409,9 +406,13 @@ pub fn get_target_basepath(target: &path::Path) -> Option<PathBuf> {
 }
 
 pub fn get_dotfiles_target_dir_path() -> Result<PathBuf, String> {
-    #[cfg(test)]
-    {
-        unsafe { std::env::remove_var("TUCKR_TARGET") };
+    if cfg!(test) {
+        return Ok(std::env::temp_dir().join(format!(
+            "tuckr-target-{}",
+            // this will return a namespace but `::` is invalid on paths in windows
+            // so we need to change it to prevent panics when interacting with the file system there
+            std::thread::current().name().unwrap().replace("::", "_")
+        )));
     }
 
     if let Ok(dir) = std::env::var("TUCKR_TARGET")
@@ -554,7 +555,7 @@ mod tests {
 
         assert_eq!(
             Dotfile::try_from(group).unwrap().to_target_path().unwrap(),
-            dirs::home_dir().unwrap().join(".zshrc")
+            super::get_dotfiles_target_dir_path().unwrap().join(".zshrc")
         );
     }
 

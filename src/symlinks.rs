@@ -1196,19 +1196,33 @@ mod tests {
 
     impl Test {
         fn start() -> Self {
+            let target_dir =  dotfiles::get_dotfiles_target_dir_path().unwrap();
+            fs::create_dir_all(&target_dir).unwrap();
+
             crate::fileops::init_cmd(&Context::default()).unwrap();
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
+            let configs_dir = dotfiles_dir.join("Configs");
             let group_dir = dotfiles_dir.join("Configs").join("Group1");
             let new_config_dir = group_dir.join(".config");
-
             fs::create_dir_all(&new_config_dir).unwrap();
 
             let filepaths = [
                 new_config_dir.join("group_file"),
                 group_dir.join("group_file_0"),
+
+                configs_dir
+                    .join("shared_group1")
+                    .join("shared_dir")
+                    .join("file1"),
+                configs_dir
+                    .join("shared_group2")
+                    .join("shared_dir")
+                    .join("file2"),
             ];
 
             for filepath in &filepaths {
+                fs::create_dir_all(filepath.parent().unwrap()).unwrap();
+
                 let mut file = File::create(filepath).unwrap();
                 _ = file
                     .write("Some random content on file".as_bytes())
@@ -1302,5 +1316,48 @@ mod tests {
     fn add_and_remove_symlink() {
         test_adding_symlink();
         test_removing_symlink();
+    }
+
+    #[test]
+    fn resolve_shared_directories() {
+        let ctx = Context::default();
+        let target_dir = dotfiles::get_dotfiles_target_dir_path().unwrap();
+        let shared_dir_target = target_dir.join("shared_dir");
+        _ = fs::remove_dir_all(&shared_dir_target);
+
+        let test = Test::start();
+
+        assert!(!shared_dir_target.exists());
+
+        _ = super::add_cmd(
+            &ctx,
+            false,
+            &["shared_group1".into()],
+            &[],
+            false,
+            false,
+            true,
+        );
+
+        let file1_target = shared_dir_target.join("file1");
+        let file2_target = shared_dir_target.join("file2");
+
+        assert!(shared_dir_target.is_symlink());
+        assert!(!file1_target.is_symlink() && file1_target.is_file());
+
+        _ = super::add_cmd(
+            &ctx,
+            false,
+            &["shared_group2".into()],
+            &[],
+            false,
+            false,
+            true,
+        );
+
+        assert!(file1_target.is_symlink() && file1_target.is_file());
+        assert!(file2_target.is_symlink() && file2_target.is_file());
+
+        _ = fs::remove_dir_all(shared_dir_target);
     }
 }

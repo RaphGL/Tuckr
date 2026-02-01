@@ -560,15 +560,18 @@ pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
         }
     };
 
+    let mut found_non_group_file = false;
     for file in files {
         let file_path = Path::new(file);
         if !file_path.exists() {
             eprintln!("{}", t!("errors.x_doesnt_exist", x = file).red());
+            found_non_group_file = true;
             continue;
         }
 
         let Some(group) = dotfiles::get_dotfile_from_path(file_path) else {
             eprintln!("{}", t!("errors.not_a_tuckr_dotfile", file = file).red());
+            found_non_group_file = true;
             continue;
         };
 
@@ -578,7 +581,11 @@ pub fn groupis_cmd(ctx: &Context, files: &[String]) -> Result<(), ExitCode> {
         println!("{}", group.group_name);
     }
 
-    Ok(())
+    if found_non_group_file {
+        Err(ExitCode::FAILURE)
+    } else {
+        Ok(())
+    }
 }
 
 pub fn get_user_confirmation(msg: &str) -> bool {
@@ -774,10 +781,7 @@ mod tests {
             let dotfiles_dir = dotfiles::get_dotfiles_path(None).unwrap();
             fs::create_dir_all(dotfiles_dir.join("Configs")).unwrap();
 
-            let target_dir = dirs::home_dir().unwrap().join(format!(
-                "tuckr_test-{}",
-                std::thread::current().name().unwrap().replace("::", "_")
-            ));
+            let target_dir = dotfiles::get_dotfiles_target_dir_path().unwrap();
             fs::create_dir_all(&target_dir).unwrap();
 
             Self {
@@ -944,5 +948,31 @@ mod tests {
         assert!(dotfiles_dir.join("Configs").exists());
         assert!(dotfiles_dir.join("Hooks").exists());
         assert!(dotfiles_dir.join("Secrets").exists());
+    }
+
+    #[test]
+    fn groupis_cmd_detects_groups_properly() {
+        let ft = FileopsTest::start();
+        let ctx = Context::default();
+
+        let testfile = ft.target_dir.join("Tuckr-GroupIs-UnitTest-File");
+
+        assert!(groupis_cmd(&ctx, &[testfile.to_str().unwrap().into()]).is_err());
+
+        fs::write(&testfile, "test".as_bytes()).unwrap();
+        assert!(groupis_cmd(&ctx, &[testfile.to_str().unwrap().into()]).is_err());
+
+        push_cmd(
+            &ctx,
+            "test".into(),
+            &[testfile.to_str().unwrap().into()],
+            true,
+            false,
+            true,
+        ).unwrap();
+
+        assert!(groupis_cmd(&ctx, &[testfile.to_str().unwrap().into()]).is_ok());
+
+        fs::remove_file(testfile).unwrap();
     }
 }

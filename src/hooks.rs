@@ -254,7 +254,7 @@ pub fn set_cmd(
     }
 
     let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
-        if !dotfiles::group_is_valid_target(&group, &ctx.custom_targets) || exclude.contains(&group)
+        if exclude.contains(&group)
         {
             return Ok(());
         }
@@ -377,7 +377,7 @@ pub fn unset_cmd(ctx: &Context, groups: &[String], exclude: &[String]) -> Result
     };
 
     for group in groups.iter() {
-        if !dotfiles::group_is_valid_target(group, &ctx.custom_targets) || exclude.contains(group) {
+        if exclude.contains(group) {
             continue;
         }
 
