@@ -35,8 +35,7 @@ pub struct Context {
     /// Choose which dotfile profile to use.
     ///
     /// A profile is a separate dotfiles repository (eg `dotfiles_work`),
-    /// allowing you to (for example) keep work-related configuration in a
-    /// separate repository to your personal configuration.
+    /// allowing you to separate configuration files into many repos.
     #[arg(short, long)]
     pub profile: Option<String>,
 
@@ -44,11 +43,9 @@ pub struct Context {
     #[arg(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Select custom targets to use when deploying dotfiles.
+    /// Enable custom targets when deploying dotfiles.
     ///
-    /// When a custom target is selected, config files, hooks and secrets from
-    /// groups matching that target will be preferred over less-specific
-    /// groups.
+    /// Groups with custom targets have higher preference over every other group.
     #[arg(short = 't', long = "targets", use_value_delimiter = true)]
     pub custom_targets: Vec<String>,
 }
@@ -78,10 +75,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Get dotfiles' symlinking status (alias: s).
+    /// Get dotfiles' symlinking status.
     ///
     /// If groups are supplied, only the status of those groups will be shown.
-    #[command(alias = "s")]
+    #[command(visible_alias = "s")]
     Status {
         #[arg(value_name = "group")]
         groups: Option<Vec<String>>,
@@ -91,12 +88,12 @@ enum Command {
         json: bool,
     },
 
-    /// Deploy dotfiles for the supplied groups (alias: a).
+    /// Deploy dotfiles for the supplied groups.
     ///
     /// Each file within the dotfiles groups will be linked to its
     /// corresponding location on the system, effectively "installing" those
     /// groups' files.
-    #[command(alias = "a")]
+    #[command(visible_alias = "a")]
     Add {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
@@ -107,44 +104,26 @@ enum Command {
 
         /// Override conflicting dotfiles.
         ///
-        /// If a file exists on the system and in the dotfiles repository, the
-        /// version from the dotfiles repository will be used to overwrite the
-        /// version on the system.
+        /// Override dotfiles on the system with dotfiles in the repository.
         #[arg(short, long)]
         force: bool,
 
         /// Adopt conflicting dotfiles.
         ///
-        /// If a file exists on the system and in the dotfiles repository, the
-        /// version from the system will be used to overwrite the version
-        /// in the dotfiles repository.
+        /// Override repository dotfiles with dotfiles on the system.
         #[arg(short, long)]
         adopt: bool,
 
-        /// Automatically answer yes on every prompt.
+        /// Answer yes to every prompt.
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Recursively create symbolic links to files, instead of to the first
-        /// un-created directory.
-        ///
-        /// This allows you to have different groups place files within the
-        /// same location, even if that location does not already exist on the
-        /// system.
-        ///
-        /// For example, if group `a` contains `bin/foo` and group `b` contains
-        /// `bin/bar`, and `~/bin` does not already exist on the system, then
-        /// failure to specify this option would cause a conflict as both
-        /// groups would try to create the `~/bin` directory as a symbolic
-        /// link.
+        /// Only symlink files and create their parent directories
         #[arg(long)]
         only_files: bool,
     },
 
-    /// Remove dotfiles for the supplied groups.
-    ///
-    /// This removes the symbolic links on the system which point to files
-    /// within the given groups.
+    /// Remove dotfiles for specified groups.
     Rm {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
@@ -159,42 +138,27 @@ enum Command {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        /// Exclude certain groups from being added and hooked.
+        /// Exclude certain groups from being added and their setup hooks ran.
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
 
         /// Override conflicting dotfiles.
         ///
-        /// If a file exists on the system and in the dotfiles repository, the
-        /// version from the dotfiles repository will be used to overwrite the
-        /// version on the system.
+        /// Override dotfiles on the system with dotfiles in the repository.
         #[arg(short, long)]
         force: bool,
 
         /// Adopt conflicting dotfiles.
         ///
-        /// If a file exists on the system and in the dotfiles repository, the
-        /// version from the system will be used to overwrite the version
-        /// in the dotfiles repository.
+        /// Override repository dotfiles with dotfiles on the system.
         #[arg(short, long)]
         adopt: bool,
 
-        /// Automatically answer yes to stdin prompts.
+        /// Answer yes to every prompt.
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
-        /// Recursively create symbolic links to files, instead of to the first
-        /// un-created directory.
-        ///
-        /// This allows you to have different groups place files within the
-        /// same location, even if that location does not already exist on the
-        /// system.
-        ///
-        /// For example, if group `a` contains `bin/foo` and group `b` contains
-        /// `bin/bar`, and `~/bin` does not already exist on the system, then
-        /// failure to specify this option would cause a conflict as both
-        /// groups would try to create the `~/bin` directory as a symbolic
-        /// link.
+        /// Only symlink files and create parent directories
         #[arg(long)]
         only_files: bool,
     },
@@ -204,13 +168,13 @@ enum Command {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
-        /// Exclude certain groups from being removed
+        /// Exclude certain groups from being removed and their cleanup hooks ran.
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
     },
 
-    /// Encrypt files and move them to dotfiles/Secrets (alias: e)
-    #[command(alias = "e")]
+    /// Encrypt files and move them to dotfiles/Secrets
+    #[command(visible_alias = "e")]
     Encrypt {
         #[arg(required = true)]
         group: String,
@@ -219,12 +183,13 @@ enum Command {
         dotfiles: Vec<String>,
     },
 
-    /// Decrypt files (alias: d)
-    #[command(alias = "d")]
+    /// Decrypt files
+    #[command(visible_alias = "d")]
     Decrypt {
         #[arg(required = true, value_name = "group")]
         groups: Vec<String>,
 
+        /// Exclude certain groups from being decrypted
         #[arg(short, long, value_name = "group", use_value_delimiter = true)]
         exclude: Vec<String>,
     },
@@ -242,42 +207,27 @@ enum Command {
         #[arg(required = true)]
         files: Vec<String>,
 
-        /// Automatically answer yes on every prompt. In the case where a file
-        /// already exists in the dotfiles, this will overwrite it.
+        /// Answer yes to every prompt.
         #[arg(short = 'y', long)]
         assume_yes: bool,
 
         /// Symlink files after pushing them into the dotfiles repository.
-        /// This is the equivalent to running `tuckr add [group]` manually
-        /// after this command.
         #[arg(short = 'a', long)]
         add: bool,
 
-        /// Recursively create symbolic links to files, instead of to the first
-        /// un-created directory when adding dotfiles.
-        ///
-        /// This option only takes effect when the `--add` flag is also used.
-        ///
-        /// This allows you to have different groups place files within the
-        /// same location, even if that location does not already exist on the
-        /// system.
-        ///
-        /// For example, if group `a` contains `bin/foo` and group `b` contains
-        /// `bin/bar`, and `~/bin` does not already exist on the system, then
-        /// failure to specify this option would cause a conflict as both
-        /// groups would try to create the `~/bin` directory as a symbolic
-        /// link.
+        /// Only symlink files and create parent directories
         #[arg(long)]
         only_files: bool,
     },
 
-    /// Delete the given groups from the dotfiles, cleaning up any left-over
-    /// symbolic links.
+    /// Pop specified groups and their corresponding symlinks
+    ///
+    /// Moves files back to the system and out of the repository.
     #[command(arg_required_else_help = true)]
     Pop {
         groups: Vec<String>,
 
-        /// Delete groups instead of popping them out dotfiles
+        /// Delete groups' files instead of moving them back to the system
         #[arg(short, long)]
         delete: bool,
 
@@ -286,34 +236,34 @@ enum Command {
         assume_yes: bool,
     },
 
-    /// List dotfiles hooks, secrets, profiles
+    /// List dotfiles hooks, secrets and profiles
     #[command(subcommand, arg_required_else_help = true)]
     Ls(ListType),
 
-    /// Initialize dotfile directory
+    /// Initialize dotfiles directory
     ///
-    /// Creates the files that are necessary to use Tuckr
+    /// Creates necessary files to use Tuckr
     Init,
 
-    /// Return the group files belongs to
+    /// Return the group files belong to
     #[command(name = "groupis", arg_required_else_help = true)]
     GroupIs { files: Vec<String> },
 
-    /// Convert a GNU Stow dotfiles repository into a Tuckr repository.
+    /// Convert a GNU Stow dotfiles directory into a Tuckr directory.
     #[command(name = "from-stow", long_about = fileops::FROM_STOW_INFO)]
     FromStow { stow_path: Option<String> },
 }
 
 #[derive(Debug, Subcommand)]
 enum ListType {
-    /// Lists dotfiles directories with a suffix _<profile> (alias: p)
-    #[command(alias = "p")]
+    /// List dotfiles directories with a profiles (ie `dotfiles_<profile>`)
+    #[command(visible_alias = "p")]
     Profiles,
-    /// Lists encrypted files (alias: s)
-    #[command(alias = "s")]
+    /// List encrypted groups
+    #[command(visible_alias = "s")]
     Secrets,
-    /// Lists which hooks exists for each group (alias: h)
-    #[command(alias = "h")]
+    /// List which hooks exist for each group
+    #[command(visible_alias = "h")]
     Hooks,
 }
 
