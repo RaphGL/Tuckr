@@ -60,7 +60,7 @@ To achieve that goal Tuckr tries to only cover what is directly needed to manage
 - No configuration
 - Commands can be run from anywhere
 - Symlinks are tracked and validated
-- Configuration files are grouped and handled as a logical unit 
+- Configuration files are grouped and handled as a logical unit
 - Provide ability to run hooks (scripts) that facilitate deployment and uninstallation
 - Easily encrypt and deploy sensitive configuration files (WIP: please do not secrets for production just yet)
 
@@ -95,7 +95,7 @@ stow -t $HOME --delete *
 
 ```
 $ mkdir -p <CONFIG_PATH>/Configs
-$ mv -t <CONFIG_PATH> * 
+$ mv -t <CONFIG_PATH> *
 ```
 
 3. Resymlink your dotfiles with:
@@ -216,7 +216,7 @@ The group directories' names are used to reference them on tuckr.
 
 ### Using Hooks
 
-Hooks are run before and after adding every program, if they're coupled with a program they should their directory should have the same name in Hooks as in Configs.  
+Hooks are run before and after adding every program, if they're coupled with a program they should their directory should have the same name in Hooks as in Configs.
 Hooks that run before symlinking the program are prefixed with `pre`, scripts that run afterwards are prefixed with `post`, as long as this is true you can name the file whatever you want.
 
 ```sh
@@ -317,4 +317,4 @@ On success Tuckr returns whatever is the default success return code for the pla
 
 ## License
 
-Distributed under GPLv3 License. See [`LICENSE`](https://github.com/RaphGL/Tuckr/blob/main/LICENSE) for more information.
+SPDX-License-Identifier: GPL-3.0-or-later
