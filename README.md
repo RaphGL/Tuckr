@@ -238,7 +238,7 @@ Hooks
 To run scripts for a program run `tuckr set <program_name>` or alternatively use a wildcard like so: `tuckr set \*` to run all hooks.
 
 ### Using Secrets
-Please not that secrets are still WIP and their security is really not guaranteed. So it's best to avoid it in production. If you want to deploy secrets with tuckr,
+Please note that secrets are still WIP and their security is really not guaranteed. So it's best to avoid it in production. If you want to deploy secrets with tuckr,
 then consider create a hook that deploys secrets for you using some of the reputable encryption tools out there like veracrypt, gpg, etc.
 
 #### Encrypting files
