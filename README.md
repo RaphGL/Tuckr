@@ -134,6 +134,11 @@ Note: The binary will be installed to `$HOME/.cargo/bin` either move it to somew
 ```sh
 paru -S tuckr-git
 ```
+**Install from Homebrew:**
+
+```sh
+brew install tuckr
+```
 
 <!-- USAGE EXAMPLES -->
 
