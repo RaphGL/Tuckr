@@ -50,6 +50,14 @@ pub struct Context {
     /// Groups with custom targets have higher preference over every other group.
     #[arg(short = 't', long = "targets", use_value_delimiter = true)]
     pub custom_targets: Vec<String>,
+
+    /// Symlink entire directories instead of individual files.
+    ///
+    /// When enabled, tuckr will create symlinks to directories rather than
+    /// symlinking individual files within them. This can be set via the
+    /// TUCKR_FULL_DIR environment variable.
+    #[arg(long)]
+    pub full_dir: bool,
 }
 
 // we should never even be creating our own context since this is user provided context
@@ -61,6 +69,7 @@ impl Default for Context {
             profile: None,
             dry_run: false,
             custom_targets: vec!["custom".into(), "laptop".into()],
+            full_dir: false,
         }
     }
 }
@@ -297,6 +306,12 @@ fn main() -> ExitCode {
             cli.ctx.custom_targets.sort();
             cli.ctx.custom_targets.dedup();
         }
+        // Check TUCKR_FULL_DIR env var if --full-dir flag wasn't explicitly set
+        if !cli.ctx.full_dir
+            && let Ok(full_dir) = std::env::var("TUCKR_FULL_DIR")
+        {
+            cli.ctx.full_dir = full_dir.parse().unwrap_or(false);
+        }
         cli
     };
 
@@ -333,7 +348,14 @@ fn main() -> ExitCode {
             assume_yes,
             only_files,
         } => symlinks::add_cmd(
-            &cli.ctx, only_files, &groups, &exclude, force, adopt, assume_yes,
+            &cli.ctx,
+            only_files,
+            &groups,
+            &exclude,
+            force,
+            adopt,
+            assume_yes,
+            cli.ctx.full_dir,
         ),
 
         Command::Rm { groups, exclude } => symlinks::remove_cmd(&cli.ctx, &groups, &exclude),

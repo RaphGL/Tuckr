@@ -308,7 +308,16 @@ pub fn push_cmd(
     }
 
     if add {
-        return symlinks::add_cmd(ctx, only_files, &[group], &[], false, false, assume_yes);
+        return symlinks::add_cmd(
+            ctx,
+            only_files,
+            &[group],
+            &[],
+            false,
+            false,
+            assume_yes,
+            ctx.full_dir,
+        );
     }
 
     Ok(())
@@ -647,6 +656,7 @@ pub fn from_stow_cmd(ctx: &Context, stow_path: Option<String>) -> Result<(), Exi
         profile: temp_profile,
         dry_run: ctx.dry_run,
         custom_targets: ctx.custom_targets.clone(),
+        full_dir: ctx.full_dir,
     };
 
     #[inline]
@@ -969,7 +979,8 @@ mod tests {
             true,
             false,
             true,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(groupis_cmd(&ctx, &[testfile.to_str().unwrap().into()]).is_ok());
 

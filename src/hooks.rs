@@ -250,12 +250,20 @@ pub fn set_cmd(
             "{}",
             t!("info.no_hooks_exist_running_cmd", cmd = "tuckr add").yellow()
         );
-        return symlinks::add_cmd(ctx, only_files, groups, exclude, force, adopt, assume_yes);
+        return symlinks::add_cmd(
+            ctx,
+            only_files,
+            groups,
+            exclude,
+            force,
+            adopt,
+            assume_yes,
+            ctx.full_dir,
+        );
     }
 
     let run_deploy_steps = |stages: DeployStages, group: String| -> Result<(), ExitCode> {
-        if exclude.contains(&group)
-        {
+        if exclude.contains(&group) {
             return Ok(());
         }
 
@@ -288,6 +296,7 @@ pub fn set_cmd(
                         force,
                         adopt,
                         assume_yes,
+                        ctx.full_dir,
                     )?;
                 }
 

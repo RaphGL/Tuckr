@@ -419,7 +419,7 @@ impl<'a> SymlinkHandler<'a> {
     }
 
     /// Symlinks all the files of a group to the user's $TUCKR_TARGET
-    fn add(&mut self, dry_run: bool, only_files: bool, group: &str) {
+    fn add(&mut self, dry_run: bool, only_files: bool, group: &str, full_dir: bool) {
         let Some(mut groups) =
             self.get_related_conditional_groups(group, SymlinkType::NotSymlinked.into(), false)
         else {
@@ -439,16 +439,26 @@ impl<'a> SymlinkHandler<'a> {
             let group = &groups[idx];
             let group = Dotfile::try_from(self.dotfiles_dir.join("Configs").join(group)).unwrap();
             if group.path.exists() {
-                for f in group.try_iter().unwrap() {
-                    let f_target = f.to_target_path().unwrap();
-
-                    // if there's a symlink in this path or its parents, we take it and put it in the "to be removed" bucket
-                    // it will later be readded after the parents dirs are created,
-                    // so that the groups are all contained in the same parent directory
-                    if let Some(dotfile) = dotfiles::get_dotfile_from_path(&f_target) {
+                // When full_dir is enabled, don't iterate through files, just symlink the whole directory
+                if full_dir && group.path.is_dir() {
+                    // Check if the group directory target already has conflicts
+                    let group_target = group.to_target_path().unwrap();
+                    if let Some(dotfile) = dotfiles::get_dotfile_from_path(&group_target) {
                         removed_files.insert(dotfile);
                     }
-                    added_files.insert(f);
+                    added_files.insert(group);
+                } else {
+                    for f in group.try_iter().unwrap() {
+                        let f_target = f.to_target_path().unwrap();
+
+                        // if there's a symlink in this path or its parents, we take it and put it in the "to be removed" bucket
+                        // it will later be readded after the parents dirs are created,
+                        // so that the groups are all contained in the same parent directory
+                        if let Some(dotfile) = dotfiles::get_dotfile_from_path(&f_target) {
+                            removed_files.insert(dotfile);
+                        }
+                        added_files.insert(f);
+                    }
                 }
             } else {
                 eprintln!(
@@ -473,27 +483,29 @@ impl<'a> SymlinkHandler<'a> {
             })
             .unwrap();
 
-            for file in fileops::DirWalk::new(&file.group_path) {
-                let Ok(dotfile) = Dotfile::try_from(file) else {
-                    continue;
-                };
-                added_files.insert(dotfile);
+            // When full_dir is enabled, we don't iterate through individual files
+            if !full_dir {
+                for file in fileops::DirWalk::new(&file.group_path) {
+                    let Ok(dotfile) = Dotfile::try_from(file) else {
+                        continue;
+                    };
+                    added_files.insert(dotfile);
+                }
             }
         }
 
         for file in added_files {
-            if only_files {
-                if file.path.is_dir() {
-                    continue;
-                }
+            // Skip directories when only_files is enabled
+            if only_files && file.path.is_dir() {
+                continue;
+            }
 
-                // we need to ensure that the target dotfile's parent exists otherwise symlink will fail
-                let f_target = file.to_target_path().unwrap();
-                let target_parent = f_target.parent().unwrap();
+            // Ensure parent directories exist before symlinking
+            let f_target = file.to_target_path().unwrap();
+            let target_parent = f_target.parent().unwrap();
 
-                if !target_parent.exists() {
-                    fs::create_dir_all(target_parent).unwrap();
-                }
+            if !target_parent.exists() {
+                fs::create_dir_all(target_parent).unwrap();
             }
 
             symlink_file(dry_run, file.path);
@@ -564,6 +576,7 @@ pub fn add_cmd(
     force: bool,
     adopt: bool,
     assume_yes: bool,
+    full_dir: bool,
 ) -> Result<(), ExitCode> {
     if !assume_yes && (force || adopt) {
         let confirmed = fileops::get_user_confirmation(if force {
@@ -587,6 +600,7 @@ pub fn add_cmd(
         only_files: bool,
         force: bool,
         adopt: bool,
+        full_dir: bool,
     ) {
         if exclude.contains(group) {
             return;
@@ -647,14 +661,16 @@ pub fn add_cmd(
             remove_files_and_decide_if_adopt(group, &sym.not_symlinked, true, ctx.dry_run);
         }
 
-        sym.add(ctx.dry_run, only_files, group)
+        sym.add(ctx.dry_run, only_files, group, full_dir)
     }
 
     if groups.contains(&"*".to_string()) {
         let not_symlinked_groups: Vec<_> = sym.not_symlinked.clone().into_keys().collect();
         for group in not_symlinked_groups {
             if dotfiles::group_is_valid_target(&group, &ctx.custom_targets) {
-                add_group(ctx, &mut sym, &group, exclude, only_files, force, adopt);
+                add_group(
+                    ctx, &mut sym, &group, exclude, only_files, force, adopt, full_dir,
+                );
             }
         }
     } else {
@@ -687,7 +703,9 @@ pub fn add_cmd(
         };
 
         for group in groups {
-            add_group(ctx, &mut sym, &group, exclude, only_files, force, adopt);
+            add_group(
+                ctx, &mut sym, &group, exclude, only_files, force, adopt, full_dir,
+            );
         }
     }
 
@@ -1276,6 +1294,7 @@ mod tests {
             false,
             false,
             false,
+            false,
         )
         .unwrap();
 
@@ -1291,6 +1310,7 @@ mod tests {
             false,
             &["Group1".to_string()],
             &[],
+            false,
             false,
             false,
             false,
@@ -1336,6 +1356,7 @@ mod tests {
             false,
             false,
             true,
+            false,
         );
 
         let file1_target = shared_dir_target.join("file1");
@@ -1352,6 +1373,7 @@ mod tests {
             false,
             false,
             true,
+            false,
         );
 
         assert!(file1_target.is_symlink() && file1_target.is_file());
