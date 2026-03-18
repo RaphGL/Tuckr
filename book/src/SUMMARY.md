@@ -4,6 +4,7 @@
 - [What is Tuckr](fundamentals/what-is-tuckr.md)
 - [How Tuckr works](fundamentals/how-tuckr-works.md)
 - [Profiles](fundamentals/profiles.md)
+- [FAQ](faq.md)
 
 # Platforms
 - [Conditional groups](platforms/conditional-groups.md)
@@ -19,5 +20,3 @@
 - [Globbing and excluding groups](commands/glob-and-exclude.md)
 - [Dotfile commands](commands/dotfile.md)
 - [Hook commands](commands/hook.md)
-
-# [FAQ](faq.md)
