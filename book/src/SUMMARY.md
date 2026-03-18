@@ -19,3 +19,5 @@
 - [Globbing and excluding groups](commands/glob-and-exclude.md)
 - [Dotfile commands](commands/dotfile.md)
 - [Hook commands](commands/hook.md)
+
+# [FAQ](faq.md)
