@@ -344,8 +344,8 @@ pub fn get_potential_dotfiles_paths(profile: Option<String>) -> PotentialDotfile
 
     PotentialDotfilePaths {
         home: dirs::home_dir().unwrap().join(format!(".{dotfiles_dir}")),
-        config: dirs::config_dir().unwrap().join(dotfiles_dir),
-        env: std::env::var("TUCKR_HOME").map(PathBuf::from).ok(),
+        config: dirs::config_dir().unwrap().join(&dotfiles_dir),
+        env: std::env::var("TUCKR_HOME").map(|p| PathBuf::from(p).join(dotfiles_dir)).ok(),
         test: std::env::temp_dir()
             .join(format!(
                 "tuckr-{}",
@@ -662,5 +662,19 @@ mod tests {
             let target = super::get_group_target(group);
             assert_eq!(target, Some(expected_target));
         }
+    }
+
+    #[test]
+    fn get_potential_dotfiles_paths() {
+        let configs_dir = dirs::config_dir().unwrap();
+        unsafe {
+            std::env::set_var("TUCKR_HOME", configs_dir);
+        };
+
+        let potential_paths = super::get_potential_dotfiles_paths(Some("whatever".into()));
+        assert_eq!(potential_paths.config.file_name().unwrap(), "dotfiles_whatever");
+        assert_eq!(potential_paths.home.file_name().unwrap(), ".dotfiles_whatever");
+        assert_eq!(potential_paths.env.unwrap().file_name().unwrap(), "dotfiles_whatever");
+        assert!(potential_paths.test.file_name().unwrap().to_str().unwrap().starts_with("dotfiles"));
     }
 }
