@@ -275,12 +275,16 @@ impl Dotfile {
         while let Some(comp) = group_path_components.next() {
             let comp = comp.as_os_str().to_str().unwrap();
 
-            if comp.len() < 2 {
+            let mut chars = comp.chars();
+            let prefix = match chars.next() {
+                Some(prefix) if prefix == '%' || prefix == '^' => prefix,
+                _ => continue,
+            };
+            let comp = chars.as_str();
+
+            if comp.is_empty() {
                 continue;
             }
-
-            let prefix = comp.chars().next().unwrap();
-            let comp = &comp[1..];
 
             if prefix == '%' {
                 let Ok(comp) = env::var(comp) else {
@@ -561,6 +565,24 @@ mod tests {
             super::get_dotfiles_target_dir_path()
                 .unwrap()
                 .join(".zshrc")
+        );
+    }
+
+    #[test]
+    fn dotfile_to_target_path_with_multibyte_component() {
+        // Regression: a path component whose first char is multibyte (e.g. `Ü`)
+        // and is not a `%`/`^` prefix must not panic on byte-index slicing.
+        let group = get_dotfiles_path(None)
+            .unwrap()
+            .join("Configs")
+            .join("ubersicht")
+            .join("Übersicht");
+
+        assert_eq!(
+            Dotfile::try_from(group).unwrap().to_target_path().unwrap(),
+            super::get_dotfiles_target_dir_path()
+                .unwrap()
+                .join("Übersicht")
         );
     }
 
