@@ -348,7 +348,9 @@ pub fn get_potential_dotfiles_paths(profile: Option<String>) -> PotentialDotfile
     PotentialDotfilePaths {
         home: dirs::home_dir().unwrap().join(format!(".{dotfiles_dir}")),
         config: dirs::config_dir().unwrap().join(&dotfiles_dir),
-        env: std::env::var("TUCKR_HOME").map(|p| PathBuf::from(p).join(dotfiles_dir)).ok(),
+        env: std::env::var("TUCKR_HOME")
+            .map(|p| PathBuf::from(p).join(dotfiles_dir))
+            .ok(),
         test: std::env::temp_dir()
             .join(format!(
                 "tuckr-{}",
@@ -569,18 +571,22 @@ mod tests {
 
     #[test]
     fn dotfile_to_target_path_non_ascii_name() {
+        let stem = std::path::PathBuf::new()
+            .join(".config")
+            .join("übersicht")
+            .join("widgets")
+            .join("道具");
+
         // Names with multi-byte characters must not panic on byte slicing.
         let group = get_dotfiles_path(None)
             .unwrap()
             .join("Configs")
-            .join("Übersicht")
-            .join("widgets");
+            .join("übersicht")
+            .join(&stem);
 
         assert_eq!(
             Dotfile::try_from(group).unwrap().to_target_path().unwrap(),
-            super::get_dotfiles_target_dir_path()
-                .unwrap()
-                .join("widgets")
+            super::get_dotfiles_target_dir_path().unwrap().join(stem)
         );
     }
 
@@ -692,9 +698,26 @@ mod tests {
         };
 
         let potential_paths = super::get_potential_dotfiles_paths(Some("whatever".into()));
-        assert_eq!(potential_paths.config.file_name().unwrap(), "dotfiles_whatever");
-        assert_eq!(potential_paths.home.file_name().unwrap(), ".dotfiles_whatever");
-        assert_eq!(potential_paths.env.unwrap().file_name().unwrap(), "dotfiles_whatever");
-        assert!(potential_paths.test.file_name().unwrap().to_str().unwrap().starts_with("dotfiles"));
+        assert_eq!(
+            potential_paths.config.file_name().unwrap(),
+            "dotfiles_whatever"
+        );
+        assert_eq!(
+            potential_paths.home.file_name().unwrap(),
+            ".dotfiles_whatever"
+        );
+        assert_eq!(
+            potential_paths.env.unwrap().file_name().unwrap(),
+            "dotfiles_whatever"
+        );
+        assert!(
+            potential_paths
+                .test
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("dotfiles")
+        );
     }
 }
