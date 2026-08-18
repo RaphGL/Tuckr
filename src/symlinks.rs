@@ -602,7 +602,9 @@ pub fn add_cmd(
             let Some(group_files) = group else { return };
 
             for file in group_files {
-                let target_file = file.to_target_path().unwrap();
+                let target_file = file
+                    .to_target_path()
+                    .expect("Unable to convert file to a target path?");
 
                 let deleted_file = if adopt { &file.path } else { &target_file };
 
@@ -612,9 +614,9 @@ pub fn add_cmd(
                         t!("dry-run.removing_x", x = deleted_file.display()).red()
                     );
                 } else if deleted_file.is_dir() {
-                    fs::remove_dir_all(deleted_file).unwrap();
+                    fs::remove_dir_all(deleted_file).expect("Unable to delete directory?");
                 } else if deleted_file.is_file() {
-                    fs::remove_file(deleted_file).unwrap();
+                    fs::remove_file(deleted_file).expect("Unable to remove file?");
                 }
 
                 if adopt {
@@ -629,7 +631,7 @@ pub fn add_cmd(
                             .yellow()
                         );
                     } else {
-                        fs::rename(target_file, &file.path).unwrap();
+                        fs::rename(target_file, &file.path).expect("Unable to rename (replace) file?");
                     }
                 }
             }
